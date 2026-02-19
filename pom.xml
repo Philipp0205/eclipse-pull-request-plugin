@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright (C) 2026, Philipp Hoenisch and contributors
+
+   All rights reserved. This program and the accompanying materials
+   are made available under the terms of the Eclipse Public License 2.0
+   which accompanies this distribution, and is available at
+   https://www.eclipse.org/legal/epl-2.0/
+
+   SPDX-License-Identifier: EPL-2.0
+-->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>org.eclipse.egit.pullrequest</groupId>
+  <artifactId>pullrequest-parent</artifactId>
+  <version>7.6.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>Eclipse Pull Request Review Plugin (Parent)</name>
+  <description>
+    Pull Request review support for Bitbucket Data Center and GitHub,
+    extracted from EGit as a standalone Eclipse plugin.
+  </description>
+
+  <licenses>
+    <license>
+      <name>Eclipse Public License 2.0</name>
+      <url>https://www.eclipse.org/legal/epl-2.0/</url>
+    </license>
+  </licenses>
+
+  <properties>
+    <maven-version-minimum>3.9.0</maven-version-minimum>
+    <tycho-version>4.0.13</tycho-version>
+    <java-version>21</java-version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    
+    <!-- Target platform -->
+    <target-platform>pullrequest</target-platform>
+    
+    <!-- P2 repository locations for JGit and EGit -->
+    <jgit-site>file:///${user.home}/.eclipse/egit-master/git/jgit/org.eclipse.jgit.packaging/org.eclipse.jgit.repository/target/repository</jgit-site>
+    <egit-site>file:///${user.home}/.eclipse/egit-master/git/egit/org.eclipse.egit.repository/target/repository</egit-site>
+    <license-site>https://download.eclipse.org/cbi/updates/license</license-site>
+  </properties>
+
+  <modules>
+    <module>org.eclipse.egit.pullrequest.target</module>
+    <module>org.eclipse.egit.pullrequest</module>
+    <module>org.eclipse.egit.pullrequest.test</module>
+  </modules>
+
+  <repositories>
+    <repository>
+      <id>jgit</id>
+      <layout>p2</layout>
+      <url>${jgit-site}</url>
+    </repository>
+    <repository>
+      <id>egit</id>
+      <layout>p2</layout>
+      <url>${egit-site}</url>
+    </repository>
+    <repository>
+      <id>eclipse.license</id>
+      <layout>p2</layout>
+      <url>${license-site}</url>
+    </repository>
+  </repositories>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.eclipse.tycho</groupId>
+        <artifactId>tycho-maven-plugin</artifactId>
+        <version>${tycho-version}</version>
+        <extensions>true</extensions>
+      </plugin>
+      <plugin>
+        <groupId>org.eclipse.tycho</groupId>
+        <artifactId>target-platform-configuration</artifactId>
+        <version>${tycho-version}</version>
+        <configuration>
+          <target>
+            <file>${project.basedir}/../org.eclipse.egit.pullrequest.target/${target-platform}.target</file>
+          </target>
+          <environments>
+            <environment>
+              <os>linux</os>
+              <ws>gtk</ws>
+              <arch>x86_64</arch>
+            </environment>
+            <environment>
+              <os>win32</os>
+              <ws>win32</ws>
+              <arch>x86_64</arch>
+            </environment>
+            <environment>
+              <os>macosx</os>
+              <ws>cocoa</ws>
+              <arch>x86_64</arch>
+            </environment>
+            <environment>
+              <os>macosx</os>
+              <ws>cocoa</ws>
+              <arch>aarch64</arch>
+            </environment>
+          </environments>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.eclipse.tycho</groupId>
+        <artifactId>tycho-compiler-plugin</artifactId>
+        <version>${tycho-version}</version>
+        <configuration>
+          <source>${java-version}</source>
+          <target>${java-version}</target>
+          <release>${java-version}</release>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

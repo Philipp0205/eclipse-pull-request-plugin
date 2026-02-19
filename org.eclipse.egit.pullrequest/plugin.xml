@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<!--
+   Copyright (C) 2026, Philipp Hoenisch and others
+
+   All rights reserved. This program and the accompanying materials
+   are made available under the terms of the Eclipse Public License 2.0
+   which accompanies this distribution, and is available at
+   https://www.eclipse.org/legal/epl-2.0/
+
+   SPDX-License-Identifier: EPL-2.0
+-->
+<plugin>
+   <!-- Adapter factory for PullRequestChangedFile -->
+   <extension
+         point="org.eclipse.core.runtime.adapters">
+      <factory
+            adaptableType="org.eclipse.egit.pullrequest.internal.ui.PullRequestChangedFile"
+            class="org.eclipse.egit.pullrequest.internal.ui.PullRequestChangedFileAdapterFactory">
+         <adapter type="org.eclipse.core.resources.IResource" />
+         <adapter type="org.eclipse.core.resources.IFile" />
+         <adapter type="org.eclipse.core.runtime.IPath" />
+      </factory>
+   </extension>
+
+   <!-- Preference page -->
+   <extension
+         point="org.eclipse.ui.preferencePages">
+      <page
+            category="org.eclipse.egit.pullrequest.preferences"
+            class="org.eclipse.egit.pullrequest.internal.ui.PullRequestPreferencePage"
+            id="org.eclipse.egit.pullrequest.preferences.PullRequestPreferencePage"
+            name="%PullRequestPreferencePage.name">
+         <keywordReference
+               id="org.eclipse.egit.pullrequest.preferences.PullRequestPreferencePage">
+         </keywordReference>
+      </page>
+   </extension>
+
+   <!-- Preference keywords -->
+   <extension
+         point="org.eclipse.ui.keywords">
+      <keyword
+            id="org.eclipse.egit.pullrequest.preferences.PullRequestPreferencePage"
+            label="%PullRequestPreferencePage_keywords">
+      </keyword>
+   </extension>
+
+   <!-- Views -->
+   <extension
+         point="org.eclipse.ui.views">
+      <category
+            id="org.eclipse.egit.pullrequest.PullRequestCategory"
+            name="%PullRequestCategory_name">
+      </category>
+      <view
+            allowMultiple="false"
+            category="org.eclipse.egit.pullrequest.PullRequestCategory"
+            class="org.eclipse.egit.pullrequest.internal.ui.PullRequestListView"
+            icon="icons/obj16/gitrepository.png"
+            id="org.eclipse.egit.pullrequest.PullRequestListView"
+            name="%PullRequestListView">
+      </view>
+      <view
+            allowMultiple="false"
+            category="org.eclipse.egit.pullrequest.PullRequestCategory"
+            class="org.eclipse.egit.pullrequest.internal.ui.PullRequestChangedFilesView"
+            icon="icons/obj16/gitrepository.png"
+            id="org.eclipse.egit.pullrequest.PullRequestChangedFilesView"
+            name="%PullRequestChangedFilesView">
+      </view>
+      <view
+            allowMultiple="false"
+            category="org.eclipse.egit.pullrequest.PullRequestCategory"
+            class="org.eclipse.egit.pullrequest.internal.ui.PullRequestCommentsView"
+            icon="icons/obj16/gitrepository.png"
+            id="org.eclipse.egit.pullrequest.PullRequestCommentsView"
+            name="%PullRequestCommentsView">
+      </view>
+   </extension>
+
+   <!-- Perspective -->
+   <extension
+         point="org.eclipse.ui.perspectives">
+      <perspective
+            class="org.eclipse.egit.pullrequest.internal.ui.PullRequestPerspectiveFactory"
+            icon="icons/obj16/gitrepository.png"
+            id="org.eclipse.egit.pullrequest.PullRequestReviewPerspective"
+            name="%PullRequestReviewPerspective_name">
+         <description>
+            %PullRequestReviewPerspective_description
+         </description>
+      </perspective>
+   </extension>
+</plugin>

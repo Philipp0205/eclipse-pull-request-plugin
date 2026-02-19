@@ -1,0 +1,331 @@
+/*******************************************************************************
+ * Copyright (C) 2026, Eclipse EGit contributors
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License 2.0
+ * which accompanies this distribution, and is available at
+ * https://www.eclipse.org/legal/epl-2.0/
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ *******************************************************************************/
+package org.eclipse.egit.pullrequest.internal.github;
+
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
+
+import java.util.List;
+
+import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+import org.junit.Test;
+
+/**
+ * Tests for {@link GitHubJsonParser}
+ */
+public class GitHubJsonParserTest {
+
+	@Test
+	public void testParseInlineComment() {
+		String json = "{\"id\":123,\"body\":\"Fix this issue\",\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\",\"path\":\"src/Main.java\"," //$NON-NLS-1$
+				+ "\"line\":42,\"side\":\"RIGHT\",\"user\":{\"login\":\"reviewer\"}}"; //$NON-NLS-1$
+
+		PullRequestComment comment = GitHubJsonParser.parseSingleComment(json);
+
+		assertThat(comment, notNullValue());
+		assertThat(comment.getId(), equalTo(123L));
+		assertThat(comment.getText(), equalTo("Fix this issue")); //$NON-NLS-1$
+		assertThat(comment.getPath(), equalTo("src/Main.java")); //$NON-NLS-1$
+		assertThat(comment.getLine(), equalTo(42));
+		assertThat(comment.getFileType(), equalTo("TO")); //$NON-NLS-1$
+		assertThat(comment.getAuthorName(), equalTo("reviewer")); //$NON-NLS-1$
+		// Inline comments with path should be marked as review comments
+		assertThat(comment.isReviewComment(), equalTo(true));
+	}
+
+	@Test
+	public void testParseInlineCommentLeftSide() {
+		String json = "{\"id\":456,\"body\":\"Old code comment\",\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\",\"path\":\"src/Utils.java\"," //$NON-NLS-1$
+				+ "\"line\":10,\"side\":\"LEFT\",\"user\":{\"login\":\"reviewer\"}}"; //$NON-NLS-1$
+
+		PullRequestComment comment = GitHubJsonParser.parseSingleComment(json);
+
+		assertThat(comment, notNullValue());
+		assertThat(comment.getFileType(), equalTo("FROM")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseGeneralComment() {
+		String json = "{\"id\":789,\"body\":\"General feedback\",\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\",\"user\":{\"login\":\"commenter\"}}"; //$NON-NLS-1$
+
+		PullRequestComment comment = GitHubJsonParser.parseSingleComment(json);
+
+		assertThat(comment, notNullValue());
+		assertThat(comment.getId(), equalTo(789L));
+		assertThat(comment.getText(), equalTo("General feedback")); //$NON-NLS-1$
+		assertThat(comment.getPath(), nullValue());
+		assertThat(comment.getLine(), nullValue());
+		// General comments without path should be marked as issue comments
+		assertThat(comment.isReviewComment(), equalTo(false));
+	}
+
+	@Test
+	public void testParseCommentWithBracesInBody() {
+		// Test that braces in comment body don't break JSON parsing
+		String json = "{\"id\":999,\"body\":\"Fix this: if (x > 0) { return true; }\",\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\",\"path\":\"src/Code.java\"," //$NON-NLS-1$
+				+ "\"line\":5,\"side\":\"RIGHT\",\"user\":{\"login\":\"dev\"}}"; //$NON-NLS-1$
+
+		PullRequestComment comment = GitHubJsonParser.parseSingleComment(json);
+
+		assertThat(comment, notNullValue());
+		assertThat(comment.getText(),
+				equalTo("Fix this: if (x > 0) { return true; }")); //$NON-NLS-1$
+		assertThat(comment.getLine(), equalTo(5));
+	}
+
+	@Test
+	public void testParseCommentArrayWithBraces() {
+		// Test array parsing with braces in comment bodies
+		String json = "[{\"id\":1,\"body\":\"Code: { x: 1 }\",\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\",\"path\":\"test.js\"," //$NON-NLS-1$
+				+ "\"line\":1,\"side\":\"RIGHT\",\"user\":{\"login\":\"user1\"}}," //$NON-NLS-1$
+				+ "{\"id\":2,\"body\":\"Another: } {\",\"created_at\":\"2026-01-15T10:10:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:15:00Z\",\"path\":\"test.js\"," //$NON-NLS-1$
+				+ "\"line\":2,\"side\":\"RIGHT\",\"user\":{\"login\":\"user2\"}}]"; //$NON-NLS-1$
+
+		List<PullRequestComment> comments = GitHubJsonParser
+				.parseReviewComments(json);
+
+		assertThat(comments, hasSize(2));
+		assertThat(comments.get(0).getText(), equalTo("Code: { x: 1 }")); //$NON-NLS-1$
+		assertThat(comments.get(1).getText(), equalTo("Another: } {")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseCommentWithNullLine() {
+		// Test original_line fallback when line is null (outdated comments)
+		String json = "{\"id\":555,\"body\":\"Outdated comment\",\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\",\"path\":\"src/Old.java\"," //$NON-NLS-1$
+				+ "\"line\":null,\"original_line\":25,\"side\":\"RIGHT\",\"user\":{\"login\":\"reviewer\"}}"; //$NON-NLS-1$
+
+		PullRequestComment comment = GitHubJsonParser.parseSingleComment(json);
+
+		assertThat(comment, notNullValue());
+		assertThat(comment.getLine(), equalTo(25));
+		assertThat(comment.getPath(), equalTo("src/Old.java")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseEmptyCommentArray() {
+		String json = "[]"; //$NON-NLS-1$
+
+		List<PullRequestComment> comments = GitHubJsonParser
+				.parseReviewComments(json);
+
+		assertThat(comments, hasSize(0));
+	}
+
+	@Test
+	public void testParseMultipleInlineComments() {
+		String json = "[{\"id\":1,\"body\":\"Comment 1\",\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\",\"path\":\"file1.java\"," //$NON-NLS-1$
+				+ "\"line\":10,\"side\":\"RIGHT\",\"user\":{\"login\":\"user1\"}}," //$NON-NLS-1$
+				+ "{\"id\":2,\"body\":\"Comment 2\",\"created_at\":\"2026-01-15T10:10:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:15:00Z\",\"path\":\"file2.java\"," //$NON-NLS-1$
+				+ "\"line\":20,\"side\":\"LEFT\",\"user\":{\"login\":\"user2\"}}]"; //$NON-NLS-1$
+
+		List<PullRequestComment> comments = GitHubJsonParser
+				.parseReviewComments(json);
+
+		assertThat(comments, hasSize(2));
+		assertThat(comments.get(0).getPath(), equalTo("file1.java")); //$NON-NLS-1$
+		assertThat(comments.get(0).getLine(), equalTo(10));
+		assertThat(comments.get(0).getFileType(), equalTo("TO")); //$NON-NLS-1$
+		assertThat(comments.get(1).getPath(), equalTo("file2.java")); //$NON-NLS-1$
+		assertThat(comments.get(1).getLine(), equalTo(20));
+		assertThat(comments.get(1).getFileType(), equalTo("FROM")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseCommentWithInReplyToId() {
+		// Test that in_reply_to_id field is extracted
+		String json = "{\"id\":200,\"body\":\"Reply to comment\",\"created_at\":\"2026-01-15T11:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T11:00:00Z\",\"path\":\"src/Main.java\"," //$NON-NLS-1$
+				+ "\"line\":42,\"side\":\"RIGHT\",\"in_reply_to_id\":100," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"reviewer2\"}}"; //$NON-NLS-1$
+
+		PullRequestComment comment = GitHubJsonParser.parseSingleComment(json);
+
+		assertThat(comment, notNullValue());
+		assertThat(comment.getId(), equalTo(200L));
+		assertThat(comment.getInReplyToId(), equalTo(100L));
+		assertThat(comment.getText(), equalTo("Reply to comment")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseCommentThread() {
+		// Test that comments are grouped into threads correctly
+		String json = "[" //$NON-NLS-1$
+				+ "{\"id\":1,\"body\":\"Root comment\",\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:00:00Z\",\"path\":\"file.txt\"," //$NON-NLS-1$
+				+ "\"line\":10,\"side\":\"RIGHT\",\"user\":{\"login\":\"user1\"}}," //$NON-NLS-1$
+				+ "{\"id\":2,\"body\":\"Reply 1\",\"created_at\":\"2026-01-15T11:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T11:00:00Z\",\"path\":\"file.txt\"," //$NON-NLS-1$
+				+ "\"line\":10,\"side\":\"RIGHT\",\"in_reply_to_id\":1," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"user2\"}}," //$NON-NLS-1$
+				+ "{\"id\":3,\"body\":\"Reply 2\",\"created_at\":\"2026-01-15T12:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T12:00:00Z\",\"path\":\"file.txt\"," //$NON-NLS-1$
+				+ "\"line\":10,\"side\":\"RIGHT\",\"in_reply_to_id\":1," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"user3\"}}" //$NON-NLS-1$
+				+ "]"; //$NON-NLS-1$
+
+		List<PullRequestComment> comments = GitHubJsonParser.parseComments(
+				json, null);
+
+		// Should return only 1 root comment
+		assertThat(comments, hasSize(1));
+
+		PullRequestComment root = comments.get(0);
+		assertThat(root.getId(), equalTo(1L));
+		assertThat(root.getText(), equalTo("Root comment")); //$NON-NLS-1$
+		assertThat(root.getInReplyToId(), equalTo(-1L));
+
+		// Root should have 2 replies
+		List<PullRequestComment> replies = root.getReplies();
+		assertThat(replies, hasSize(2));
+
+		// Replies should be in chronological order
+		assertThat(replies.get(0).getId(), equalTo(2L));
+		assertThat(replies.get(0).getText(), equalTo("Reply 1")); //$NON-NLS-1$
+		assertThat(replies.get(0).getInReplyToId(), equalTo(1L));
+
+		assertThat(replies.get(1).getId(), equalTo(3L));
+		assertThat(replies.get(1).getText(), equalTo("Reply 2")); //$NON-NLS-1$
+		assertThat(replies.get(1).getInReplyToId(), equalTo(1L));
+	}
+
+	@Test
+	public void testParseCommentThreadOrdering() {
+		// Test that replies are sorted chronologically even if received
+		// out-of-order
+		String json = "[" //$NON-NLS-1$
+				+ "{\"id\":1,\"body\":\"Root\",\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:00:00Z\",\"path\":\"file.txt\"," //$NON-NLS-1$
+				+ "\"line\":5,\"side\":\"RIGHT\",\"user\":{\"login\":\"user1\"}}," //$NON-NLS-1$
+				+ "{\"id\":3,\"body\":\"Third reply\",\"created_at\":\"2026-01-15T14:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T14:00:00Z\",\"path\":\"file.txt\"," //$NON-NLS-1$
+				+ "\"line\":5,\"side\":\"RIGHT\",\"in_reply_to_id\":1," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"user3\"}}," //$NON-NLS-1$
+				+ "{\"id\":2,\"body\":\"First reply\",\"created_at\":\"2026-01-15T12:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T12:00:00Z\",\"path\":\"file.txt\"," //$NON-NLS-1$
+				+ "\"line\":5,\"side\":\"RIGHT\",\"in_reply_to_id\":1," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"user2\"}}" //$NON-NLS-1$
+				+ "]"; //$NON-NLS-1$
+
+		List<PullRequestComment> comments = GitHubJsonParser.parseComments(
+				json, null);
+
+		assertThat(comments, hasSize(1));
+		List<PullRequestComment> replies = comments.get(0).getReplies();
+		assertThat(replies, hasSize(2));
+
+		// Should be sorted by created date (ID 2 before ID 3)
+		assertThat(replies.get(0).getId(), equalTo(2L));
+		assertThat(replies.get(1).getId(), equalTo(3L));
+	}
+
+	@Test
+	public void testParseCommentOrphanedReply() {
+		// Test that a reply without a parent in the result set is treated as a
+		// root
+		String json = "[" //$NON-NLS-1$
+				+ "{\"id\":2,\"body\":\"Orphaned reply\",\"created_at\":\"2026-01-15T11:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T11:00:00Z\",\"path\":\"file.txt\"," //$NON-NLS-1$
+				+ "\"line\":10,\"side\":\"RIGHT\",\"in_reply_to_id\":1," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"user2\"}}" //$NON-NLS-1$
+				+ "]"; //$NON-NLS-1$
+
+		List<PullRequestComment> comments = GitHubJsonParser.parseComments(
+				json, null);
+
+		// Orphaned reply should be treated as root
+		assertThat(comments, hasSize(1));
+		assertThat(comments.get(0).getId(), equalTo(2L));
+		assertThat(comments.get(0).getText(), equalTo("Orphaned reply")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseCommentsMixedThreadsAndRoots() {
+		// Test mix of threaded and non-threaded comments
+		String json = "[" //$NON-NLS-1$
+				+ "{\"id\":1,\"body\":\"Root 1\",\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:00:00Z\",\"path\":\"file1.txt\"," //$NON-NLS-1$
+				+ "\"line\":10,\"side\":\"RIGHT\",\"user\":{\"login\":\"user1\"}}," //$NON-NLS-1$
+				+ "{\"id\":2,\"body\":\"Root 2\",\"created_at\":\"2026-01-15T10:30:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:30:00Z\",\"path\":\"file2.txt\"," //$NON-NLS-1$
+				+ "\"line\":20,\"side\":\"RIGHT\",\"user\":{\"login\":\"user2\"}}," //$NON-NLS-1$
+				+ "{\"id\":3,\"body\":\"Reply to 1\",\"created_at\":\"2026-01-15T11:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T11:00:00Z\",\"path\":\"file1.txt\"," //$NON-NLS-1$
+				+ "\"line\":10,\"side\":\"RIGHT\",\"in_reply_to_id\":1," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"user3\"}}" //$NON-NLS-1$
+				+ "]"; //$NON-NLS-1$
+
+		List<PullRequestComment> comments = GitHubJsonParser.parseComments(
+				json, null);
+
+		// Should return 2 root comments
+		assertThat(comments, hasSize(2));
+
+		// First root has 1 reply
+		PullRequestComment root1 = comments.get(0);
+		assertThat(root1.getId(), equalTo(1L));
+		assertThat(root1.getReplies(), hasSize(1));
+		assertThat(root1.getReplies().get(0).getId(), equalTo(3L));
+
+		// Second root has no replies
+		PullRequestComment root2 = comments.get(1);
+		assertThat(root2.getId(), equalTo(2L));
+		assertThat(root2.getReplies(), hasSize(0));
+	}
+
+	@Test
+	public void testParseCommentsIssueCommentsNotThreaded() {
+		// Test that issue comments (general PR comments) are not grouped into
+		// threads
+		String reviewJson = "[" //$NON-NLS-1$
+				+ "{\"id\":1,\"body\":\"Review comment\",\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:00:00Z\",\"path\":\"file.txt\"," //$NON-NLS-1$
+				+ "\"line\":10,\"side\":\"RIGHT\",\"user\":{\"login\":\"user1\"}}" //$NON-NLS-1$
+				+ "]"; //$NON-NLS-1$
+
+		String issueJson = "[" //$NON-NLS-1$
+				+ "{\"id\":100,\"body\":\"General comment 1\",\"created_at\":\"2026-01-15T10:30:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:30:00Z\",\"user\":{\"login\":\"user2\"}}," //$NON-NLS-1$
+				+ "{\"id\":101,\"body\":\"General comment 2\",\"created_at\":\"2026-01-15T11:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T11:00:00Z\",\"user\":{\"login\":\"user3\"}}" //$NON-NLS-1$
+				+ "]"; //$NON-NLS-1$
+
+		List<PullRequestComment> comments = GitHubJsonParser.parseComments(
+				reviewJson, issueJson);
+
+		// Should have 3 root comments total (1 review + 2 issue)
+		assertThat(comments, hasSize(3));
+
+		// All should be root level (no replies)
+		for (PullRequestComment comment : comments) {
+			assertThat(comment.getReplies(), hasSize(0));
+		}
+
+		// First comment should be marked as review comment
+		assertThat(comments.get(0).isReviewComment(), equalTo(true));
+
+		// Last two comments should be marked as issue comments
+		assertThat(comments.get(1).isReviewComment(), equalTo(false));
+		assertThat(comments.get(2).isReviewComment(), equalTo(false));
+	}
+}

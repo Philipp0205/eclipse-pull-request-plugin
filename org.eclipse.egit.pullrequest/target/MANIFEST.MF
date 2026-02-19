@@ -1,0 +1,33 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: %Bundle-Name
+Automatic-Module-Name: org.eclipse.egit.pullrequest
+Bundle-SymbolicName: org.eclipse.egit.pullrequest;singleton:=true
+Bundle-Version: 7.6.0.202602191250
+Bundle-Activator: org.eclipse.egit.pullrequest.Activator
+Bundle-Vendor: %Bundle-Vendor
+Bundle-Localization: plugin
+Require-Bundle: org.eclipse.core.runtime;bundle-version="[3.33.100,4.0.0
+ )",org.eclipse.core.resources;bundle-version="[3.22.200,4.0.0)",org.ecl
+ ipse.egit.core;bundle-version="[7.6.0,7.7.0)",org.eclipse.egit.ui;bundl
+ e-version="[7.6.0,7.7.0)",org.eclipse.ui;bundle-version="[3.208.100,4.0
+ .0)",org.eclipse.ui.workbench;bundle-version="[3.135.200,4.0.0)",org.ec
+ lipse.jface;bundle-version="[3.36.200,4.0.0)",org.eclipse.compare;bundl
+ e-version="[3.10.400,4.0.0)",org.eclipse.ui.forms;bundle-version="[3.14
+ .600,4.0.0)",org.eclipse.jface.text;bundle-version="[3.27.200,4.0.0)",o
+ rg.eclipse.ui.editors;bundle-version="[3.18.200,4.0.0)",org.eclipse.ui.
+ ide;bundle-version="[3.23.200,4.0.0)"
+Export-Package: org.eclipse.egit.pullrequest.internal.client;version="7.
+ 6.0";x-internal:=true,org.eclipse.egit.pullrequest.internal.model;versi
+ on="7.6.0";x-internal:=true,org.eclipse.egit.pullrequest.internal.bitbu
+ cket;version="7.6.0";x-internal:=true,org.eclipse.egit.pullrequest.inte
+ rnal.github;version="7.6.0";x-internal:=true,org.eclipse.egit.pullreque
+ st.internal.ui;version="7.6.0";x-internal:=true
+Bundle-ActivationPolicy: lazy
+Bundle-RequiredExecutionEnvironment: JavaSE-21
+Import-Package: org.eclipse.jgit.annotations;version="[7.6.0,7.7.0)",org
+ .eclipse.jgit.lib;version="[7.6.0,7.7.0)",org.eclipse.jgit.transport;ve
+ rsion="[7.6.0,7.7.0)"
+Bundle-License: Eclipse Public License 2.0;link="https://www.eclipse.org
+ /legal/epl-2.0/"
+
