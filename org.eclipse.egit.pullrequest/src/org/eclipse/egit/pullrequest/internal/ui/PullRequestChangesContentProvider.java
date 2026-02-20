@@ -20,14 +20,14 @@ import java.util.Set;
 
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.Path;
+import org.eclipse.jface.viewers.ITreeContentProvider;
 import org.eclipse.jface.viewers.Viewer;
-import org.eclipse.ui.model.WorkbenchContentProvider;
 
 /**
  * Content provider for pull request changed files tree
  */
 public class PullRequestChangesContentProvider
-		extends WorkbenchContentProvider {
+		implements ITreeContentProvider {
 
 	private PullRequestChangedFile[] content = new PullRequestChangedFile[0];
 
@@ -73,8 +73,12 @@ public class PullRequestChangesContentProvider
 
 	@Override
 	public void inputChanged(Viewer viewer, Object oldInput, Object newInput) {
-		super.inputChanged(viewer, oldInput, newInput);
 		treeRoots = null; // Invalidate cache
+	}
+
+	@Override
+	public void dispose() {
+		// Nothing to dispose
 	}
 
 	/**

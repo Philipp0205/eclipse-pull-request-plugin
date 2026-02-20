@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.eclipse.compare.CompareConfiguration;
+import org.eclipse.compare.contentmergeviewer.ITokenComparator;
 import org.eclipse.compare.contentmergeviewer.TextMergeViewer;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
@@ -25,6 +26,7 @@ import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
 import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
 import org.eclipse.egit.pullrequest.internal.client.PullRequestClientFactory;
 import org.eclipse.egit.pullrequest.Activator;
+import org.eclipse.jface.text.IDocumentPartitioner;
 import org.eclipse.jface.text.source.SourceViewer;
 import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
@@ -127,7 +129,71 @@ public class InlineCommentTextMergeViewer extends TextMergeViewer {
 			} else if (index == 2) {
 				rightSourceViewer = sv;
 			}
+
+			// Apply Java syntax highlighting if this is a Java file
+			if (isJavaFile()) {
+				try {
+					JavaViewerConfigurator.configure(sv,
+							currentFilePath);
+				} catch (NoClassDefFoundError e) {
+					// JDT not available - degrade gracefully to plain
+					// text
+					Activator.logInfo(
+							"JDT not available, using plain text comparison"); //$NON-NLS-1$
+				}
+			}
 		}
+	}
+
+	@Override
+	protected IDocumentPartitioner getDocumentPartitioner() {
+		if (isJavaFile()) {
+			try {
+				return JavaViewerConfigurator.createJavaPartitioner();
+			} catch (NoClassDefFoundError e) {
+				// JDT not available - fall through to default
+			}
+		}
+		return super.getDocumentPartitioner();
+	}
+
+	@Override
+	protected String getDocumentPartitioning() {
+		if (isJavaFile()) {
+			try {
+				return JavaViewerConfigurator.getJavaPartitioning();
+			} catch (NoClassDefFoundError e) {
+				// JDT not available - fall through to default
+			}
+		}
+		return super.getDocumentPartitioning();
+	}
+
+	@Override
+	protected ITokenComparator createTokenComparator(
+			String s) {
+		if (isJavaFile()) {
+			try {
+				// For Java files, use Java-aware token comparison which
+				// understands Java syntax for intra-line diffs
+				boolean ignoreWhitespace = false;
+				return JavaViewerConfigurator
+						.createJavaTokenComparator(s, ignoreWhitespace);
+			} catch (NoClassDefFoundError e) {
+				// JDT not available - fall through to default
+			}
+		}
+		return super.createTokenComparator(s);
+	}
+
+	/**
+	 * Checks if the current file is a Java source file.
+	 *
+	 * @return {@code true} if the file ends with {@code .java}
+	 */
+	private boolean isJavaFile() {
+		return currentFilePath != null
+				&& currentFilePath.endsWith(".java"); //$NON-NLS-1$
 	}
 
 	@Override

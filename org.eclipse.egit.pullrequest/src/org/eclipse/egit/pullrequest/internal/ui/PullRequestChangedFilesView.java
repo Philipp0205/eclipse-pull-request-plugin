@@ -386,6 +386,15 @@ public class PullRequestChangedFilesView extends ViewPart {
 							changedFilesViewer.setInput(changedFiles);
 							changedFilesViewer.refresh();
 							updateFormTitle();
+
+							// Notify the comments view that comments are available
+							IWorkbenchPart commentsPart = getSite()
+									.getWorkbenchWindow().getActivePage()
+									.findView(PullRequestCommentsView.VIEW_ID);
+							if (commentsPart instanceof PullRequestCommentsView) {
+								((PullRequestCommentsView) commentsPart)
+										.onCommentsLoaded(allComments);
+							}
 						}
 					});
 

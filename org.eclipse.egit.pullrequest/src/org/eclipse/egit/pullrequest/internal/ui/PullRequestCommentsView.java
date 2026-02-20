@@ -1848,6 +1848,17 @@ public class PullRequestCommentsView extends ViewPart {
 		commentsViewer.getControl().setFocus();
 	}
 
+	/**
+	 * Called when comments have been loaded by the changed files view.
+	 *
+	 * @param comments
+	 *            the loaded comments
+	 */
+	public void onCommentsLoaded(List<PullRequestComment> comments) {
+		allComments = comments;
+		refreshComments();
+	}
+
 	@Override
 	public void dispose() {
 		// Clear any active highlight

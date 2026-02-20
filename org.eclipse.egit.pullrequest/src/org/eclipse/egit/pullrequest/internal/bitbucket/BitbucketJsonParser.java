@@ -13,6 +13,10 @@ package org.eclipse.egit.pullrequest.internal.bitbucket;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
+import org.eclipse.egit.pullrequest.internal.model.PullRequest;
+import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+
 /**
  * Utility class for parsing JSON responses from Bitbucket Data Center REST API
  */

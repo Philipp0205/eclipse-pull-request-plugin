@@ -1,7 +1,0 @@
-Manifest-Version: 1.0
-Bundle-ManifestVersion: 2
-Bundle-Name: eclipse-pullrequest-plugin
-Bundle-SymbolicName: eclipse-pullrequest-plugin
-Bundle-Version: 1.0.0.qualifier
-Bundle-RequiredExecutionEnvironment: JavaSE-21
-Automatic-Module-Name: eclipse.pullrequest.plugin

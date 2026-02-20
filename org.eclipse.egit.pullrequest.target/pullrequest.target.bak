@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <?pde?>
 <!-- Target platform for standalone EGit Pull Request plugin -->
-<target name="pullrequest" sequenceNumber="2">
+<target name="pullrequest" sequenceNumber="1">
   <locations>
     <!-- Eclipse Public License -->
     <location includeMode="slicer" includeAllPlatforms="false" includeSource="true" includeConfigurePhase="true" type="InstallableUnit">
@@ -14,8 +14,6 @@
       <unit id="org.eclipse.sdk.ide" version="0.0.0"/>
       <unit id="org.eclipse.e4.ui.workbench" version="0.0.0"/>
       <unit id="org.eclipse.pde.core" version="0.0.0"/>
-      <unit id="org.eclipse.jdt.core" version="0.0.0"/>
-      <unit id="org.eclipse.jdt.ui" version="0.0.0"/>
       <repository location="https://download.eclipse.org/releases/2025-06"/>
     </location>
 

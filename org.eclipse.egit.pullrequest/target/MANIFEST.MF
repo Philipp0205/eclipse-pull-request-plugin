@@ -3,31 +3,28 @@ Bundle-ManifestVersion: 2
 Bundle-Name: %Bundle-Name
 Automatic-Module-Name: org.eclipse.egit.pullrequest
 Bundle-SymbolicName: org.eclipse.egit.pullrequest;singleton:=true
-Bundle-Version: 7.6.0.202602191250
+Bundle-Version: 7.6.0.202602191545
 Bundle-Activator: org.eclipse.egit.pullrequest.Activator
 Bundle-Vendor: %Bundle-Vendor
 Bundle-Localization: plugin
-Require-Bundle: org.eclipse.core.runtime;bundle-version="[3.33.100,4.0.0
- )",org.eclipse.core.resources;bundle-version="[3.22.200,4.0.0)",org.ecl
- ipse.egit.core;bundle-version="[7.6.0,7.7.0)",org.eclipse.egit.ui;bundl
- e-version="[7.6.0,7.7.0)",org.eclipse.ui;bundle-version="[3.208.100,4.0
- .0)",org.eclipse.ui.workbench;bundle-version="[3.135.200,4.0.0)",org.ec
- lipse.jface;bundle-version="[3.36.200,4.0.0)",org.eclipse.compare;bundl
- e-version="[3.10.400,4.0.0)",org.eclipse.ui.forms;bundle-version="[3.14
- .600,4.0.0)",org.eclipse.jface.text;bundle-version="[3.27.200,4.0.0)",o
- rg.eclipse.ui.editors;bundle-version="[3.18.200,4.0.0)",org.eclipse.ui.
- ide;bundle-version="[3.23.200,4.0.0)"
-Export-Package: org.eclipse.egit.pullrequest.internal.client;version="7.
- 6.0";x-internal:=true,org.eclipse.egit.pullrequest.internal.model;versi
- on="7.6.0";x-internal:=true,org.eclipse.egit.pullrequest.internal.bitbu
- cket;version="7.6.0";x-internal:=true,org.eclipse.egit.pullrequest.inte
- rnal.github;version="7.6.0";x-internal:=true,org.eclipse.egit.pullreque
- st.internal.ui;version="7.6.0";x-internal:=true
+Require-Bundle: org.eclipse.core.runtime;bundle-version="[3.20.0,4.0.0)"
+ ,org.eclipse.core.resources;bundle-version="[3.13.0,4.0.0)",org.eclipse
+ .egit.core;bundle-version="[7.6.0,7.7.0)",org.eclipse.egit.ui;bundle-ve
+ rsion="[7.6.0,7.7.0)",org.eclipse.ui;bundle-version="[3.100.0,4.0.0)",o
+ rg.eclipse.ui.workbench;bundle-version="[3.100.0,4.0.0)",org.eclipse.jf
+ ace;bundle-version="[3.10.0,4.0.0)",org.eclipse.compare;bundle-version=
+ "[3.5.0,4.0.0)",org.eclipse.ui.forms;bundle-version="[3.5.0,4.0.0)",org
+ .eclipse.jface.text;bundle-version="[3.10.0,4.0.0)",org.eclipse.ui.edit
+ ors;bundle-version="[3.10.0,4.0.0)",org.eclipse.ui.ide;bundle-version="
+ [3.10.0,4.0.0)",org.eclipse.jdt.core;bundle-version="[3.42.0,4.0.0)";re
+ solution:=optional,org.eclipse.jdt.ui;bundle-version="[3.35.0,4.0.0)";r
+ esolution:=optional
 Bundle-ActivationPolicy: lazy
 Bundle-RequiredExecutionEnvironment: JavaSE-21
 Import-Package: org.eclipse.jgit.annotations;version="[7.6.0,7.7.0)",org
  .eclipse.jgit.lib;version="[7.6.0,7.7.0)",org.eclipse.jgit.transport;ve
- rsion="[7.6.0,7.7.0)"
+ rsion="[7.6.0,7.7.0)",org.eclipse.ui,org.eclipse.ui.forms.widgets,org.e
+ clipse.ui.model
 Bundle-License: Eclipse Public License 2.0;link="https://www.eclipse.org
  /legal/epl-2.0/"
 

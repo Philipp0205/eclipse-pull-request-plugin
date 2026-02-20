@@ -43,9 +43,9 @@
     <!-- Target platform -->
     <target-platform>pullrequest</target-platform>
     
-    <!-- P2 repository locations for JGit and EGit -->
-    <jgit-site>file:///${user.home}/.eclipse/egit-master/git/jgit/org.eclipse.jgit.packaging/org.eclipse.jgit.repository/target/repository</jgit-site>
-    <egit-site>file:///${user.home}/.eclipse/egit-master/git/egit/org.eclipse.egit.repository/target/repository</egit-site>
+    <!-- P2 repository locations for EGit and JGit -->
+    <!-- Using nightly builds since 7.6.0 is not yet released -->
+    <egit-site>https://download.eclipse.org/egit/updates-nightly/</egit-site>
     <license-site>https://download.eclipse.org/cbi/updates/license</license-site>
   </properties>
 
@@ -56,11 +56,6 @@
   </modules>
 
   <repositories>
-    <repository>
-      <id>jgit</id>
-      <layout>p2</layout>
-      <url>${jgit-site}</url>
-    </repository>
     <repository>
       <id>egit</id>
       <layout>p2</layout>

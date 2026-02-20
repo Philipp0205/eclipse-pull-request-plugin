@@ -61,7 +61,6 @@ public class PullRequestCompareEditorInput extends CompareEditorInput {
 		this.client = client;
 		this.pullRequest = pullRequest;
 		this.changedFile = changedFile;
-		System.out.println("[PullRequestCompareEditorInput] Created compare editor input for file: " + changedFile.getPath()); //$NON-NLS-1$
 
 		// Configure the compare editor
 		CompareConfiguration config = getCompareConfiguration();
@@ -100,33 +99,21 @@ public class PullRequestCompareEditorInput extends CompareEditorInput {
 	@Override
 	protected Object prepareInput(IProgressMonitor monitor)
 			throws InvocationTargetException, InterruptedException {
-		System.out.println("[PullRequestCompareEditorInput] *** prepareInput CALLED ***"); //$NON-NLS-1$
-		System.out.println("[PullRequestCompareEditorInput] prepareInput - File: " + changedFile.getPath()); //$NON-NLS-1$
-		System.out.println("[PullRequestCompareEditorInput] prepareInput - Comments: " + comments.size()); //$NON-NLS-1$
 		Object result = createCompareInput(client, pullRequest, changedFile, monitor);
-		System.out.println("[PullRequestCompareEditorInput] prepareInput - Result: " + (result != null ? result.getClass().getSimpleName() : "null")); //$NON-NLS-1$ //$NON-NLS-2$
 		return result;
 	}
 
 	@Override
 	public Viewer findContentViewer(Viewer oldViewer, ICompareInput input,
 			Composite parent) {
-		System.out.println("[PullRequestCompareEditorInput] *** findContentViewer CALLED ***"); //$NON-NLS-1$
-		System.out.println("[PullRequestCompareEditorInput] findContentViewer - oldViewer: " + (oldViewer != null ? oldViewer.getClass().getName() : "null")); //$NON-NLS-1$ //$NON-NLS-2$
-		System.out.println("[PullRequestCompareEditorInput] findContentViewer - comments: " + comments.size()); //$NON-NLS-1$
-		
 		// Check if inline comments should be displayed
 		boolean useInlineComments = Activator.getDefault()
 				.getPreferenceStore()
 				.getBoolean(PRPreferences.PULLREQUEST_SHOW_INLINE_COMMENTS);
-		System.out.println("[PullRequestCompareEditorInput] findContentViewer - useInlineComments: " + useInlineComments); //$NON-NLS-1$
 
 		if (useInlineComments && comments != null && !comments.isEmpty()) {
-			System.out.println("[PullRequestCompareEditorInput] findContentViewer - Will use InlineCommentTextMergeViewer"); //$NON-NLS-1$
-			
 			// Check if we can reuse the existing viewer
 			if (oldViewer instanceof InlineCommentTextMergeViewer) {
-				System.out.println("[PullRequestCompareEditorInput] findContentViewer - Reusing existing viewer"); //$NON-NLS-1$
 				InlineCommentTextMergeViewer inlineViewer = (InlineCommentTextMergeViewer) oldViewer;
 				inlineViewer.setFilePath(changedFile.getPath());
 				inlineViewer.setComments(comments);
@@ -140,26 +127,19 @@ public class PullRequestCompareEditorInput extends CompareEditorInput {
 					|| oldViewer.getClass().getName().contains("NullViewer"); //$NON-NLS-1$
 			
 			if (canCreateNew) {
-				System.out.println("[PullRequestCompareEditorInput] findContentViewer - Creating NEW InlineCommentTextMergeViewer"); //$NON-NLS-1$
 				InlineCommentTextMergeViewer inlineViewer = new InlineCommentTextMergeViewer(
 						parent, getCompareConfiguration());
 				inlineViewer.setFilePath(changedFile.getPath());
 				inlineViewer.setComments(comments);
 				contentViewer = inlineViewer;
-				System.out.println("[PullRequestCompareEditorInput] findContentViewer - Created and returning InlineCommentTextMergeViewer"); //$NON-NLS-1$
 				return contentViewer;
 			}
 			// If oldViewer exists but is not our type, fall through to default
 			// to avoid handler conflicts
-			System.out.println("[PullRequestCompareEditorInput] findContentViewer - oldViewer incompatible, using default"); //$NON-NLS-1$
-		} else {
-			System.out.println("[PullRequestCompareEditorInput] findContentViewer - NOT using inline (useInlineComments=" + useInlineComments + ", comments=" + comments.size() + ")"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		}
 
 		// Use default viewer
-		System.out.println("[PullRequestCompareEditorInput] findContentViewer - Using default viewer"); //$NON-NLS-1$
 		contentViewer = super.findContentViewer(oldViewer, input, parent);
-		System.out.println("[PullRequestCompareEditorInput] findContentViewer - Returning: " + (contentViewer != null ? contentViewer.getClass().getName() : "null")); //$NON-NLS-1$ //$NON-NLS-2$
 		return contentViewer;
 	}
 
@@ -170,7 +150,6 @@ public class PullRequestCompareEditorInput extends CompareEditorInput {
 	 *            the list of comments for this file
 	 */
 	public void setComments(List<PullRequestComment> comments) {
-		System.out.println("[PullRequestCompareEditorInput] setComments called with " + (comments != null ? comments.size() : 0) + " comments"); //$NON-NLS-1$ //$NON-NLS-2$
 		if (comments != null) {
 			this.comments = new ArrayList<>(comments);
 		} else {

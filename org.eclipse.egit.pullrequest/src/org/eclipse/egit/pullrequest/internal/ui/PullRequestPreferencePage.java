@@ -387,7 +387,7 @@ public class PullRequestPreferencePage extends PreferencePage
 	private void testBitbucketConnection() {
 		// Create temporary config
 		PullRequestClientFactory.ClientConfig config = new PullRequestClientFactory.ClientConfig();
-		config.providerType = org.eclipse.egit.core.internal.pullrequest.PullRequestProviderType.BITBUCKET;
+		config.providerType = org.eclipse.egit.pullrequest.internal.client.PullRequestProviderType.BITBUCKET;
 		config.bitbucketServerUrl = bitbucketServerUrlText.getText().trim();
 		config.bitbucketProjectKey = bitbucketProjectKeyText.getText().trim();
 		config.bitbucketRepoSlug = bitbucketRepoSlugText.getText().trim();
@@ -421,7 +421,7 @@ public class PullRequestPreferencePage extends PreferencePage
 	private void testGitHubConnection() {
 		// Create temporary config
 		PullRequestClientFactory.ClientConfig config = new PullRequestClientFactory.ClientConfig();
-		config.providerType = org.eclipse.egit.core.internal.pullrequest.PullRequestProviderType.GITHUB;
+		config.providerType = org.eclipse.egit.pullrequest.internal.client.PullRequestProviderType.GITHUB;
 		config.githubOwner = githubOwnerText.getText().trim();
 		config.githubRepo = githubRepoText.getText().trim();
 		config.githubAccessToken = githubTokenText.getText().trim();
