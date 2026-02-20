@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.eclipse.compare.CompareUI;
+import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
@@ -68,8 +69,6 @@ import org.eclipse.swt.widgets.Display;
 import org.eclipse.ui.ISelectionListener;
 import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.actions.ActionFactory;
-import org.eclipse.ui.forms.widgets.Form;
-import org.eclipse.ui.forms.widgets.FormToolkit;
 import org.eclipse.ui.part.IShowInSource;
 import org.eclipse.ui.part.ShowInContext;
 import org.eclipse.ui.part.ViewPart;
@@ -83,10 +82,6 @@ public class PullRequestChangedFilesView extends ViewPart {
 	 * View ID
 	 */
 	public static final String VIEW_ID = "org.eclipse.egit.pullrequest.PullRequestChangedFilesView"; //$NON-NLS-1$
-
-	private FormToolkit toolkit;
-
-	private Form form;
 
 	private TreeViewer changedFilesViewer;
 
@@ -104,17 +99,10 @@ public class PullRequestChangedFilesView extends ViewPart {
 	public void createPartControl(Composite parent) {
 		GridLayoutFactory.fillDefaults().applyTo(parent);
 
-		toolkit = new FormToolkit(parent.getDisplay());
-		parent.addDisposeListener(e -> toolkit.dispose());
-
-		form = toolkit.createForm(parent);
-		form.setText("Changed Files"); //$NON-NLS-1$
-		GridDataFactory.fillDefaults().grab(true, true).applyTo(form);
-		toolkit.decorateFormHeading(form);
-		GridLayoutFactory.fillDefaults().applyTo(form.getBody());
+		setContentDescription("Changed Files"); //$NON-NLS-1$
 
 		TreeColumnLayout treeColumnLayout = new TreeColumnLayout();
-		Composite layoutComposite = toolkit.createComposite(form.getBody());
+		Composite layoutComposite = new Composite(parent, SWT.NONE);
 		layoutComposite.setLayout(treeColumnLayout);
 		GridDataFactory.fillDefaults().grab(true, true)
 				.applyTo(layoutComposite);
@@ -123,8 +111,6 @@ public class PullRequestChangedFilesView extends ViewPart {
 				SWT.BORDER | SWT.FULL_SELECTION | SWT.MULTI);
 		changedFilesViewer.getTree().setHeaderVisible(true);
 		changedFilesViewer.getTree().setLinesVisible(true);
-		changedFilesViewer.getTree().setData(FormToolkit.KEY_DRAW_BORDER,
-				FormToolkit.TREE_BORDER);
 
 		setupColumns(treeColumnLayout);
 
@@ -190,6 +176,27 @@ public class PullRequestChangedFilesView extends ViewPart {
 		// getSite().getWorkbenchWindow().getSelectionService()
 		// 		.addSelectionListener(PullRequestListView.VIEW_ID,
 		// 				prSelectionListener);
+		createMarkAllUnreadAction();
+	}
+
+	/**
+	 * Creates the "Mark All as Unread" action and adds it to the
+	 * view toolbar.
+	 */
+	private void createMarkAllUnreadAction() {
+		Action markAllUnreadAction = new Action(
+				PRText.ChangedFilesView_MarkAllUnread) {
+			@Override
+			public void run() {
+				for (PullRequestChangedFile file : changedFiles) {
+					file.setRead(false);
+				}
+				changedFilesViewer.refresh();
+			}
+		};
+		markAllUnreadAction.setToolTipText(PRText.ChangedFilesView_MarkAllUnread);
+		getViewSite().getActionBars().getToolBarManager()
+				.add(markAllUnreadAction);
 	}
 
 	private void setupColumns(TreeColumnLayout layout) {
@@ -198,56 +205,86 @@ public class PullRequestChangedFilesView extends ViewPart {
 				SWT.LEFT);
 		fileColumn.setLabelProvider(new PullRequestChangesLabelProvider());
 
-		// Change Type Column
-		TreeViewerColumn changeColumn = createColumn(layout, "Change", 10, //$NON-NLS-1$
-				SWT.LEFT);
-		changeColumn.setLabelProvider(new ColumnLabelProvider() {
-			@Override
-			public String getText(Object element) {
-				if (element instanceof PullRequestChangedFile) {
-					return ((PullRequestChangedFile) element).getChangeType()
-							.toString();
-				}
-				return ""; //$NON-NLS-1$
+	// Change Type Column
+	TreeViewerColumn changeColumn = createColumn(layout, "Change", 10, //$NON-NLS-1$
+			SWT.LEFT);
+	changeColumn.setLabelProvider(new ColumnLabelProvider() {
+		@Override
+		public String getText(Object element) {
+			if (element instanceof PullRequestChangedFile) {
+				return ((PullRequestChangedFile) element).getChangeType()
+						.toString();
 			}
-		});
+			return ""; //$NON-NLS-1$
+		}
 
-		// Comments Column
-		TreeViewerColumn commentsColumn = createColumn(layout, "Comments", 10, //$NON-NLS-1$
-				SWT.CENTER);
-		commentsColumn.setLabelProvider(new ColumnLabelProvider() {
-			@Override
-			public String getText(Object element) {
-				if (element instanceof PullRequestChangedFile) {
-					PullRequestChangedFile file = (PullRequestChangedFile) element;
-					int count = getCommentCountForFile(file.getPath(),
-							file.getSrcPath());
-					return count > 0 ? String.valueOf(count) : ""; //$NON-NLS-1$
-				} else if (element instanceof PullRequestFolderEntry) {
-					PullRequestFolderEntry folder = (PullRequestFolderEntry) element;
-					int count = getCommentCountForFolder(folder);
-					return count > 0 ? String.valueOf(count) : ""; //$NON-NLS-1$
-				}
-				return ""; //$NON-NLS-1$
-			}
-		});
+		@Override
+		public org.eclipse.swt.graphics.Color getBackground(Object element) {
+			return null; // Use theme colors
+		}
 
-		// Path Column
-		TreeViewerColumn pathColumn = createColumn(layout, "Path", 30, //$NON-NLS-1$
-				SWT.LEFT);
-		pathColumn.setLabelProvider(new ColumnLabelProvider() {
-			@Override
-			public String getText(Object element) {
-				if (element instanceof PullRequestChangedFile) {
-					return ((PullRequestChangedFile) element).getPath();
-				} else if (element instanceof PullRequestFolderEntry) {
-					return ((PullRequestFolderEntry) element).getPath()
-							.toString();
-				}
-				return ""; //$NON-NLS-1$
+		@Override
+		public org.eclipse.swt.graphics.Color getForeground(Object element) {
+			return null; // Use theme colors
+		}
+	});
+
+	// Comments Column
+	TreeViewerColumn commentsColumn = createColumn(layout, "Comments", 10, //$NON-NLS-1$
+			SWT.CENTER);
+	commentsColumn.setLabelProvider(new ColumnLabelProvider() {
+		@Override
+		public String getText(Object element) {
+			if (element instanceof PullRequestChangedFile) {
+				PullRequestChangedFile file = (PullRequestChangedFile) element;
+				int count = getCommentCountForFile(file.getPath(),
+						file.getSrcPath());
+				return count > 0 ? String.valueOf(count) : ""; //$NON-NLS-1$
+			} else if (element instanceof PullRequestFolderEntry) {
+				PullRequestFolderEntry folder = (PullRequestFolderEntry) element;
+				int count = getCommentCountForFolder(folder);
+				return count > 0 ? String.valueOf(count) : ""; //$NON-NLS-1$
 			}
-		});
-	}
+			return ""; //$NON-NLS-1$
+		}
+
+		@Override
+		public org.eclipse.swt.graphics.Color getBackground(Object element) {
+			return null; // Use theme colors
+		}
+
+		@Override
+		public org.eclipse.swt.graphics.Color getForeground(Object element) {
+			return null; // Use theme colors
+		}
+	});
+
+	// Path Column
+	TreeViewerColumn pathColumn = createColumn(layout, "Path", 30, //$NON-NLS-1$
+			SWT.LEFT);
+	pathColumn.setLabelProvider(new ColumnLabelProvider() {
+		@Override
+		public String getText(Object element) {
+			if (element instanceof PullRequestChangedFile) {
+				return ((PullRequestChangedFile) element).getPath();
+			} else if (element instanceof PullRequestFolderEntry) {
+				return ((PullRequestFolderEntry) element).getPath()
+						.toString();
+			}
+			return ""; //$NON-NLS-1$
+		}
+
+		@Override
+		public org.eclipse.swt.graphics.Color getBackground(Object element) {
+			return null; // Use theme colors
+		}
+
+		@Override
+		public org.eclipse.swt.graphics.Color getForeground(Object element) {
+			return null; // Use theme colors
+		}
+	});
+}
 
 	private TreeViewerColumn createColumn(TreeColumnLayout layout, String text,
 			int weight, int style) {
@@ -421,7 +458,15 @@ public class PullRequestChangedFilesView extends ViewPart {
 	}
 
 	private void openCompareEditor(PullRequestChangedFile file) {
-		openCompareEditor(file, null);
+		openCompareEditor(file, () -> {
+			// Mark file as read after editor opens
+			file.setRead(true);
+			Display.getDefault().asyncExec(() -> {
+				if (!changedFilesViewer.getControl().isDisposed()) {
+					changedFilesViewer.refresh(file);
+				}
+			});
+		});
 	}
 
 	/**
@@ -435,14 +480,9 @@ public class PullRequestChangedFilesView extends ViewPart {
 	 */
 	public void openCompareEditor(PullRequestChangedFile file,
 			Runnable afterOpen) {
-		System.out.println("[PullRequestChangedFilesView] openCompareEditor called for file: " + file.getPath()); //$NON-NLS-1$
-
 		if (selectedPullRequest == null) {
-			System.out.println("[PullRequestChangedFilesView] No pull request selected, aborting"); //$NON-NLS-1$
 			return;
 		}
-
-		System.out.println("[PullRequestChangedFilesView] PR #" + selectedPullRequest.getId() + ", file has " + getCommentCountForFile(file.getPath(), file.getSrcPath()) + " comments"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 
 		// Open compare editor in a background job
 		Job job = new Job("Opening file comparison") { //$NON-NLS-1$
@@ -452,18 +492,14 @@ public class PullRequestChangedFilesView extends ViewPart {
 					monitor.beginTask("Preparing comparison", //$NON-NLS-1$
 							IProgressMonitor.UNKNOWN);
 
-					System.out.println("[PullRequestChangedFilesView] Job started for file: " + file.getPath()); //$NON-NLS-1$
-
 					IPullRequestClient client = PullRequestClientFactory
 							.createClient();
 					if (client == null) {
-						System.out.println("[PullRequestChangedFilesView] Failed to create pull request client"); //$NON-NLS-1$
 						return new Status(IStatus.ERROR, Activator.PLUGIN_ID,
 								"Pull request provider not configured"); //$NON-NLS-1$
 					}
 
 					// Create compare editor input
-					System.out.println("[PullRequestChangedFilesView] Creating PullRequestCompareEditorInput"); //$NON-NLS-1$
 					final PullRequestCompareEditorInput input = new PullRequestCompareEditorInput(
 							client, selectedPullRequest, file);
 
@@ -480,36 +516,28 @@ public class PullRequestChangedFilesView extends ViewPart {
 										&& commentPath.equals(srcPath));
 							}).collect(Collectors.toList());
 
-					System.out.println("[PullRequestChangedFilesView] Filtered " + fileComments.size() + " comments for file"); //$NON-NLS-1$ //$NON-NLS-2$
-
 					// Set comments on the compare input
 					input.setComments(fileComments);
 
 					// Open compare editor in UI thread
 					Display.getDefault().asyncExec(() -> {
-						System.out.println("[PullRequestChangedFilesView] Opening compare editor in UI thread"); //$NON-NLS-1$
-						System.out.println("[PullRequestChangedFilesView] About to call CompareUI.openCompareEditor()"); //$NON-NLS-1$
 						try {
-							// Use openCompareEditor with the flag to run the input preparation
-							// This ensures prepareInput() is called
 							CompareUI.openCompareEditor(input, true);
-							System.out.println("[PullRequestChangedFilesView] CompareUI.openCompareEditor() returned successfully"); //$NON-NLS-1$
 						} catch (Exception e) {
-							System.out.println("[PullRequestChangedFilesView] Exception in CompareUI.openCompareEditor(): " + e.getMessage()); //$NON-NLS-1$
-							e.printStackTrace();
+							Activator.logError(
+									"Failed to open compare editor", //$NON-NLS-1$
+									e);
 						}
 						// Execute callback after editor opens
 						if (afterOpen != null) {
-							System.out.println("[PullRequestChangedFilesView] Executing afterOpen callback"); //$NON-NLS-1$
 							afterOpen.run();
 						}
 					});
 
-					System.out.println("[PullRequestChangedFilesView] Job completed for file: " + file.getPath()); //$NON-NLS-1$
 					return Status.OK_STATUS;
 				} catch (Exception e) {
-					System.out.println("[PullRequestChangedFilesView] Error opening compare editor: " + e.getMessage()); //$NON-NLS-1$
-					e.printStackTrace();
+					Activator.logError(
+							"Error opening compare editor", e); //$NON-NLS-1$
 					return new Status(IStatus.ERROR, Activator.PLUGIN_ID,
 							"Failed to open comparison", e); //$NON-NLS-1$
 				} finally {
@@ -519,17 +547,16 @@ public class PullRequestChangedFilesView extends ViewPart {
 		};
 		job.setUser(false);
 		job.schedule();
-		System.out.println("[PullRequestChangedFilesView] Job scheduled"); //$NON-NLS-1$
 	}
 
 	private void updateFormTitle() {
 		if (selectedPullRequest != null) {
-			form.setText(MessageFormat.format(
-					"Changed Files - PR #{0}: {1}", //$NON-NLS-1$
+			setContentDescription(MessageFormat.format(
+					"PR #{0}: {1}", //$NON-NLS-1$
 					Long.valueOf(selectedPullRequest.getId()),
 					selectedPullRequest.getTitle()));
 		} else {
-			form.setText("Changed Files"); //$NON-NLS-1$
+			setContentDescription(""); //$NON-NLS-1$
 		}
 	}
 
@@ -615,9 +642,6 @@ public class PullRequestChangedFilesView extends ViewPart {
 		// 			.removeSelectionListener(PullRequestListView.VIEW_ID,
 		// 					prSelectionListener);
 		// }
-		if (toolkit != null) {
-			toolkit.dispose();
-		}
 		super.dispose();
 	}
 
@@ -840,12 +864,9 @@ public class PullRequestChangedFilesView extends ViewPart {
 	/**
 	 * Opens the selected changed files in the working tree editor.
 	 * <p>
-	 * This method constructs the absolute filesystem path from the repository
-	 * working tree and opens the file via
-	 * {@link DiffViewer#openFileInEditor(java.io.File, int)}. This approach
-	 * follows the pattern used in StagingView, which is more reliable than
-	 * trying to resolve workspace files first since PR files may not be in a
-	 * Git-shared project.
+	 * This method attempts to open the workspace file using Eclipse's standard
+	 * editor opening API. If the file is not in the workspace, it falls back
+	 * to opening via external editor using the filesystem path.
 	 * </p>
 	 *
 	 * @param files
@@ -863,11 +884,31 @@ public class PullRequestChangedFilesView extends ViewPart {
 				continue;
 			}
 
-			String relativePath = file.getPath();
-			java.io.File fsFile = new org.eclipse.core.runtime.Path(
-					repo.getWorkTree().getAbsolutePath())
-					.append(relativePath).toFile();
-			DiffViewer.openFileInEditor(fsFile, -1);
+			// First try to open as workspace file
+			IFile workspaceFile = file.getWorkspaceFile();
+			if (workspaceFile != null && workspaceFile.exists()) {
+				try {
+					org.eclipse.ui.ide.IDE.openEditor(
+							getSite().getPage(), workspaceFile);
+				} catch (org.eclipse.ui.PartInitException e) {
+					Activator.logError(MessageFormat.format(
+							"Failed to open workspace file: {0}", //$NON-NLS-1$
+							workspaceFile.getFullPath()), e);
+				}
+			} else {
+				// Fallback: open file from filesystem
+				String relativePath = file.getPath();
+				java.io.File fsFile = new org.eclipse.core.runtime.Path(
+						repo.getWorkTree().getAbsolutePath())
+						.append(relativePath).toFile();
+				if (fsFile.exists()) {
+					DiffViewer.openFileInEditor(fsFile, -1);
+				} else {
+					Activator.logWarning(MessageFormat.format(
+							"File does not exist: {0}", //$NON-NLS-1$
+							fsFile.getAbsolutePath()));
+				}
+			}
 		}
 	}
 }

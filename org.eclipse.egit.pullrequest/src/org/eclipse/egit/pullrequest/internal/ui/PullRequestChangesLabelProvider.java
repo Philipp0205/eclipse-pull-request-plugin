@@ -20,8 +20,13 @@ import org.eclipse.jface.resource.ResourceManager;
 import org.eclipse.jface.viewers.ColumnLabelProvider;
 import org.eclipse.jface.viewers.DecorationOverlayIcon;
 import org.eclipse.jface.viewers.IDecoration;
+import org.eclipse.swt.SWT;
+import org.eclipse.swt.graphics.Color;
+import org.eclipse.swt.graphics.Font;
+import org.eclipse.swt.graphics.FontData;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.ImageData;
+import org.eclipse.swt.widgets.Display;
 import org.eclipse.ui.ISharedImages;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.model.WorkbenchLabelProvider;
@@ -36,6 +41,8 @@ public class PullRequestChangesLabelProvider extends ColumnLabelProvider {
 	private final WorkbenchLabelProvider workbenchLabelProvider;
 
 	private final Image folderImage;
+
+	private Font boldFont;
 
 	// Icon size in pixels (reduced from default 16x16)
 	private static final int ICON_SIZE = 12;
@@ -109,6 +116,39 @@ public class PullRequestChangesLabelProvider extends ColumnLabelProvider {
 		return null;
 	}
 
+	@Override
+	public Font getFont(Object element) {
+		if (element instanceof PullRequestChangedFile) {
+			PullRequestChangedFile file = (PullRequestChangedFile) element;
+			if (!file.isRead()) {
+				if (boldFont == null) {
+					Font defaultFont = JFaceResources.getDefaultFont();
+					FontData[] fontData = defaultFont.getFontData();
+					for (FontData fd : fontData) {
+						fd.setStyle(fd.getStyle() | SWT.BOLD);
+					}
+					boldFont = new Font(Display.getCurrent(), fontData);
+				}
+				return boldFont;
+			}
+		}
+		return null;
+	}
+	
+
+	@Override
+	public Color getBackground(Object element) {
+		return null; // Use theme-appropriate background (works in both light and dark mode)
+	}
+
+	@Override
+	public Color getForeground(Object element) {
+		// Return null to use theme-appropriate foreground color
+		// This ensures dark mode compatibility
+		return null;
+	}
+
+
 	private ImageDescriptor getChangeTypeOverlay(ChangeType type) {
 		switch (type) {
 		case ADDED:
@@ -125,6 +165,9 @@ public class PullRequestChangesLabelProvider extends ColumnLabelProvider {
 
 	@Override
 	public void dispose() {
+		if (boldFont != null && !boldFont.isDisposed()) {
+			boldFont.dispose();
+		}
 		resourceManager.dispose();
 		workbenchLabelProvider.dispose();
 		super.dispose();

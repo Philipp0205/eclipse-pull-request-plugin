@@ -18,6 +18,8 @@ import static org.hamcrest.Matchers.nullValue;
 
 import java.util.List;
 
+import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
+import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
 import org.junit.Test;
 
@@ -327,5 +329,90 @@ public class GitHubJsonParserTest {
 		// Last two comments should be marked as issue comments
 		assertThat(comments.get(1).isReviewComment(), equalTo(false));
 		assertThat(comments.get(2).isReviewComment(), equalTo(false));
+	}
+
+	@Test
+	public void testParseChangedFileWithPatch() {
+		String json = "[{\"sha\":\"abc123\"," //$NON-NLS-1$
+				+ "\"filename\":\"src/Main.java\"," //$NON-NLS-1$
+				+ "\"status\":\"modified\"," //$NON-NLS-1$
+				+ "\"additions\":2,\"deletions\":1," //$NON-NLS-1$
+				+ "\"changes\":3," //$NON-NLS-1$
+				+ "\"patch\":\"@@ -1,4 +1,5 @@\\n import java.util.List;\\n-import java.util.ArrayList;\\n+import java.util.LinkedList;\\n+import java.util.Set;\\n import java.util.Map;\"}]"; //$NON-NLS-1$
+
+		List<ChangedFile> files = GitHubJsonParser
+				.parseChangedFiles(json);
+
+		assertThat(files, hasSize(1));
+		ChangedFile file = files.get(0);
+		assertThat(file.getPath(), notNullValue());
+		assertThat(file.getPath().getToString(),
+				equalTo("src/Main.java")); //$NON-NLS-1$
+		assertThat(file.getType(), equalTo("MODIFY")); //$NON-NLS-1$
+
+		// Patch should be parsed and stored
+		assertThat(file.getPatch(), notNullValue());
+		// Verify the patch contains the hunk header
+		assertThat(file.getPatch().contains("@@ -1,4 +1,5 @@"), //$NON-NLS-1$
+				equalTo(true));
+	}
+
+	@Test
+	public void testParseChangedFileWithoutPatch() {
+		// Binary files don't have a patch field
+		String json = "[{\"sha\":\"def456\"," //$NON-NLS-1$
+				+ "\"filename\":\"image.png\"," //$NON-NLS-1$
+				+ "\"status\":\"added\"," //$NON-NLS-1$
+				+ "\"additions\":0,\"deletions\":0," //$NON-NLS-1$
+				+ "\"changes\":0}]"; //$NON-NLS-1$
+
+		List<ChangedFile> files = GitHubJsonParser
+				.parseChangedFiles(json);
+
+		assertThat(files, hasSize(1));
+		ChangedFile file = files.get(0);
+		assertThat(file.getPath().getToString(),
+				equalTo("image.png")); //$NON-NLS-1$
+		assertThat(file.getType(), equalTo("ADD")); //$NON-NLS-1$
+		assertThat(file.getPatch(), nullValue());
+	}
+
+	@Test
+	public void testParsePullRequestRefSha() {
+		String json = "{\"number\":42,\"title\":\"Test PR\"," //$NON-NLS-1$
+				+ "\"state\":\"open\",\"body\":\"desc\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\"," //$NON-NLS-1$
+				+ "\"head\":{\"ref\":\"feature-branch\"," //$NON-NLS-1$
+				+ "\"sha\":\"abc123def456\"," //$NON-NLS-1$
+				+ "\"repo\":{\"name\":\"my-repo\"," //$NON-NLS-1$
+				+ "\"full_name\":\"owner/my-repo\"," //$NON-NLS-1$
+				+ "\"owner\":{\"login\":\"owner\"}}}," //$NON-NLS-1$
+				+ "\"base\":{\"ref\":\"main\"," //$NON-NLS-1$
+				+ "\"sha\":\"789xyz000111\"," //$NON-NLS-1$
+				+ "\"repo\":{\"name\":\"my-repo\"," //$NON-NLS-1$
+				+ "\"full_name\":\"owner/my-repo\"," //$NON-NLS-1$
+				+ "\"owner\":{\"login\":\"owner\"}}}," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"author\"}," //$NON-NLS-1$
+				+ "\"html_url\":\"https://github.com/owner/my-repo/pull/42\"," //$NON-NLS-1$
+				+ "\"comments\":5}"; //$NON-NLS-1$
+
+		PullRequest pr = GitHubJsonParser.parseSinglePullRequest(json);
+
+		assertThat(pr, notNullValue());
+
+		// Head ref (fromRef) should have branch name and SHA
+		assertThat(pr.getFromRef(), notNullValue());
+		assertThat(pr.getFromRef().getId(),
+				equalTo("feature-branch")); //$NON-NLS-1$
+		assertThat(pr.getFromRef().getLatestCommit(),
+				equalTo("abc123def456")); //$NON-NLS-1$
+
+		// Base ref (toRef) should have branch name and SHA
+		assertThat(pr.getToRef(), notNullValue());
+		assertThat(pr.getToRef().getId(),
+				equalTo("main")); //$NON-NLS-1$
+		assertThat(pr.getToRef().getLatestCommit(),
+				equalTo("789xyz000111")); //$NON-NLS-1$
 	}
 }

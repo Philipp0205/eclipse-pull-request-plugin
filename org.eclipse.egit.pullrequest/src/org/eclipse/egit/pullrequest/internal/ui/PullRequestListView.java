@@ -69,13 +69,10 @@ import org.eclipse.ui.forms.widgets.FormToolkit;
 import org.eclipse.ui.part.ViewPart;
 
 /**
- * View for displaying a list of Bitbucket Data Center pull requests
+ * View for displaying a list of pull requests
  */
 public class PullRequestListView extends ViewPart {
 
-	/**
-	 * View ID
-	 */
 	public static final String VIEW_ID = "org.eclipse.egit.pullrequest.PullRequestListView"; //$NON-NLS-1$
 
 	private FormToolkit toolkit;
@@ -124,6 +121,7 @@ public class PullRequestListView extends ViewPart {
 
 		final TreeColumnLayout treeColumnLayout = new TreeColumnLayout();
 
+		// TODO refactor the construction of the filtered tree to own method.  
 		FilteredTree filteredTree = new FilteredTree(tableComposite,
 				SWT.BORDER | SWT.FULL_SELECTION | SWT.MULTI,
 				new TreeColumnPatternFilter(), true, true) {
@@ -171,6 +169,7 @@ public class PullRequestListView extends ViewPart {
 
 		pullRequestViewer.setInput(pullRequests);
 
+		// TODO refactor selection mechanism to own method
 		// Register as selection provider for view communication
 		getSite().setSelectionProvider(pullRequestViewer);
 

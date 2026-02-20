@@ -280,6 +280,7 @@ public class PullRequest {
 		private String id;
 		private String displayId;
 		private Repository repository;
+		private String latestCommit;
 		
 		/**
 		 * @return the ref ID
@@ -321,6 +322,20 @@ public class PullRequest {
 		 */
 		public void setRepository(Repository repository) {
 			this.repository = repository;
+		}
+		
+		/**
+		 * @return the latest commit SHA
+		 */
+		public String getLatestCommit() {
+			return latestCommit;
+		}
+		
+		/**
+		 * @param latestCommit the latest commit SHA
+		 */
+		public void setLatestCommit(String latestCommit) {
+			this.latestCommit = latestCommit;
 		}
 	}
 	

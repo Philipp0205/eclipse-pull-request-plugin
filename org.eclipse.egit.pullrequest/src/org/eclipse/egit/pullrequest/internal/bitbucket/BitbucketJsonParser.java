@@ -542,6 +542,11 @@ class BitbucketJsonParser {
 			ref.setDisplayId(displayId);
 		}
 
+		String latestCommit = extractStringValue(json, "\"latestCommit\":"); //$NON-NLS-1$
+		if (latestCommit != null) {
+			ref.setLatestCommit(latestCommit);
+		}
+
 		String repoJson = extractObjectValue(json, "\"repository\":"); //$NON-NLS-1$
 		if (repoJson != null) {
 			ref.setRepository(parseRepository(repoJson));

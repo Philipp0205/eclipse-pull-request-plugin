@@ -203,6 +203,7 @@ class GitHubJsonParser {
 		PullRequest.PullRequestRef ref = new PullRequest.PullRequestRef();
 		ref.setId(extractString(json, "ref")); //$NON-NLS-1$
 		ref.setDisplayId(extractString(json, "ref")); //$NON-NLS-1$
+		ref.setLatestCommit(extractString(json, "sha")); //$NON-NLS-1$
 
 		String repoJson = extractObject(json, "repo"); //$NON-NLS-1$
 		if (repoJson != null) {
@@ -343,7 +344,13 @@ class GitHubJsonParser {
 								.substring(previousFilename.lastIndexOf('/') + 1)
 						: previousFilename);
 				file.setSrcPath(srcPath);
-			}
+		}
+		}
+
+		// Extract patch field if present
+		String patch = extractString(json, "patch"); //$NON-NLS-1$
+		if (patch != null) {
+			file.setPatch(patch);
 		}
 
 		return file;
@@ -515,6 +522,15 @@ class GitHubJsonParser {
 		comment.setReviewComment(isReviewComment);
 
 		if (isReviewComment) {
+			// Extract node_id for GraphQL thread resolution
+			// GitHub requires the node_id to query for the review thread ID
+			String nodeId = extractString(json, "node_id"); //$NON-NLS-1$
+			Activator.logInfo("parseComment: extracted node_id=" + nodeId //$NON-NLS-1$
+					+ " for comment id=" + comment.getId()); //$NON-NLS-1$
+			if (nodeId != null && !nodeId.isEmpty()) {
+				comment.setThreadId(nodeId);
+			}
+			
 			// Review comments have file and line information
 			comment.setPath(extractString(json, "path")); //$NON-NLS-1$
 			Integer line = extractInteger(json, "line"); //$NON-NLS-1$

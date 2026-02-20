@@ -23,6 +23,9 @@ public class PRText extends NLS {
 	/** */
 	public static String StagingView_CopyPaths;
 
+	/** */
+	public static String ChangedFilesView_MarkAllUnread;
+
 	static {
 		initializeMessages("org.eclipse.egit.pullrequest.internal.prtext", //$NON-NLS-1$
 				PRText.class);

@@ -28,6 +28,7 @@ import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
 import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
 import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderCapabilities;
+import org.eclipse.egit.pullrequest.Activator;
 import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderType;
 import org.eclipse.jgit.annotations.NonNull;
 import org.eclipse.jgit.annotations.Nullable;
@@ -38,6 +39,8 @@ import org.eclipse.jgit.annotations.Nullable;
 public class GitHubClient implements IPullRequestClient {
 
 	private static final String API_BASE_URL = "https://api.github.com"; //$NON-NLS-1$
+
+	private static final String GRAPHQL_URL = "https://api.github.com/graphql"; //$NON-NLS-1$
 
 	private static final int DEFAULT_TIMEOUT = 30000; // 30 seconds
 
@@ -276,12 +279,204 @@ public class GitHubClient implements IPullRequestClient {
 	public @NonNull PullRequestComment updateCommentState(long pullRequestId,
 			long commentId, int commentVersion, @NonNull String state)
 			throws IOException {
-		// GitHub doesn't have a direct "resolve comment" API
-		// Comments can be marked as resolved via the review thread API
-		// For now, we'll throw UnsupportedOperationException
-		// TODO: Implement via GraphQL or review thread resolution
-		throw new UnsupportedOperationException(
-				"GitHub comment state updates not yet implemented"); //$NON-NLS-1$
+		// GitHub requires GraphQL to resolve/unresolve review threads
+		// First, get the comment to find its node_id
+		PullRequestComment comment = getCommentById(commentId);
+		
+		// Debug: Log the comment's threadId
+		String commentThreadId = comment.getThreadId();
+		Activator.logInfo("updateCommentState: commentId=" + commentId //$NON-NLS-1$
+				+ ", threadId(node_id)=" + commentThreadId); //$NON-NLS-1$
+		
+		// Use GraphQL to find the thread ID from the comment's node_id
+		String threadId = getThreadIdFromComment(commentThreadId);
+		
+		Activator.logInfo("updateCommentState: resolved threadId=" + threadId); //$NON-NLS-1$
+		
+		if (threadId == null || threadId.isEmpty()) {
+			throw new IOException(
+					"Unable to find review thread for comment " + commentId); //$NON-NLS-1$
+		}
+
+		// Map state to GraphQL mutation
+		boolean shouldResolve = "RESOLVED".equalsIgnoreCase(state); //$NON-NLS-1$
+		String mutationName = shouldResolve ? "resolveReviewThread" //$NON-NLS-1$
+				: "unresolveReviewThread"; //$NON-NLS-1$
+
+		// Build GraphQL mutation
+		String mutation = "mutation { " + mutationName + "(input: {threadId: \"" //$NON-NLS-1$ //$NON-NLS-2$
+				+ threadId + "\"}) { thread { isResolved } } }"; //$NON-NLS-1$
+
+		// Execute GraphQL mutation
+		String result = executeGraphQL(mutation);
+		
+		// Verify mutation succeeded
+		if (!result.contains("\"isResolved\":" + shouldResolve)) { //$NON-NLS-1$
+			throw new IOException("Failed to update comment state: " + result); //$NON-NLS-1$
+		}
+
+		// Update comment state and return
+		comment.setState(state);
+		return comment;
+	}
+
+	/**
+	 * Fetches the thread ID for a given comment node_id using GraphQL
+	 *
+	 * @param commentNodeId
+	 *            the comment's node_id
+	 * @return the thread's node_id, or null if not found
+	 * @throws IOException
+	 *             if the request fails
+	 */
+	private String getThreadIdFromComment(String commentNodeId)
+			throws IOException {
+		if (commentNodeId == null || commentNodeId.isEmpty()) {
+			Activator.logInfo("getThreadIdFromComment: commentNodeId is null or empty"); //$NON-NLS-1$
+			return null;
+		}
+
+		// GitHub's GraphQL schema: PullRequestReviewComment doesn't have a direct pullRequestReviewThread field
+		// Instead, we need to query the comment to get its pull request, then find the thread containing this comment
+		String query = "query { node(id: \"" + commentNodeId //$NON-NLS-1$
+				+ "\") { ... on PullRequestReviewComment { " //$NON-NLS-1$
+				+ "databaseId pullRequest { reviewThreads(first: 100) { " //$NON-NLS-1$
+				+ "nodes { id comments(first: 100) { nodes { databaseId } } } } } } } }"; //$NON-NLS-1$
+
+		String result = executeGraphQL(query);
+		
+		Activator.logInfo("getThreadIdFromComment: GraphQL result=" + result); //$NON-NLS-1$
+		
+		// Extract the comment's database ID from the result
+		long commentDbId = extractCommentDatabaseId(result);
+		if (commentDbId == -1) {
+			Activator.logInfo("getThreadIdFromComment: Could not extract comment databaseId"); //$NON-NLS-1$
+			return null;
+		}
+		
+		// Find the thread that contains this comment
+		String threadId = extractThreadIdContainingComment(result, commentDbId);
+		
+		if (threadId == null) {
+			Activator.logInfo("getThreadIdFromComment: No thread found containing comment " + commentDbId); //$NON-NLS-1$
+		} else {
+			Activator.logInfo("getThreadIdFromComment: extracted threadId=" + threadId); //$NON-NLS-1$
+		}
+		
+		return threadId;
+	}
+
+	/**
+	 * Extracts the databaseId of the comment from GraphQL result
+	 */
+	private long extractCommentDatabaseId(String result) {
+		String marker = "\"databaseId\":"; //$NON-NLS-1$
+		int start = result.indexOf(marker);
+		if (start == -1) {
+			return -1;
+		}
+		start += marker.length();
+		
+		// Skip whitespace and find end of number
+		while (start < result.length() && Character.isWhitespace(result.charAt(start))) {
+			start++;
+		}
+		
+		int end = start;
+		while (end < result.length() && Character.isDigit(result.charAt(end))) {
+			end++;
+		}
+		
+		if (end == start) {
+			return -1;
+		}
+		
+		try {
+			return Long.parseLong(result.substring(start, end));
+		} catch (NumberFormatException e) {
+			return -1;
+		}
+	}
+
+	/**
+	 * Extracts the thread ID that contains the given comment database ID
+	 */
+	private String extractThreadIdContainingComment(String result, long commentDbId) {
+		// Parse through the reviewThreads nodes to find which thread contains our comment
+		// JSON structure: reviewThreads: { nodes: [ { id: "...", comments: { nodes: [ { databaseId: ... } ] } } ] }
+		
+		int nodesStart = result.indexOf("\"reviewThreads\""); //$NON-NLS-1$
+		if (nodesStart == -1) {
+			return null;
+		}
+		
+		// Find all thread objects
+		int pos = nodesStart;
+		while (pos < result.length()) {
+			// Find next thread ID
+			int threadIdPos = result.indexOf("\"id\":\"", pos); //$NON-NLS-1$
+			if (threadIdPos == -1) {
+				break;
+			}
+			
+			int threadIdStart = threadIdPos + 6; // length of "\"id\":\""
+			int threadIdEnd = result.indexOf("\"", threadIdStart); //$NON-NLS-1$
+			if (threadIdEnd == -1) {
+				break;
+			}
+			
+			String threadId = result.substring(threadIdStart, threadIdEnd);
+			
+			// Check if this thread contains our comment
+			// Find the comments array for this thread
+			int commentsStart = result.indexOf("\"comments\"", threadIdStart); //$NON-NLS-1$
+			if (commentsStart == -1 || commentsStart > result.indexOf("\"id\":\"", threadIdEnd)) { //$NON-NLS-1$
+				// No more comments in this thread or we've moved to next thread
+				pos = threadIdEnd;
+				continue;
+			}
+			
+			// Look for our comment's databaseId within this thread's comments
+			int nextThreadPos = result.indexOf("\"id\":\"", threadIdEnd); //$NON-NLS-1$
+			int searchEnd = (nextThreadPos == -1) ? result.length() : nextThreadPos;
+			String threadSection = result.substring(commentsStart, searchEnd);
+			
+			// Check if this thread section contains our comment ID
+			String commentIdMarker = "\"databaseId\":" + commentDbId; //$NON-NLS-1$
+			if (threadSection.contains(commentIdMarker)) {
+				return threadId;
+			}
+			
+			pos = threadIdEnd;
+		}
+		
+		return null;
+	}
+
+	/**
+	 * Fetches a single comment by ID
+	 *
+	 * @param commentId
+	 *            the comment ID
+	 * @return the comment
+	 * @throws IOException
+	 *             if the request fails
+	 */
+	private PullRequestComment getCommentById(long commentId)
+			throws IOException {
+		// Try review comment endpoint first
+		try {
+			String path = "/repos/" + owner + "/" + repo + "/pulls/comments/" //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+					+ commentId;
+			String json = doGet(path);
+			return GitHubJsonParser.parseSingleComment(json);
+		} catch (IOException e) {
+			// If not found, try issue comment endpoint
+			String path = "/repos/" + owner + "/" + repo + "/issues/comments/" //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+					+ commentId;
+			String json = doGet(path);
+			return GitHubJsonParser.parseSingleComment(json);
+		}
 	}
 
 	@Override
@@ -547,6 +742,55 @@ public class GitHubClient implements IPullRequestClient {
 						"GitHub API request failed: HTTP " + responseCode //$NON-NLS-1$
 								+ " - " + error); //$NON-NLS-1$
 			}
+
+		} finally {
+			if (conn != null) {
+				conn.disconnect();
+			}
+		}
+	}
+
+	/**
+	 * Executes a GraphQL query or mutation against GitHub's GraphQL API
+	 *
+	 * @param query
+	 *            the GraphQL query or mutation string
+	 * @return the response body as string
+	 * @throws IOException
+	 *             if the request fails
+	 */
+	private String executeGraphQL(String query) throws IOException {
+		HttpURLConnection conn = null;
+		try {
+			URL url = new URL(GRAPHQL_URL);
+			conn = (HttpURLConnection) url.openConnection();
+			conn.setRequestMethod("POST"); //$NON-NLS-1$
+			conn.setConnectTimeout(DEFAULT_TIMEOUT);
+			conn.setReadTimeout(DEFAULT_TIMEOUT);
+			conn.setDoOutput(true);
+
+			// Set headers for GraphQL
+			conn.setRequestProperty("Authorization", "Bearer " + token); //$NON-NLS-1$ //$NON-NLS-2$
+			conn.setRequestProperty("Content-Type", "application/json"); //$NON-NLS-1$ //$NON-NLS-2$
+
+			// Build GraphQL request body
+			String requestBody = "{\"query\":\"" + escapeJson(query) + "\"}"; //$NON-NLS-1$ //$NON-NLS-2$
+
+			// Write request body
+			try (OutputStream os = conn.getOutputStream()) {
+				byte[] input = requestBody.getBytes(StandardCharsets.UTF_8);
+				os.write(input, 0, input.length);
+			}
+
+			int responseCode = conn.getResponseCode();
+			if (responseCode != 200) {
+				String error = readError(conn);
+				throw new IOException(
+						"GitHub GraphQL request failed: HTTP " + responseCode //$NON-NLS-1$
+								+ " - " + error); //$NON-NLS-1$
+			}
+
+			return readResponse(conn);
 
 		} finally {
 			if (conn != null) {

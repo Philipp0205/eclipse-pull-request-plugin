@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
 import org.eclipse.jface.text.source.AbstractRulerColumn;
@@ -111,6 +112,14 @@ public class CommentRulerColumn extends AbstractRulerColumn {
 
 	private int hoveredModelLine = -1;
 
+	/**
+	 * Set of 1-based line numbers that are part of the diff and
+	 * therefore valid targets for new inline comments. When
+	 * {@code null}, all lines are considered valid (fallback
+	 * for providers that do not supply patch data).
+	 */
+	private Set<Integer> validDiffLines;
+
 	private Color commentIconColor;
 
 	private Color resolvedIconColor;
@@ -204,6 +213,36 @@ public class CommentRulerColumn extends AbstractRulerColumn {
 	}
 
 	/**
+	 * Sets the valid diff lines for this ruler column. Only lines
+	 * in this set will show the "+" hover icon and accept new
+	 * comment clicks.
+	 *
+	 * @param validLines
+	 *            the set of 1-based line numbers that are part
+	 *            of the diff, or {@code null} to allow all lines
+	 */
+	public void setValidDiffLines(Set<Integer> validLines) {
+		this.validDiffLines = validLines;
+	}
+
+	/**
+	 * Returns whether the given 1-based line number is a valid
+	 * target for a new inline comment. A line is valid if
+	 * {@link #validDiffLines} is {@code null} (no restriction)
+	 * or the line is contained in the set.
+	 *
+	 * @param line
+	 *            the 1-based line number
+	 * @return {@code true} if the line is commentable
+	 */
+	public boolean isCommentableLine(int line) {
+		if (validDiffLines == null) {
+			return true;
+		}
+		return validDiffLines.contains(Integer.valueOf(line));
+	}
+
+	/**
 	 * Sets the currently expanded line number. The ruler will highlight
 	 * the icon for this line differently to indicate it is expanded.
 	 *
@@ -247,7 +286,8 @@ public class CommentRulerColumn extends AbstractRulerColumn {
 
 		if (hasComments(oneBasedLine)) {
 			drawCommentIcon(gc, oneBasedLine, linePixel, lineHeight);
-		} else if (modelLine == hoveredModelLine) {
+		} else if (modelLine == hoveredModelLine
+				&& isCommentableLine(oneBasedLine)) {
 			drawAddIcon(gc, linePixel, lineHeight);
 		}
 	}
@@ -425,7 +465,7 @@ public class CommentRulerColumn extends AbstractRulerColumn {
 								oneBasedLine,
 								getComments(oneBasedLine));
 					}
-				} else {
+				} else if (isCommentableLine(oneBasedLine)) {
 					if (newCommentClickHandler != null) {
 						newCommentClickHandler
 								.onNewCommentClick(oneBasedLine);

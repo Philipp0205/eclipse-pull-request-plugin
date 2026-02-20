@@ -67,6 +67,13 @@ public class PullRequestComment {
 	private boolean reviewComment;
 
 	/**
+	 * GitHub GraphQL thread ID (node_id). Required for resolving/unresolving
+	 * review threads via GraphQL API. This is the global node ID that
+	 * identifies the review thread in GitHub's GraphQL schema.
+	 */
+	private String threadId;
+
+	/**
 	 * @return the comment ID
 	 */
 	public long getId() {
@@ -360,4 +367,20 @@ public class PullRequestComment {
 	public void setReviewComment(boolean reviewComment) {
 		this.reviewComment = reviewComment;
 	}
+
+	/**
+	 * @return the GitHub GraphQL thread ID (node_id), or null if not available
+	 */
+	public String getThreadId() {
+		return threadId;
+	}
+
+	/**
+	 * @param threadId
+	 *            the GitHub GraphQL thread ID (node_id)
+	 */
+	public void setThreadId(String threadId) {
+		this.threadId = threadId;
+	}
 }
+

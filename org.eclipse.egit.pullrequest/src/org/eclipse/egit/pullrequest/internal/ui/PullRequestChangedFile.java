@@ -17,6 +17,7 @@ import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.Path;
 import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
+import org.eclipse.egit.pullrequest.internal.model.DiffHunkParser;
 import org.eclipse.egit.core.internal.util.ResourceUtil;
 import org.eclipse.egit.pullrequest.internal.ui.IProblemDecoratable;
 import org.eclipse.jgit.lib.Repository;
@@ -53,6 +54,10 @@ public class PullRequestChangedFile implements IProblemDecoratable {
 	private PullRequestFolderEntry parent;
 
 	private Repository repository;
+
+	private boolean read;
+
+	private DiffHunkParser.DiffLines diffLines;
 
 	/**
 	 * Creates a new changed file entry
@@ -157,6 +162,50 @@ public class PullRequestChangedFile implements IProblemDecoratable {
 		return repository;
 	}
 
+	/**
+	 * Returns whether this file has been read (opened) by the user.
+	 *
+	 * @return {@code true} if the file has been read, {@code false}
+	 *         otherwise
+	 */
+	public boolean isRead() {
+		return read;
+	}
+
+	/**
+	 * Sets the read state of this file.
+	 *
+	 * @param read
+	 *            {@code true} to mark as read, {@code false} to mark as
+	 *            unread
+	 */
+	public void setRead(boolean read) {
+		this.read = read;
+	}
+
+	/**
+	 * Returns the parsed diff lines for this file. The diff lines
+	 * indicate which 1-based line numbers in the file are part of
+	 * the pull request diff and are therefore valid targets for
+	 * inline comments.
+	 *
+	 * @return the diff lines, or {@code null} if no patch data
+	 *         was available
+	 */
+	public DiffHunkParser.DiffLines getDiffLines() {
+		return diffLines;
+	}
+
+	/**
+	 * Sets the parsed diff lines for this file.
+	 *
+	 * @param diffLines
+	 *            the diff lines
+	 */
+	public void setDiffLines(DiffHunkParser.DiffLines diffLines) {
+		this.diffLines = diffLines;
+	}
+
 	@Override
 	public int getProblemSeverity() {
 		// No problem markers for remote files
@@ -259,8 +308,17 @@ public class PullRequestChangedFile implements IProblemDecoratable {
 			srcPathStr = cf.getSrcPath().getToString();
 		}
 
-		return new PullRequestChangedFile(cf.getPath().getToString(),
+		PullRequestChangedFile result = new PullRequestChangedFile(
+				cf.getPath().getToString(),
 				cf.getPath().getName(), type, srcPathStr);
+
+		// Parse diff patch to extract valid comment lines
+		if (cf.getPatch() != null) {
+			result.setDiffLines(
+					DiffHunkParser.parse(cf.getPatch()));
+		}
+
+		return result;
 	}
 
 	@Override

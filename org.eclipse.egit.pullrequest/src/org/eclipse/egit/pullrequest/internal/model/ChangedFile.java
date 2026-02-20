@@ -29,6 +29,8 @@ public class ChangedFile {
 
 	private int linesRemoved;
 
+	private String patch;
+
 	/**
 	 * @return the path information
 	 */
@@ -111,6 +113,21 @@ public class ChangedFile {
 	 */
 	public void setLinesRemoved(int linesRemoved) {
 		this.linesRemoved = linesRemoved;
+	}
+
+	/**
+	 * @return the unified diff patch string, or {@code null}
+	 */
+	public String getPatch() {
+		return patch;
+	}
+
+	/**
+	 * @param patch
+	 *            the unified diff patch string
+	 */
+	public void setPatch(String patch) {
+		this.patch = patch;
 	}
 
 	/**

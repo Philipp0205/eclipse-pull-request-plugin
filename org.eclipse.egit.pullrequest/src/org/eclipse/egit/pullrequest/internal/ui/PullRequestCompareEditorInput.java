@@ -18,15 +18,15 @@ import java.util.List;
 import org.eclipse.compare.CompareConfiguration;
 import org.eclipse.compare.CompareEditorInput;
 import org.eclipse.compare.ITypedElement;
+import org.eclipse.compare.contentmergeviewer.TextMergeViewer;
 import org.eclipse.compare.structuremergeviewer.DiffNode;
 import org.eclipse.compare.structuremergeviewer.ICompareInput;
 import org.eclipse.core.runtime.IProgressMonitor;
-import org.eclipse.egit.pullrequest.internal.model.PullRequest;
-import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
-import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
 import org.eclipse.egit.pullrequest.Activator;
 import org.eclipse.egit.pullrequest.internal.PRPreferences;
-import org.eclipse.egit.ui.internal.revision.GitCompareFileRevisionEditorInput;
+import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
+import org.eclipse.egit.pullrequest.internal.model.PullRequest;
+import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
 import org.eclipse.jface.viewers.Viewer;
 import org.eclipse.swt.widgets.Composite;
 
@@ -42,6 +42,8 @@ public class PullRequestCompareEditorInput extends CompareEditorInput {
 	private final PullRequestChangedFile changedFile;
 
 	private Viewer contentViewer;
+
+	private CommentOverlayInstaller commentOverlay;
 
 	private List<PullRequestComment> comments = new ArrayList<>();
 
@@ -106,40 +108,28 @@ public class PullRequestCompareEditorInput extends CompareEditorInput {
 	@Override
 	public Viewer findContentViewer(Viewer oldViewer, ICompareInput input,
 			Composite parent) {
-		// Check if inline comments should be displayed
+		// Always let the framework select the appropriate viewer for
+		// the file type (e.g. JavaMergeViewer for .java files, XML
+		// compare for .xml, etc.). This ensures proper syntax
+		// highlighting and language-specific comparison.
+		contentViewer = super.findContentViewer(oldViewer, input, parent);
+
+		// After the framework has selected the right viewer, install
+		// comment overlays if needed
 		boolean useInlineComments = Activator.getDefault()
 				.getPreferenceStore()
 				.getBoolean(PRPreferences.PULLREQUEST_SHOW_INLINE_COMMENTS);
 
-		if (useInlineComments && comments != null && !comments.isEmpty()) {
-			// Check if we can reuse the existing viewer
-			if (oldViewer instanceof InlineCommentTextMergeViewer) {
-				InlineCommentTextMergeViewer inlineViewer = (InlineCommentTextMergeViewer) oldViewer;
-				inlineViewer.setFilePath(changedFile.getPath());
-				inlineViewer.setComments(comments);
-				contentViewer = inlineViewer;
-				return contentViewer;
-			}
-
-			// Need to create a new InlineCommentTextMergeViewer
-			// Create if oldViewer is null OR if it's a NullViewer (placeholder viewer)
-			boolean canCreateNew = oldViewer == null 
-					|| oldViewer.getClass().getName().contains("NullViewer"); //$NON-NLS-1$
-			
-			if (canCreateNew) {
-				InlineCommentTextMergeViewer inlineViewer = new InlineCommentTextMergeViewer(
-						parent, getCompareConfiguration());
-				inlineViewer.setFilePath(changedFile.getPath());
-				inlineViewer.setComments(comments);
-				contentViewer = inlineViewer;
-				return contentViewer;
-			}
-			// If oldViewer exists but is not our type, fall through to default
-			// to avoid handler conflicts
+		if (useInlineComments
+				&& contentViewer instanceof TextMergeViewer) {
+			commentOverlay = new CommentOverlayInstaller(
+					contentViewer);
+			commentOverlay.setFilePath(changedFile.getPath());
+			commentOverlay.setDiffLines(
+					changedFile.getDiffLines());
+			commentOverlay.installComments(comments);
 		}
 
-		// Use default viewer
-		contentViewer = super.findContentViewer(oldViewer, input, parent);
 		return contentViewer;
 	}
 

@@ -45,8 +45,8 @@ import org.eclipse.swt.widgets.Link;
  *
  * <p>
  * Only one {@code ExpandedCommentComposite} is visible at a time per viewer
- * side. The owning {@link InlineCommentTextMergeViewer} manages creation and
- * disposal.
+ * side. The owning {@link CommentOverlayInstaller} manages creation
+ * and disposal.
  * </p>
  */
 public class ExpandedCommentComposite extends Composite {
@@ -179,7 +179,7 @@ public class ExpandedCommentComposite extends Composite {
 	public ExpandedCommentComposite(Composite parent, int style,
 			int oneLine, List<PullRequestComment> comments,
 			CommentActionHandler handler) {
-		super(parent, style);
+		super(parent, style | SWT.DOUBLE_BUFFERED);
 		this.line = oneLine;
 
 		ensureColors();
@@ -244,7 +244,10 @@ public class ExpandedCommentComposite extends Composite {
 	}
 
 	/**
-	 * Paints a custom rounded border around the composite.
+	 * Fills the background and paints a rounded border around the
+	 * composite. The explicit background fill is necessary because
+	 * the parent {@code StyledText} widget paints its own white
+	 * background underneath child controls.
 	 *
 	 * @param gc
 	 *            the graphics context
@@ -254,10 +257,17 @@ public class ExpandedCommentComposite extends Composite {
 	private void paintCustomBorder(GC gc, boolean resolved) {
 		Rectangle bounds = getClientArea();
 		gc.setAntialias(SWT.ON);
+
+		// Fill the background explicitly to prevent the parent
+		// StyledText's white background from bleeding through
+		gc.setBackground(getBackground());
+		gc.fillRoundRectangle(0, 0, bounds.width, bounds.height,
+				BORDER_RADIUS, BORDER_RADIUS);
+
 		gc.setForeground(borderColor);
 		gc.setLineWidth(1);
-		gc.drawRoundRectangle(0, 0, bounds.width - 1, bounds.height - 1,
-				BORDER_RADIUS, BORDER_RADIUS);
+		gc.drawRoundRectangle(0, 0, bounds.width - 1,
+				bounds.height - 1, BORDER_RADIUS, BORDER_RADIUS);
 	}
 
 	private void renderComment(Composite parent,
