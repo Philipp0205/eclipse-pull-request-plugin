@@ -44,6 +44,10 @@ public class PullRequest {
 	private PullRequestLinks links;
 	
 	private int commentCount;
+
+	private boolean isDraft;
+
+	private String[] labels;
 	
 	/**
 	 * @return the pull request ID
@@ -239,6 +243,34 @@ public class PullRequest {
 	 */
 	public void setCommentCount(int commentCount) {
 		this.commentCount = commentCount;
+	}
+
+	/**
+	 * @return whether the PR is a draft
+	 */
+	public boolean isDraft() {
+		return isDraft;
+	}
+
+	/**
+	 * @param isDraft whether the PR is a draft
+	 */
+	public void setDraft(boolean isDraft) {
+		this.isDraft = isDraft;
+	}
+
+	/**
+	 * @return the labels associated with this PR
+	 */
+	public String[] getLabels() {
+		return labels;
+	}
+
+	/**
+	 * @param labels the labels to set
+	 */
+	public void setLabels(String[] labels) {
+		this.labels = labels;
 	}
 	
 	/**

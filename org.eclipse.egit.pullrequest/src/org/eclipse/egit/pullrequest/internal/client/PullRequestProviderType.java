@@ -22,5 +22,10 @@ public enum PullRequestProviderType {
 	/**
 	 * GitHub (github.com)
 	 */
-	GITHUB
+	GITHUB,
+
+	/**
+	 * GitLab (gitlab.com)
+	 */
+	GITLAB
 }

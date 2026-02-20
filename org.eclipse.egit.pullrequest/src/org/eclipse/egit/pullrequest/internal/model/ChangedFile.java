@@ -25,6 +25,10 @@ public class ChangedFile {
 
 	private boolean executable;
 
+	private int linesAdded;
+
+	private int linesRemoved;
+
 	/**
 	 * @return the path information
 	 */
@@ -79,6 +83,34 @@ public class ChangedFile {
 	 */
 	public void setExecutable(boolean executable) {
 		this.executable = executable;
+	}
+
+	/**
+	 * @return the number of lines added
+	 */
+	public int getLinesAdded() {
+		return linesAdded;
+	}
+
+	/**
+	 * @param linesAdded the number of lines added
+	 */
+	public void setLinesAdded(int linesAdded) {
+		this.linesAdded = linesAdded;
+	}
+
+	/**
+	 * @return the number of lines removed
+	 */
+	public int getLinesRemoved() {
+		return linesRemoved;
+	}
+
+	/**
+	 * @param linesRemoved the number of lines removed
+	 */
+	public void setLinesRemoved(int linesRemoved) {
+		this.linesRemoved = linesRemoved;
 	}
 
 	/**
