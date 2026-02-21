@@ -5,12 +5,9 @@ Bundle-Vendor: Eclipse.org
 Automatic-Module-Name: org.eclipse.egit.pullrequest.test
 Bundle-SymbolicName: org.eclipse.egit.pullrequest.test;singleton:=true
 Fragment-Host: org.eclipse.egit.pullrequest
-Bundle-Version: 7.6.0.202602191459
+Bundle-Version: 7.6.0.202602211633
 Require-Bundle: org.junit;bundle-version="[4.13.0,5.0.0)"
-Import-Package: org.eclipse.egit.pullrequest.internal.bitbucket;version=
- "[7.6.0,7.7.0)",org.eclipse.egit.pullrequest.internal.github;version="[
- 7.6.0,7.7.0)",org.eclipse.egit.pullrequest.internal.model;version="[7.6
- .0,7.7.0)",org.hamcrest;version="[3.0.0,4.0.0)"
+Import-Package: org.hamcrest;version="[3.0.0,4.0.0)"
 Bundle-RequiredExecutionEnvironment: JavaSE-21
 Bundle-License: Eclipse Public License 2.0;link="https://www.eclipse.org
  /legal/epl-2.0/"
