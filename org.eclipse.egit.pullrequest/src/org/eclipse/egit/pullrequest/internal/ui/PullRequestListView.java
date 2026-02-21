@@ -121,25 +121,7 @@ public class PullRequestListView extends ViewPart {
 
 		final TreeColumnLayout treeColumnLayout = new TreeColumnLayout();
 
-		// TODO refactor the construction of the filtered tree to own method.  
-		FilteredTree filteredTree = new FilteredTree(tableComposite,
-				SWT.BORDER | SWT.FULL_SELECTION | SWT.MULTI,
-				new TreeColumnPatternFilter(), true, true) {
-
-			@Override
-			protected void createControl(Composite composite, int treeStyle) {
-				super.createControl(composite, treeStyle);
-				treeComposite.setLayout(treeColumnLayout);
-			}
-		};
-
-		toolkit.adapt(filteredTree);
-		pullRequestViewer = filteredTree.getViewer();
-		pullRequestViewer.getTree().setHeaderVisible(true);
-		pullRequestViewer.getTree().setLinesVisible(true);
-		pullRequestViewer.getTree().setData(FormToolkit.KEY_DRAW_BORDER,
-				FormToolkit.TREE_BORDER);
-
+		createFilteredTree(tableComposite, treeColumnLayout);
 		setupColumns(treeColumnLayout);
 
 		pullRequestViewer.setContentProvider(new ITreeContentProvider() {
@@ -169,41 +151,7 @@ public class PullRequestListView extends ViewPart {
 
 		pullRequestViewer.setInput(pullRequests);
 
-		// TODO refactor selection mechanism to own method
-		// Register as selection provider for view communication
-		getSite().setSelectionProvider(pullRequestViewer);
-
-		// Add double-click listener to load PR
-		pullRequestViewer.addDoubleClickListener(new IDoubleClickListener() {
-			@Override
-			public void doubleClick(DoubleClickEvent event) {
-				IStructuredSelection selection = (IStructuredSelection) event
-						.getSelection();
-				if (!selection.isEmpty()) {
-					Object element = selection.getFirstElement();
-					if (element instanceof PullRequest) {
-						loadPullRequest((PullRequest) element);
-					}
-				}
-			}
-		});
-
-		// Load PR on Enter key
-		pullRequestViewer.getTree().addKeyListener(new KeyAdapter() {
-			@Override
-			public void keyPressed(KeyEvent e) {
-				if (e.keyCode == SWT.CR || e.keyCode == SWT.KEYPAD_CR) {
-					IStructuredSelection selection = (IStructuredSelection) pullRequestViewer
-							.getSelection();
-					if (!selection.isEmpty()) {
-						Object element = selection.getFirstElement();
-						if (element instanceof PullRequest) {
-							loadPullRequest((PullRequest) element);
-						}
-					}
-				}
-			}
-		});
+		setupSelectionHandling();
 
 		createActions();
 		createFilterActions();
@@ -333,6 +281,60 @@ public class PullRequestListView extends ViewPart {
 		column.getColumn().setText(text);
 		layout.setColumnData(column.getColumn(), new ColumnWeightData(weight));
 		return column;
+	}
+
+	private void createFilteredTree(Composite parent, TreeColumnLayout treeColumnLayout) {
+		FilteredTree filteredTree = new FilteredTree(parent,
+				SWT.BORDER | SWT.FULL_SELECTION | SWT.MULTI,
+				new TreeColumnPatternFilter(), true, true) {
+
+			@Override
+			protected void createControl(Composite composite, int treeStyle) {
+				super.createControl(composite, treeStyle);
+				treeComposite.setLayout(treeColumnLayout);
+			}
+		};
+
+		toolkit.adapt(filteredTree);
+		pullRequestViewer = filteredTree.getViewer();
+		pullRequestViewer.getTree().setHeaderVisible(true);
+		pullRequestViewer.getTree().setLinesVisible(true);
+		pullRequestViewer.getTree().setData(FormToolkit.KEY_DRAW_BORDER,
+				FormToolkit.TREE_BORDER);
+	}
+
+	private void setupSelectionHandling() {
+		getSite().setSelectionProvider(pullRequestViewer);
+
+		pullRequestViewer.addDoubleClickListener(new IDoubleClickListener() {
+			@Override
+			public void doubleClick(DoubleClickEvent event) {
+				IStructuredSelection selection = (IStructuredSelection) event
+						.getSelection();
+				if (!selection.isEmpty()) {
+					Object element = selection.getFirstElement();
+					if (element instanceof PullRequest) {
+						loadPullRequest((PullRequest) element);
+					}
+				}
+			}
+		});
+
+		pullRequestViewer.getTree().addKeyListener(new KeyAdapter() {
+			@Override
+			public void keyPressed(KeyEvent e) {
+				if (e.keyCode == SWT.CR || e.keyCode == SWT.KEYPAD_CR) {
+					IStructuredSelection selection = (IStructuredSelection) pullRequestViewer
+							.getSelection();
+					if (!selection.isEmpty()) {
+						Object element = selection.getFirstElement();
+						if (element instanceof PullRequest) {
+							loadPullRequest((PullRequest) element);
+						}
+					}
+				}
+			}
+		});
 	}
 
 	private void createActions() {

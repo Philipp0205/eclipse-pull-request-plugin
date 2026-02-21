@@ -3,7 +3,7 @@ Bundle-ManifestVersion: 2
 Bundle-Name: %Bundle-Name
 Automatic-Module-Name: org.eclipse.egit.pullrequest
 Bundle-SymbolicName: org.eclipse.egit.pullrequest;singleton:=true
-Bundle-Version: 7.6.0.202602191545
+Bundle-Version: 7.6.0.202602212044
 Bundle-Activator: org.eclipse.egit.pullrequest.Activator
 Bundle-Vendor: %Bundle-Vendor
 Bundle-Localization: plugin

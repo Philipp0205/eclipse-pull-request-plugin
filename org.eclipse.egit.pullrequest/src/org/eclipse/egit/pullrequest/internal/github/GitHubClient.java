@@ -183,6 +183,175 @@ public class GitHubClient implements IPullRequestClient {
 			result.addAll(
 					GitHubJsonParser.parseComments(null, page));
 		}
+
+		// Fetch thread resolution states via GraphQL and update comments
+		updateCommentResolutionStates(pullRequestId, result);
+
+		return result;
+	}
+
+	/**
+	 * Updates the resolution state of comments by fetching thread information
+	 * via GraphQL. GitHub's REST API doesn't include thread resolution status,
+	 * so we need to query it separately.
+	 *
+	 * @param pullRequestId
+	 *            the pull request number
+	 * @param comments
+	 *            the list of comments to update (modified in place)
+	 * @throws IOException
+	 *             if the GraphQL query fails
+	 */
+	private void updateCommentResolutionStates(long pullRequestId,
+			List<PullRequestComment> comments) throws IOException {
+		if (comments.isEmpty()) {
+			return;
+		}
+
+		try {
+			// Query all review threads with their resolution status
+			// We need to paginate through all threads (GitHub limits to 100 per page)
+			String query = "query { repository(owner: \\\"" + owner //$NON-NLS-1$
+					+ "\\\", name: \\\"" + repo //$NON-NLS-1$
+					+ "\\\") { pullRequest(number: " + pullRequestId //$NON-NLS-1$
+					+ ") { reviewThreads(first: 100) { nodes { id isResolved " //$NON-NLS-1$
+					+ "comments(first: 100) { nodes { databaseId } } } } } } }"; //$NON-NLS-1$
+
+			Activator.logInfo("updateCommentResolutionStates: Executing GraphQL query for PR " //$NON-NLS-1$
+					+ pullRequestId);
+			Activator.logInfo("updateCommentResolutionStates: Query = " + query); //$NON-NLS-1$
+
+			String result = executeGraphQL(query);
+			
+			Activator.logInfo("updateCommentResolutionStates: GraphQL response length: " //$NON-NLS-1$
+					+ (result != null ? result.length() : 0));
+			Activator.logInfo("updateCommentResolutionStates: GraphQL response: " //$NON-NLS-1$
+					+ result);
+			
+			// Check for errors in response
+			if (result != null && result.contains("\"errors\"")) { //$NON-NLS-1$
+				Activator.logError("updateCommentResolutionStates: GraphQL returned errors: " //$NON-NLS-1$
+						+ result, null);
+			}
+
+			// Parse the GraphQL response to build a map of comment ID -> resolved state
+			java.util.Map<Long, Boolean> resolvedStates = parseThreadResolutionStates(
+					result);
+
+			Activator.logInfo("updateCommentResolutionStates: Parsed " //$NON-NLS-1$
+					+ resolvedStates.size() + " comment resolution states"); //$NON-NLS-1$
+
+			// Update comment states based on thread resolution
+			for (PullRequestComment comment : comments) {
+				// Only update review comments (inline comments)
+				if (comment.isReviewComment()) {
+					Boolean isResolved = resolvedStates.get(comment.getId());
+					if (isResolved != null) {
+						String newState = isResolved ? "RESOLVED" : "OPEN"; //$NON-NLS-1$ //$NON-NLS-2$
+						comment.setState(newState);
+						Activator.logInfo("updateCommentResolutionStates: Set comment " //$NON-NLS-1$
+								+ comment.getId() + " state to " + newState); //$NON-NLS-1$
+					} else {
+						Activator.logInfo("updateCommentResolutionStates: No resolution state found for comment " //$NON-NLS-1$
+								+ comment.getId());
+					}
+				}
+			}
+		} catch (IOException e) {
+			// Log the error but don't fail the entire comment fetch
+			// Comments will just show as OPEN if we can't get resolution state
+			Activator.logError(
+					"Failed to fetch thread resolution states: " //$NON-NLS-1$
+							+ e.getMessage(),
+					e);
+		}
+	}
+
+	/**
+	 * Parses GraphQL response to extract thread resolution states.
+	 *
+	 * @param graphqlResult
+	 *            the GraphQL response JSON
+	 * @return map of comment database ID to resolved state
+	 */
+	private java.util.Map<Long, Boolean> parseThreadResolutionStates(
+			String graphqlResult) {
+		java.util.Map<Long, Boolean> result = new java.util.HashMap<>();
+
+		Activator.logInfo("parseThreadResolutionStates: Parsing GraphQL result"); //$NON-NLS-1$
+		Activator.logInfo("parseThreadResolutionStates: Input length = " //$NON-NLS-1$
+				+ (graphqlResult != null ? graphqlResult.length() : 0));
+		
+		if (graphqlResult == null || graphqlResult.isEmpty()) {
+			Activator.logWarning("parseThreadResolutionStates: GraphQL result is null or empty"); //$NON-NLS-1$
+			return result;
+		}
+
+		// Parse the JSON structure to find all threads and their comments
+		// Structure: data.repository.pullRequest.reviewThreads.nodes[]
+		// Each node has: id, isResolved, comments.nodes[].databaseId
+
+		int nodesStart = graphqlResult.indexOf("\"nodes\":["); //$NON-NLS-1$
+		Activator.logInfo("parseThreadResolutionStates: nodesStart index = " + nodesStart); //$NON-NLS-1$
+		if (nodesStart == -1) {
+			Activator.logWarning("parseThreadResolutionStates: No 'nodes' array found in GraphQL response"); //$NON-NLS-1$
+			Activator.logWarning("parseThreadResolutionStates: Response snippet: " //$NON-NLS-1$
+					+ graphqlResult.substring(0, Math.min(200, graphqlResult.length())));
+			return result;
+		}
+
+		String nodesSection = graphqlResult.substring(nodesStart);
+		String[] threadBlocks = nodesSection.split("\\{\"id\":"); //$NON-NLS-1$
+		
+		Activator.logInfo("parseThreadResolutionStates: Found " //$NON-NLS-1$
+				+ (threadBlocks.length - 1) + " thread blocks"); //$NON-NLS-1$
+
+		for (int i = 1; i < threadBlocks.length; i++) {
+			String threadBlock = threadBlocks[i];
+
+			// Extract isResolved
+			boolean isResolved = threadBlock.contains("\"isResolved\":true"); //$NON-NLS-1$
+			
+			Activator.logInfo("parseThreadResolutionStates: Thread " + i //$NON-NLS-1$
+					+ " isResolved=" + isResolved); //$NON-NLS-1$
+
+			// Extract comment database IDs from this thread
+			String commentNodesMarker = "\"comments\":{\"nodes\":["; //$NON-NLS-1$
+			int commentStart = threadBlock.indexOf(commentNodesMarker);
+			if (commentStart != -1) {
+				String commentsSection = threadBlock.substring(
+						commentStart + commentNodesMarker.length());
+				String[] commentBlocks = commentsSection.split(
+						"\\{\"databaseId\":"); //$NON-NLS-1$
+				
+				Activator.logInfo("parseThreadResolutionStates: Thread " + i //$NON-NLS-1$
+						+ " has " + (commentBlocks.length - 1) + " comments"); //$NON-NLS-1$ //$NON-NLS-2$
+
+				for (int j = 1; j < commentBlocks.length; j++) {
+					String commentBlock = commentBlocks[j];
+					int endIndex = commentBlock.indexOf('}');
+					if (endIndex != -1) {
+						try {
+							long commentId = Long.parseLong(
+									commentBlock.substring(0, endIndex));
+							result.put(commentId, isResolved);
+							Activator.logInfo("parseThreadResolutionStates: Mapped comment " //$NON-NLS-1$
+									+ commentId + " -> " + isResolved); //$NON-NLS-1$
+						} catch (NumberFormatException e) {
+							// Skip malformed comment ID
+							Activator.logWarning("parseThreadResolutionStates: Failed to parse comment ID from: " //$NON-NLS-1$
+									+ commentBlock.substring(0, Math.min(50, endIndex)));
+						}
+					}
+				}
+			} else {
+				Activator.logWarning("parseThreadResolutionStates: No comments found in thread " + i); //$NON-NLS-1$
+			}
+		}
+
+		Activator.logInfo("parseThreadResolutionStates: Parsed " //$NON-NLS-1$
+				+ result.size() + " total comment states"); //$NON-NLS-1$
+
 		return result;
 	}
 

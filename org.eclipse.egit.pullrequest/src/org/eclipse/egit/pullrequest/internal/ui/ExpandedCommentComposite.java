@@ -13,6 +13,8 @@ package org.eclipse.egit.pullrequest.internal.ui;
 import java.text.SimpleDateFormat;
 import java.util.List;
 
+import org.eclipse.egit.pullrequest.Activator;
+import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderType;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
 import org.eclipse.jface.layout.GridDataFactory;
 import org.eclipse.jface.layout.GridLayoutFactory;
@@ -64,30 +66,39 @@ public class ExpandedCommentComposite extends Composite {
 		 */
 		void onReply(PullRequestComment comment);
 
-		/**
-		 * Called when the user clicks the Resolve link.
-		 *
-		 * @param comment
-		 *            the root comment being resolved
-		 */
-		void onResolve(PullRequestComment comment);
+	/**
+	 * Called when the user clicks the Resolve/Reopen link.
+	 * Only shown for Bitbucket provider.
+	 *
+	 * @param comment
+	 *            the root comment being resolved/reopened
+	 */
+	void onResolve(PullRequestComment comment);
 
-		/**
-		 * Called when the user clicks the Col	lapse link.
-		 *
-		 * @param line
-		 *            the 1-based line number to collapse
-		 */
-		void onCollapse(int line);
+	/**
+	 * Called when the user clicks the Delete link.
+	 *
+	 * @param comment
+	 *            the comment being deleted
+	 */
+	void onDelete(PullRequestComment comment);
 
-		/**
-		 * Called when the user clicks on a comment to select it in the
-		 * comments view.
-		 *
-		 * @param comment
-		 *            the comment to select
-		 */
-		void onSelect(PullRequestComment comment);
+	/**
+	 * Called when the user clicks the Collapse link.
+	 *
+	 * @param line
+	 *            the line number to collapse
+	 */
+	void onCollapse(int line);
+
+	/**
+	 * Called when the user selects a comment (clicks on its
+	 * header).
+	 *
+	 * @param comment
+	 *            the selected comment
+	 */
+	void onSelect(PullRequestComment comment);
 	}
 
 	private static final SimpleDateFormat DATE_FORMAT =
@@ -160,6 +171,10 @@ public class ExpandedCommentComposite extends Composite {
 
 	private Font smallFont;
 
+	private String currentUsername;
+
+	private boolean showResolve;
+
 	/**
 	 * Creates a new expanded comment composite showing the given thread.
 	 *
@@ -175,12 +190,19 @@ public class ExpandedCommentComposite extends Composite {
 	 * @param handler
 	 *            the action handler for Reply/Resolve/Collapse, or
 	 *            {@code null}
+	 * @param currentUsername
+	 *            the current user's username, or {@code null}
+	 * @param providerType
+	 *            the pull request provider type, or {@code null}
 	 */
 	public ExpandedCommentComposite(Composite parent, int style,
 			int oneLine, List<PullRequestComment> comments,
-			CommentActionHandler handler) {
+			CommentActionHandler handler, String currentUsername,
+			PullRequestProviderType providerType) {
 		super(parent, style | SWT.DOUBLE_BUFFERED);
 		this.line = oneLine;
+		this.currentUsername = currentUsername;
+		this.showResolve = (providerType == PullRequestProviderType.BITBUCKET);
 
 		ensureColors();
 		ensureFonts();
@@ -280,107 +302,130 @@ public class ExpandedCommentComposite extends Composite {
 		GridDataFactory.fillDefaults().grab(true, false)
 				.applyTo(commentArea);
 
-		// Header row with avatar, author, timestamp, and optional badge
-		Composite headerRow = new Composite(commentArea, SWT.NONE);
-		Color headerBg = isResolved ? resolvedHeaderBgColor : headerBgColor;
-		headerRow.setBackground(headerBg);
-		GridLayoutFactory.fillDefaults().numColumns(4).spacing(8, 0)
-				.margins(8, 6).applyTo(headerRow);
+	// Header row with avatar, author, timestamp, badge, and delete link
+	Composite headerRow = new Composite(commentArea, SWT.NONE);
+	Color headerBg = isResolved ? resolvedHeaderBgColor : headerBgColor;
+	headerRow.setBackground(headerBg);
+	GridLayoutFactory.fillDefaults().numColumns(5).spacing(8, 0)
+			.margins(8, 6).applyTo(headerRow);
+	GridDataFactory.fillDefaults().grab(true, false)
+			.applyTo(headerRow);
+
+	// Avatar with initials
+	String author = comment.getAuthorDisplayName();
+	if (author == null || author.isEmpty()) {
+		author = comment.getAuthorName();
+	}
+	if (author == null) {
+		author = "Unknown"; //$NON-NLS-1$
+	}
+
+	Canvas avatarCanvas = createAvatarCanvas(headerRow, author);
+	GridDataFactory.fillDefaults()
+			.hint(AVATAR_SIZE, AVATAR_SIZE)
+			.applyTo(avatarCanvas);
+
+	// Author name (bold)
+	Label authorLabel = new Label(headerRow, SWT.NONE);
+	authorLabel.setText(author);
+	authorLabel.setFont(boldFont);
+	authorLabel.setForeground(authorColor);
+	authorLabel.setBackground(headerBg);
+	GridDataFactory.fillDefaults().align(SWT.BEGINNING, SWT.CENTER)
+			.applyTo(authorLabel);
+
+	// Timestamp
+	String timestamp = ""; //$NON-NLS-1$
+	if (comment.getCreatedDate() != null) {
+		synchronized (DATE_FORMAT) {
+			timestamp = DATE_FORMAT.format(comment.getCreatedDate());
+		}
+	}
+
+	Label tsLabel = new Label(headerRow, SWT.NONE);
+	tsLabel.setText(timestamp);
+	tsLabel.setFont(smallFont);
+	tsLabel.setForeground(timestampColor);
+	tsLabel.setBackground(headerBg);
+	GridDataFactory.fillDefaults().align(SWT.BEGINNING, SWT.CENTER)
+			.grab(true, false).applyTo(tsLabel);
+
+	// Resolved badge (only for root comments that are resolved)
+	if (isRootComment && "RESOLVED".equals(comment.getState())) { //$NON-NLS-1$
+		Label badge = new Label(headerRow, SWT.NONE);
+		badge.setText(" ✓ Resolved "); //$NON-NLS-1$
+		badge.setFont(smallFont);
+		badge.setForeground(resolvedBadgeFgColor);
+		badge.setBackground(resolvedBadgeBgColor);
+		GridDataFactory.fillDefaults().align(SWT.END, SWT.CENTER)
+				.applyTo(badge);
+	} else {
+		// Empty placeholder to maintain layout
+		Label placeholder = new Label(headerRow, SWT.NONE);
+		placeholder.setBackground(headerBg);
+		GridDataFactory.fillDefaults().applyTo(placeholder);
+	}
+
+	// Delete link (only if user can delete this comment)
+	if (handler != null && canDelete(comment)) {
+		Link deleteLink = new Link(headerRow, SWT.NONE);
+		deleteLink.setText("<a>Delete</a>"); //$NON-NLS-1$
+		deleteLink.setBackground(headerBg);
+		deleteLink.setFont(smallFont);
+		deleteLink.setForeground(linkColor);
+		deleteLink.addListener(SWT.MouseEnter,
+				e -> deleteLink.setForeground(linkHoverColor));
+		deleteLink.addListener(SWT.MouseExit,
+				e -> deleteLink.setForeground(linkColor));
+		deleteLink.addListener(SWT.Selection,
+				e -> handler.onDelete(comment));
+		GridDataFactory.fillDefaults().align(SWT.END, SWT.CENTER)
+				.applyTo(deleteLink);
+	} else {
+		// Empty placeholder to maintain layout
+		Label placeholder = new Label(headerRow, SWT.NONE);
+		placeholder.setBackground(headerBg);
+		GridDataFactory.fillDefaults().align(SWT.END, SWT.CENTER)
+				.applyTo(placeholder);
+	}
+
+	// Make header clickable
+	if (handler != null) {
+		for (Control ctrl : new Control[] { headerRow, avatarCanvas,
+				authorLabel, tsLabel }) {
+			ctrl.setCursor(getDisplay().getSystemCursor(SWT.CURSOR_HAND));
+			ctrl.addListener(SWT.MouseDown, e -> handler.onSelect(comment));
+		}
+	}
+
+	// Body text with improved styling
+	String bodyText = comment.getText();
+	if (bodyText != null && !bodyText.isEmpty()) {
+		Composite bodyContainer = new Composite(commentArea, SWT.NONE);
+		bodyContainer.setBackground(parent.getBackground());
+		GridLayoutFactory.fillDefaults().margins(8, 6)
+				.applyTo(bodyContainer);
 		GridDataFactory.fillDefaults().grab(true, false)
-				.applyTo(headerRow);
+				.applyTo(bodyContainer);
 
-		// Avatar with initials
-		String author = comment.getAuthorDisplayName();
-		if (author == null || author.isEmpty()) {
-			author = comment.getAuthorName();
-		}
-		if (author == null) {
-			author = "Unknown"; //$NON-NLS-1$
-		}
+		Label bodyLabel = new Label(bodyContainer, SWT.WRAP);
+		bodyLabel.setText(bodyText);
+		bodyLabel.setForeground(bodyTextColor);
+		bodyLabel.setBackground(parent.getBackground());
+		GridDataFactory.fillDefaults().grab(true, false)
+				.hint(400, SWT.DEFAULT).applyTo(bodyLabel);
 
-		Canvas avatarCanvas = createAvatarCanvas(headerRow, author);
-		GridDataFactory.fillDefaults()
-				.hint(AVATAR_SIZE, AVATAR_SIZE)
-				.applyTo(avatarCanvas);
-
-		// Author name (bold)
-		Label authorLabel = new Label(headerRow, SWT.NONE);
-		authorLabel.setText(author);
-		authorLabel.setFont(boldFont);
-		authorLabel.setForeground(authorColor);
-		authorLabel.setBackground(headerBg);
-		GridDataFactory.fillDefaults().align(SWT.BEGINNING, SWT.CENTER)
-				.applyTo(authorLabel);
-
-		// Timestamp
-		String timestamp = ""; //$NON-NLS-1$
-		if (comment.getCreatedDate() != null) {
-			synchronized (DATE_FORMAT) {
-				timestamp = DATE_FORMAT.format(comment.getCreatedDate());
-			}
-		}
-
-		Label tsLabel = new Label(headerRow, SWT.NONE);
-		tsLabel.setText(timestamp);
-		tsLabel.setFont(smallFont);
-		tsLabel.setForeground(timestampColor);
-		tsLabel.setBackground(headerBg);
-		GridDataFactory.fillDefaults().align(SWT.BEGINNING, SWT.CENTER)
-				.grab(true, false).applyTo(tsLabel);
-
-		// Resolved badge (only for root comments that are resolved)
-		if (isRootComment && "RESOLVED".equals(comment.getState())) { //$NON-NLS-1$
-			Label badge = new Label(headerRow, SWT.NONE);
-			badge.setText(" ✓ Resolved "); //$NON-NLS-1$
-			badge.setFont(smallFont);
-			badge.setForeground(resolvedBadgeFgColor);
-			badge.setBackground(resolvedBadgeBgColor);
-			GridDataFactory.fillDefaults().align(SWT.END, SWT.CENTER)
-					.applyTo(badge);
-		} else {
-			// Empty placeholder to maintain layout
-			Label placeholder = new Label(headerRow, SWT.NONE);
-			placeholder.setBackground(headerBg);
-			GridDataFactory.fillDefaults().applyTo(placeholder);
-		}
-
-		// Make header clickable
 		if (handler != null) {
-			for (Control ctrl : new Control[] { headerRow, avatarCanvas,
-					authorLabel, tsLabel }) {
-				ctrl.setCursor(getDisplay().getSystemCursor(SWT.CURSOR_HAND));
-				ctrl.addListener(SWT.MouseDown, e -> handler.onSelect(comment));
-			}
+			bodyContainer.setCursor(
+					getDisplay().getSystemCursor(SWT.CURSOR_HAND));
+			bodyContainer.addListener(SWT.MouseDown,
+					e -> handler.onSelect(comment));
+			bodyLabel.setCursor(
+					getDisplay().getSystemCursor(SWT.CURSOR_HAND));
+			bodyLabel.addListener(SWT.MouseDown,
+					e -> handler.onSelect(comment));
 		}
-
-		// Body text with improved styling
-		String bodyText = comment.getText();
-		if (bodyText != null && !bodyText.isEmpty()) {
-			Composite bodyContainer = new Composite(commentArea, SWT.NONE);
-			bodyContainer.setBackground(parent.getBackground());
-			GridLayoutFactory.fillDefaults().margins(8, 6)
-					.applyTo(bodyContainer);
-			GridDataFactory.fillDefaults().grab(true, false)
-					.applyTo(bodyContainer);
-
-			Label bodyLabel = new Label(bodyContainer, SWT.WRAP);
-			bodyLabel.setText(bodyText);
-			bodyLabel.setForeground(bodyTextColor);
-			bodyLabel.setBackground(parent.getBackground());
-			GridDataFactory.fillDefaults().grab(true, false)
-					.hint(400, SWT.DEFAULT).applyTo(bodyLabel);
-
-			if (handler != null) {
-				bodyContainer.setCursor(
-						getDisplay().getSystemCursor(SWT.CURSOR_HAND));
-				bodyContainer.addListener(SWT.MouseDown,
-						e -> handler.onSelect(comment));
-				bodyLabel.setCursor(
-						getDisplay().getSystemCursor(SWT.CURSOR_HAND));
-				bodyLabel.addListener(SWT.MouseDown,
-						e -> handler.onSelect(comment));
-			}
-		}
+	}
 	}
 
 	/**
@@ -499,7 +544,46 @@ public class ExpandedCommentComposite extends Composite {
 	}
 
 	/**
-	 * Adds the action bar with Reply, Resolve, and Collapse links.
+	 * Checks if the current user can delete the given comment.
+	 * A comment can be deleted if:
+	 * <ul>
+	 * <li>The current user is the comment author, OR</li>
+	 * <li>The comment is authored by a bot (author name contains
+	 * "[bot]"), OR</li>
+	 * <li>The comment is authored by Copilot (author name is
+	 * "Copilot")</li>
+	 * </ul>
+	 *
+	 * @param comment
+	 *            the comment to check
+	 * @return {@code true} if the comment can be deleted
+	 */
+	private boolean canDelete(PullRequestComment comment) {
+		if (currentUsername == null || comment == null) {
+			return false;
+		}
+		String authorName = comment.getAuthorName();
+		if (authorName == null) {
+			return false;
+		}
+		// Debug logging
+		boolean isOwn = currentUsername.equals(authorName);
+		boolean isBot = authorName.contains("[bot]"); //$NON-NLS-1$
+		boolean isCopilot = "Copilot".equals(authorName); //$NON-NLS-1$
+		boolean canDelete = isOwn || isBot || isCopilot;
+
+		Activator.logInfo(String.format(
+				"[canDelete] currentUser='%s', author='%s', isOwn=%s, isBot=%s, isCopilot=%s, canDelete=%s", //$NON-NLS-1$
+				currentUsername, authorName, isOwn, isBot, isCopilot,
+				canDelete));
+
+		// Allow deletion of own comments, bot comments, or Copilot comments
+		return canDelete;
+	}
+
+	/**
+	 * Adds the action bar with Reply, Resolve (Bitbucket only), and
+	 * Collapse links.
 	 *
 	 * @param parent
 	 *            the parent composite
@@ -518,36 +602,42 @@ public class ExpandedCommentComposite extends Composite {
 				.hint(SWT.DEFAULT, 1)
 				.indent(0, 6).applyTo(sep);
 
-		Composite actionBar = new Composite(parent, SWT.NONE);
-		actionBar.setBackground(parent.getBackground());
-		GridLayoutFactory.fillDefaults().numColumns(3).spacing(16, 0)
-				.margins(8, 6).applyTo(actionBar);
-		GridDataFactory.fillDefaults().grab(true, false)
-				.applyTo(actionBar);
+	// Dynamically determine column count: 2 for GitHub, 3 for Bitbucket
+	int columnCount = showResolve ? 3 : 2;
+	Composite actionBar = new Composite(parent, SWT.NONE);
+	actionBar.setBackground(parent.getBackground());
+	GridLayoutFactory.fillDefaults().numColumns(columnCount).spacing(16, 0)
+			.margins(8, 6).applyTo(actionBar);
+	GridDataFactory.fillDefaults().grab(true, false)
+			.applyTo(actionBar);
 
-		// Reply link with hover effect
-		Link replyLink = createStyledLink(actionBar, "Reply"); //$NON-NLS-1$
-		if (handler != null && !comments.isEmpty()) {
-			PullRequestComment rootComment = comments.get(0);
-			replyLink.addListener(SWT.Selection,
-					e -> handler.onReply(rootComment));
-		}
+	// Reply link with hover effect
+	Link replyLink = createStyledLink(actionBar, "Reply"); //$NON-NLS-1$
+	if (handler != null && !comments.isEmpty()) {
+		PullRequestComment rootComment = comments.get(0);
+		replyLink.addListener(SWT.Selection,
+				e -> handler.onReply(rootComment));
+	}
 
-		// Resolve/Reopen link
-		boolean allResolved = true;
-		for (PullRequestComment c : comments) {
-			if (!"RESOLVED".equals(c.getState())) { //$NON-NLS-1$
-				allResolved = false;
-				break;
+		// Resolve/Reopen link (Bitbucket only)
+		if (showResolve) {
+			boolean allResolved = true;
+			for (PullRequestComment c : comments) {
+				if (!"RESOLVED".equals(c.getState())) { //$NON-NLS-1$
+					allResolved = false;
+					break;
+				}
 			}
-		}
 
-		String resolveText = allResolved ? "Reopen" : "Resolve"; //$NON-NLS-1$ //$NON-NLS-2$
-		Link resolveLink = createStyledLink(actionBar, resolveText);
-		if (handler != null && !comments.isEmpty()) {
-			PullRequestComment rootComment = comments.get(0);
-			resolveLink.addListener(SWT.Selection,
-					e -> handler.onResolve(rootComment));
+			String resolveText = allResolved
+					? "Reopen" : "Resolve"; //$NON-NLS-1$ //$NON-NLS-2$
+			Link resolveLink = createStyledLink(actionBar,
+					resolveText);
+			if (handler != null && !comments.isEmpty()) {
+				PullRequestComment rootComment = comments.get(0);
+				resolveLink.addListener(SWT.Selection,
+						e -> handler.onResolve(rootComment));
+			}
 		}
 
 		// Collapse link

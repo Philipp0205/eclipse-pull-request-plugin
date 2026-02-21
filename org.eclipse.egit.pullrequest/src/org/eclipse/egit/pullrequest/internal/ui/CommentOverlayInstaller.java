@@ -24,9 +24,11 @@ import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.egit.pullrequest.Activator;
 import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
 import org.eclipse.egit.pullrequest.internal.client.PullRequestClientFactory;
+import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderType;
 import org.eclipse.egit.pullrequest.internal.model.DiffHunkParser;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.text.source.SourceViewer;
 import org.eclipse.jface.viewers.Viewer;
 import org.eclipse.jface.window.Window;
@@ -72,6 +74,10 @@ class CommentOverlayInstaller {
 	private DiffHunkParser.DiffLines diffLines;
 
 	private final Viewer viewer;
+
+	private String currentUsername;
+
+	private PullRequestProviderType providerType;
 
 	/**
 	 * Creates a new installer for the given viewer.
@@ -331,6 +337,10 @@ class CommentOverlayInstaller {
 				continue;
 			}
 
+			// Note: We now show resolved comments too, so users can see them
+			// and potentially unresolve them. The visual distinction is handled
+			// by CommentRulerColumn (different icon color for resolved comments)
+
 			String fileType = comment.getFileType();
 			if ("FROM".equals(fileType)) { //$NON-NLS-1$
 				leftComments.add(comment);
@@ -443,14 +453,20 @@ class CommentOverlayInstaller {
 						handleReply(comment, fileType);
 					}
 
-					@Override
-					public void onResolve(
-							PullRequestComment comment) {
-						handleResolve(comment);
-					}
+				@Override
+				public void onResolve(
+						PullRequestComment comment) {
+					handleResolve(comment);
+				}
 
-					@Override
-					public void onCollapse(int collapseLine) {
+				@Override
+				public void onDelete(
+						PullRequestComment comment) {
+					handleDelete(comment);
+				}
+
+				@Override
+				public void onCollapse(int collapseLine) {
 						collapseExpanded(sv, isLeft);
 					}
 
@@ -458,12 +474,24 @@ class CommentOverlayInstaller {
 					public void onSelect(
 							PullRequestComment comment) {
 						selectCommentInView(comment);
-					}
-				};
+			}
+		};
+
+		ensureCurrentUsername();
+
+		Activator.logInfo(String.format(
+				"[CommentOverlayInstaller] Creating overlay for line %d with currentUsername='%s', provider=%s, %d comments", //$NON-NLS-1$
+				line, currentUsername, providerType, comments.size()));
+		if (!comments.isEmpty()) {
+			Activator.logInfo(String.format(
+					"[CommentOverlayInstaller] First comment author='%s'", //$NON-NLS-1$
+					comments.get(0).getAuthorName()));
+		}
 
 		ExpandedCommentComposite composite =
 				new ExpandedCommentComposite(styledText,
-						SWT.NONE, line, comments, handler);
+						SWT.NONE, line, comments, handler,
+						currentUsername, providerType);
 
 		Point preferredSize = composite.computeSize(
 				styledText.getClientArea().width - 20,
@@ -671,6 +699,58 @@ class CommentOverlayInstaller {
 		job.schedule();
 	}
 
+	private void handleDelete(PullRequestComment comment) {
+		boolean confirmed = MessageDialog.openConfirm(
+				viewer.getControl().getShell(),
+				"Delete Comment", //$NON-NLS-1$
+				"Are you sure you want to delete this comment?"); //$NON-NLS-1$
+		if (!confirmed) {
+			return;
+		}
+
+		PullRequest pr = getSelectedPullRequest();
+		if (pr == null) {
+			return;
+		}
+
+		Job job = new Job("Deleting comment") { //$NON-NLS-1$
+			@Override
+			protected IStatus run(IProgressMonitor monitor) {
+				try {
+					IPullRequestClient client =
+							PullRequestClientFactory
+									.createClient();
+					if (client == null) {
+						return new Status(IStatus.ERROR,
+								Activator.PLUGIN_ID,
+								"Pull request provider" //$NON-NLS-1$
+										+ " not configured"); //$NON-NLS-1$
+					}
+
+					client.deleteComment(pr.getId(),
+							comment.getId(),
+							comment.getVersion(),
+							comment.isReviewComment());
+
+					refreshAfterReply(pr, client);
+					return Status.OK_STATUS;
+				} catch (IOException e) {
+					Activator.logError(
+							"Failed to delete comment", //$NON-NLS-1$
+							e);
+					return new Status(IStatus.ERROR,
+							Activator.PLUGIN_ID,
+							"Failed to delete comment:" //$NON-NLS-1$
+									+ " " //$NON-NLS-1$
+									+ e.getMessage(),
+							e);
+				}
+			}
+		};
+		job.setUser(true);
+		job.schedule();
+	}
+
 	private void handleNewComment(int line, String fileType) {
 		MultiLineInputDialog dialog = new MultiLineInputDialog(
 				viewer.getControl().getShell(),
@@ -860,6 +940,27 @@ class CommentOverlayInstaller {
 			Activator.logError(
 					"Failed to refresh comments view", //$NON-NLS-1$
 					e);
+		}
+	}
+
+	private void ensureCurrentUsername() {
+		if (currentUsername == null || providerType == null) {
+			try {
+				IPullRequestClient client =
+						PullRequestClientFactory.createClient();
+				if (client != null) {
+					currentUsername = client.getCurrentUser();
+					providerType = client.getProviderType();
+					Activator.logInfo(
+							"Fetched current username: " //$NON-NLS-1$
+									+ currentUsername
+									+ ", provider: " //$NON-NLS-1$
+									+ providerType);
+				}
+			} catch (IOException e) {
+				Activator.logError(
+						"Failed to fetch current user", e); //$NON-NLS-1$
+			}
 		}
 	}
 

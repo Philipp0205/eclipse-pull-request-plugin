@@ -108,6 +108,8 @@ public class PullRequestCommentsView extends ViewPart {
 
 	private boolean showAllComments;
 
+	private boolean hideResolvedComments = true;
+
 	private ISelectionListener fileSelectionListener;
 
 	private ISelectionListener prSelectionListener;
@@ -411,7 +413,20 @@ public class PullRequestCommentsView extends ViewPart {
 		showAllAction.setToolTipText(
 				"Toggle between file-specific and all PR comments"); //$NON-NLS-1$
 
+		Action hideResolvedAction = new Action("Hide Resolved Comments", //$NON-NLS-1$
+				IAction.AS_CHECK_BOX) {
+			@Override
+			public void run() {
+				hideResolvedComments = isChecked();
+				refreshComments();
+			}
+		};
+		hideResolvedAction.setToolTipText(
+				"Toggle visibility of resolved comments"); //$NON-NLS-1$
+		hideResolvedAction.setChecked(true);
+
 		form.getToolBarManager().add(showAllAction);
+		form.getToolBarManager().add(hideResolvedAction);
 		form.getToolBarManager().update(true);
 	}
 
@@ -452,7 +467,13 @@ public class PullRequestCommentsView extends ViewPart {
 
 		// Edit and Delete actions - only for own comments
 		boolean isOwner = currentUsername != null
-				&& currentUsername.equals(comment.getAuthorName());
+				&& (currentUsername.equals(comment.getAuthorName())
+						|| (comment.getAuthorName() != null
+								&& (comment.getAuthorName()
+										.contains("[bot]") //$NON-NLS-1$
+										|| "Copilot" //$NON-NLS-1$
+												.equals(comment
+														.getAuthorName()))));
 		if (isOwner) {
 			manager.add(new Action("Edit...") { //$NON-NLS-1$
 				@Override
@@ -826,12 +847,16 @@ public class PullRequestCommentsView extends ViewPart {
 			public String getText(Object element) {
 				if (element instanceof PullRequestComment) {
 					PullRequestComment comment = (PullRequestComment) element;
+					String state = comment.getState();
 					String severity = comment.getSeverity();
+
+					// Show checkmark for all resolved comments
+					if ("RESOLVED".equals(state)) { //$NON-NLS-1$
+						return "\u2713"; // checkmark //$NON-NLS-1$
+					}
+
+					// Show empty ballot box for open blockers
 					if ("BLOCKER".equals(severity)) { //$NON-NLS-1$
-						String state = comment.getState();
-						if ("RESOLVED".equals(state)) { //$NON-NLS-1$
-							return "\u2611"; // ballot box with check //$NON-NLS-1$
-						}
 						return "\u2610"; // empty ballot box //$NON-NLS-1$
 					}
 				}
@@ -1177,7 +1202,10 @@ public class PullRequestCommentsView extends ViewPart {
 
 		// Edit and Delete buttons - only enabled if user owns the comment
 		boolean isOwner = currentUsername != null
-				&& currentUsername.equals(comment.getAuthorName());
+				&& (currentUsername.equals(comment.getAuthorName())
+						|| (comment.getAuthorName() != null
+								&& (comment.getAuthorName().contains("[bot]") //$NON-NLS-1$
+										|| "Copilot".equals(comment.getAuthorName())))); //$NON-NLS-1$
 
 		// Debug logging to help diagnose ownership issues
 		if (currentUsername != null && comment.getAuthorName() != null) {
@@ -1243,7 +1271,7 @@ public class PullRequestCommentsView extends ViewPart {
 	}
 
 	private void refreshComments() {
-		List<PullRequestComment> displayComments;
+		List<PullRequestComment> commentsToDisplay;
 
 		if (showAllComments) {
 			// Fetch latest from the files view if needed
@@ -1256,9 +1284,9 @@ public class PullRequestCommentsView extends ViewPart {
 							.getAllComments();
 				}
 			}
-			displayComments = new ArrayList<>(allComments);
+			commentsToDisplay = new ArrayList<>(allComments);
 		} else if (selectedFile != null) {
-			displayComments = allComments.stream().filter(comment -> {
+			commentsToDisplay = allComments.stream().filter(comment -> {
 				if (comment.getPath() == null) {
 					return false;
 				}
@@ -1269,8 +1297,17 @@ public class PullRequestCommentsView extends ViewPart {
 						|| (srcPath != null && commentPath.equals(srcPath));
 			}).collect(Collectors.toList());
 		} else {
-			displayComments = new ArrayList<>();
+			commentsToDisplay = new ArrayList<>();
 		}
+
+		// Filter out resolved comments if the toggle is enabled
+		if (hideResolvedComments) {
+			commentsToDisplay = commentsToDisplay.stream()
+					.filter(comment -> !"RESOLVED".equals(comment.getState())) //$NON-NLS-1$
+					.collect(Collectors.toList());
+		}
+		
+		final List<PullRequestComment> displayComments = commentsToDisplay;
 
 		Display.getDefault().asyncExec(() -> {
 			if (!commentsViewer.getControl().isDisposed()) {
