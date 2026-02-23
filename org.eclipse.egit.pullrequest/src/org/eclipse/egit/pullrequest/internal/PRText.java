@@ -194,6 +194,15 @@ public class PRText extends NLS {
 	/** */
 	public static String OverviewView_ManageReviewersButton;
 
+	/** */
+	public static String OverviewView_AddMyselfAsReviewer;
+
+	/** */
+	public static String OverviewView_ReviewersSectionTitle;
+
+	/** */
+	public static String OverviewView_AddReviewerTooltip;
+
 	static {
 		initializeMessages("org.eclipse.egit.pullrequest.internal.prtext", //$NON-NLS-1$
 				PRText.class);

@@ -31,12 +31,20 @@ import org.eclipse.jface.resource.JFaceResources;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.ScrolledComposite;
 import org.eclipse.swt.custom.StyledText;
+import org.eclipse.swt.events.PaintEvent;
+import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.FontData;
+import org.eclipse.swt.graphics.GC;
+import org.eclipse.swt.graphics.Point;
+import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.widgets.Button;
+import org.eclipse.swt.widgets.Canvas;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.ui.IEditorInput;
+import org.eclipse.ui.IEditorSite;
 import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.PartInitException;
@@ -44,22 +52,22 @@ import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.browser.IWebBrowser;
 import org.eclipse.ui.browser.IWorkbenchBrowserSupport;
 import org.eclipse.ui.forms.widgets.FormToolkit;
-import org.eclipse.ui.part.ViewPart;
+import org.eclipse.ui.part.EditorPart;
 
 /**
- * View that displays a pull request overview using native SWT widgets.
+ * Editor that displays a pull request overview using native SWT widgets.
  * <p>
  * Shows title, state, draft indicator, author, branches, labels,
  * dates, comment count, description, and action buttons.
  */
-public class PullRequestOverviewView extends ViewPart {
+public class PullRequestOverviewView extends EditorPart {
 
 	/**
-	 * The view ID.
+	 * The editor ID.
 	 */
-	public static final String VIEW_ID =
+	public static final String EDITOR_ID =
 			"org.eclipse.egit.pullrequest" //$NON-NLS-1$
-					+ ".PullRequestOverviewView"; //$NON-NLS-1$
+					+ ".PullRequestOverviewEditor"; //$NON-NLS-1$
 
 	private FormToolkit toolkit;
 
@@ -76,6 +84,23 @@ public class PullRequestOverviewView extends ViewPart {
 	private Font sectionFont;
 
 	private StyledText descriptionWidget;
+
+	@Override
+	public void init(IEditorSite site, IEditorInput input)
+			throws PartInitException {
+		if (!(input instanceof PullRequestOverviewEditorInput)) {
+			throw new PartInitException(
+					"Invalid input: must be PullRequestOverviewEditorInput"); //$NON-NLS-1$
+		}
+		setSite(site);
+		setInput(input);
+
+		PullRequestOverviewEditorInput prInput =
+				(PullRequestOverviewEditorInput) input;
+		currentPullRequest = prInput.getPullRequest();
+
+		setPartName(input.getName());
+	}
 
 	@Override
 	public void createPartControl(Composite parent) {
@@ -108,33 +133,37 @@ public class PullRequestOverviewView extends ViewPart {
 			}
 		});
 
-		showPlaceholder();
-	}
-
-	/**
-	 * Loads a pull request into the overview view.
-	 *
-	 * @param pr
-	 *            the pull request to display, or {@code null} to
-	 *            show the placeholder
-	 */
-	public void loadPullRequest(PullRequest pr) {
-		currentPullRequest = pr;
-
-		if (scrolledComposite == null
-				|| scrolledComposite.isDisposed()) {
-			return;
-		}
-
-		if (pr != null) {
-			renderPullRequest(pr);
+		// Load the pull request if input is provided
+		if (currentPullRequest != null) {
+			renderPullRequest(currentPullRequest);
 			setPartName(MessageFormat.format(
 					PRText.OverviewView_TitleFormat,
-					Long.valueOf(pr.getId())));
+					Long.valueOf(currentPullRequest.getId())));
 		} else {
 			showPlaceholder();
 			setPartName(PRText.OverviewView_DefaultTitle);
 		}
+	}
+
+	@Override
+	public void doSave(IProgressMonitor monitor) {
+		// Not implemented - overview is read-only except for description
+		// which has its own save button
+	}
+
+	@Override
+	public void doSaveAs() {
+		// Not supported
+	}
+
+	@Override
+	public boolean isDirty() {
+		return false;
+	}
+
+	@Override
+	public boolean isSaveAsAllowed() {
+		return false;
 	}
 
 	@Override
@@ -184,21 +213,42 @@ public class PullRequestOverviewView extends ViewPart {
 		contentComposite = toolkit.createComposite(
 				scrolledComposite);
 		GridLayoutFactory.fillDefaults().numColumns(2)
-				.margins(16, 16).spacing(8, 4)
+				.margins(16, 16).spacing(16, 4)
 				.applyTo(contentComposite);
 
-		renderHeader(pr);
-		renderMetadata(pr);
-		renderDescription(pr);
-		renderActions();
+		// Left content area
+		Composite leftComposite = toolkit.createComposite(
+				contentComposite);
+		GridLayoutFactory.fillDefaults().numColumns(2)
+				.spacing(8, 4).applyTo(leftComposite);
+		GridDataFactory.fillDefaults().grab(true, true)
+				.applyTo(leftComposite);
+
+		// Right sidebar for reviewers
+		Composite rightSidebar = toolkit.createComposite(
+				contentComposite);
+		GridLayoutFactory.fillDefaults().numColumns(1)
+				.spacing(0, 8).applyTo(rightSidebar);
+		GridDataFactory.fillDefaults().align(SWT.FILL, SWT.BEGINNING)
+				.hint(180, SWT.DEFAULT)
+				.applyTo(rightSidebar);
+
+		// Render content in left composite
+		renderHeader(pr, leftComposite);
+		renderMetadata(pr, leftComposite);
+		renderDescription(pr, leftComposite);
+		renderActions(leftComposite);
+
+		// Render reviewer sidebar on the right
+		renderReviewerSidebar(pr, rightSidebar);
 
 		scrolledComposite.setContent(contentComposite);
 		updateScrolledSize();
 	}
 
-	private void renderHeader(PullRequest pr) {
+	private void renderHeader(PullRequest pr, Composite parent) {
 		// Title spans both columns
-		Label titleLabel = toolkit.createLabel(contentComposite,
+		Label titleLabel = toolkit.createLabel(parent,
 				pr.getTitle(), SWT.WRAP);
 		titleLabel.setFont(getTitleFont());
 		GridDataFactory.fillDefaults().grab(true, false)
@@ -206,7 +256,7 @@ public class PullRequestOverviewView extends ViewPart {
 
 		// Badges row spanning both columns
 		Composite badgeRow = toolkit.createComposite(
-				contentComposite);
+				parent);
 		GridLayoutFactory.fillDefaults().numColumns(4)
 				.spacing(8, 0).applyTo(badgeRow);
 		GridDataFactory.fillDefaults().grab(true, false)
@@ -245,12 +295,12 @@ public class PullRequestOverviewView extends ViewPart {
 
 		// Separator spanning both columns
 		Label separator = toolkit.createSeparator(
-				contentComposite, SWT.HORIZONTAL);
+				parent, SWT.HORIZONTAL);
 		GridDataFactory.fillDefaults().grab(true, false)
 				.span(2, 1).applyTo(separator);
 	}
 
-	private void renderMetadata(PullRequest pr) {
+	private void renderMetadata(PullRequest pr, Composite parent) {
 		// Author
 		if (pr.getAuthor() != null
 				&& pr.getAuthor().getUser() != null) {
@@ -259,7 +309,7 @@ public class PullRequestOverviewView extends ViewPart {
 			if (authorName == null) {
 				authorName = pr.getAuthor().getUser().getName();
 			}
-			createMetaRow(PRText.OverviewView_Author,
+			createMetaRow(parent, PRText.OverviewView_Author,
 					authorName);
 		}
 
@@ -268,10 +318,10 @@ public class PullRequestOverviewView extends ViewPart {
 				&& !pr.getReviewers().isEmpty()) {
 			String reviewersText = formatReviewers(
 					pr.getReviewers());
-			createMetaRow(PRText.OverviewView_Reviewers,
+			createMetaRow(parent, PRText.OverviewView_Reviewers,
 					reviewersText);
 		} else {
-			createMetaRow(PRText.OverviewView_Reviewers,
+			createMetaRow(parent, PRText.OverviewView_Reviewers,
 					PRText.OverviewView_NoReviewers);
 		}
 
@@ -281,7 +331,7 @@ public class PullRequestOverviewView extends ViewPart {
 			String branches = pr.getFromRef().getDisplayId()
 					+ " " + PRText.OverviewView_BranchArrow //$NON-NLS-1$
 					+ " " + pr.getToRef().getDisplayId(); //$NON-NLS-1$
-			createMetaRow(PRText.OverviewView_Branches,
+			createMetaRow(parent, PRText.OverviewView_Branches,
 					branches);
 		}
 
@@ -295,39 +345,39 @@ public class PullRequestOverviewView extends ViewPart {
 				}
 				sb.append(pr.getLabels()[i]);
 			}
-			createMetaRow(PRText.OverviewView_Labels,
+			createMetaRow(parent, PRText.OverviewView_Labels,
 					sb.toString());
 		}
 
 		// Created date
 		if (pr.getCreatedDate() != null) {
-			createMetaRow(PRText.OverviewView_Created,
+			createMetaRow(parent, PRText.OverviewView_Created,
 					dateFormatter.formatDate(
 							pr.getCreatedDate()));
 		}
 
 		// Updated date
 		if (pr.getUpdatedDate() != null) {
-			createMetaRow(PRText.OverviewView_Updated,
+			createMetaRow(parent, PRText.OverviewView_Updated,
 					dateFormatter.formatDate(
 							pr.getUpdatedDate()));
 		}
 
 		// Comment count
-		createMetaRow(PRText.OverviewView_Comments,
+		createMetaRow(parent, PRText.OverviewView_Comments,
 				String.valueOf(pr.getCommentCount()));
 
 		// Separator
 		Label separator = toolkit.createSeparator(
-				contentComposite, SWT.HORIZONTAL);
+				parent, SWT.HORIZONTAL);
 		GridDataFactory.fillDefaults().grab(true, false)
 				.span(2, 1).applyTo(separator);
 	}
 
-	private void renderDescription(PullRequest pr) {
+	private void renderDescription(PullRequest pr, Composite parent) {
 		// Section label spanning both columns
 		Label sectionLabel = toolkit.createLabel(
-				contentComposite,
+				parent,
 				PRText.OverviewView_Description, SWT.NONE);
 		sectionLabel.setFont(getSectionFont());
 		GridDataFactory.fillDefaults().grab(true, false)
@@ -339,7 +389,7 @@ public class PullRequestOverviewView extends ViewPart {
 		}
 
 		// Always create editable StyledText widget
-		descriptionWidget = new StyledText(contentComposite,
+		descriptionWidget = new StyledText(parent,
 				SWT.MULTI | SWT.WRAP | SWT.BORDER);
 		descriptionWidget.setText(descText);
 		toolkit.adapt(descriptionWidget, true, false);
@@ -350,15 +400,15 @@ public class PullRequestOverviewView extends ViewPart {
 
 		// Separator
 		Label separator = toolkit.createSeparator(
-				contentComposite, SWT.HORIZONTAL);
+				parent, SWT.HORIZONTAL);
 		GridDataFactory.fillDefaults().grab(true, false)
 				.span(2, 1).applyTo(separator);
 	}
 
-	private void renderActions() {
+	private void renderActions(Composite parent) {
 		Composite buttonRow = toolkit.createComposite(
-				contentComposite);
-		GridLayoutFactory.fillDefaults().numColumns(5)
+				parent);
+		GridLayoutFactory.fillDefaults().numColumns(6)
 				.spacing(8, 0).applyTo(buttonRow);
 		GridDataFactory.fillDefaults().grab(true, false)
 				.span(2, 1).applyTo(buttonRow);
@@ -373,6 +423,11 @@ public class PullRequestOverviewView extends ViewPart {
 				SWT.PUSH);
 		manageReviewersBtn.addListener(SWT.Selection,
 				e -> manageReviewers());
+
+		Button addMyselfBtn = toolkit.createButton(buttonRow,
+				PRText.OverviewView_AddMyselfAsReviewer, SWT.PUSH);
+		addMyselfBtn.addListener(SWT.Selection,
+				e -> addMyselfAsReviewer());
 
 		Button openBrowserBtn = toolkit.createButton(buttonRow,
 				PRText.OverviewView_OpenInBrowser, SWT.PUSH);
@@ -390,8 +445,9 @@ public class PullRequestOverviewView extends ViewPart {
 				e -> checkoutSourceBranch());
 	}
 
-	private void createMetaRow(String label, String value) {
-		Label metaLabel = toolkit.createLabel(contentComposite,
+	private void createMetaRow(Composite parent, String label,
+			String value) {
+		Label metaLabel = toolkit.createLabel(parent,
 				label, SWT.NONE);
 		metaLabel.setFont(
 				JFaceResources.getFontRegistry().getBold(
@@ -400,7 +456,7 @@ public class PullRequestOverviewView extends ViewPart {
 				.hint(100, SWT.DEFAULT)
 				.applyTo(metaLabel);
 
-		Label metaValue = toolkit.createLabel(contentComposite,
+		Label metaValue = toolkit.createLabel(parent,
 				value, SWT.WRAP);
 		GridDataFactory.fillDefaults().grab(true, false)
 				.applyTo(metaValue);
@@ -636,7 +692,11 @@ public class PullRequestOverviewView extends ViewPart {
 
 					Display.getDefault().asyncExec(() -> {
 						if (!scrolledComposite.isDisposed()) {
-							loadPullRequest(updatedPr);
+							currentPullRequest = updatedPr;
+							renderPullRequest(updatedPr);
+							setPartName(MessageFormat.format(
+									PRText.OverviewView_TitleFormat,
+									Long.valueOf(updatedPr.getId())));
 						}
 					});
 
@@ -652,6 +712,168 @@ public class PullRequestOverviewView extends ViewPart {
 		};
 		job.setSystem(true);
 		job.schedule();
+	}
+
+	private void renderReviewerSidebar(PullRequest pr,
+			Composite parent) {
+		// Section title
+		Label sectionTitle = toolkit.createLabel(parent,
+				PRText.OverviewView_ReviewersSectionTitle,
+				SWT.NONE);
+		sectionTitle.setFont(getSectionFont());
+		GridDataFactory.fillDefaults().grab(true, false)
+				.applyTo(sectionTitle);
+
+		// Show reviewers or "no reviewers" message
+		if (pr.getReviewers() != null
+				&& !pr.getReviewers().isEmpty()) {
+			for (PullRequest.PullRequestParticipant reviewer :
+					pr.getReviewers()) {
+				createAvatarCircle(parent, reviewer);
+			}
+		} else {
+			Label noReviewers = toolkit.createLabel(parent,
+					PRText.OverviewView_NoReviewers,
+					SWT.WRAP);
+			GridDataFactory.fillDefaults().grab(true, false)
+					.applyTo(noReviewers);
+		}
+
+		// Add separator
+		Label separator = toolkit.createSeparator(parent,
+				SWT.HORIZONTAL);
+		GridDataFactory.fillDefaults().grab(true, false)
+				.applyTo(separator);
+
+		// Add "Add Myself" button
+		Button addMyselfBtn = toolkit.createButton(parent,
+				"+", SWT.PUSH); //$NON-NLS-1$
+		addMyselfBtn.setToolTipText(
+				PRText.OverviewView_AddReviewerTooltip);
+		addMyselfBtn.addListener(SWT.Selection,
+				e -> addMyselfAsReviewer());
+		GridDataFactory.fillDefaults().align(SWT.CENTER, SWT.CENTER)
+				.applyTo(addMyselfBtn);
+	}
+
+	private void createAvatarCircle(Composite parent,
+			PullRequest.PullRequestParticipant reviewer) {
+		Composite avatarContainer = toolkit.createComposite(
+				parent);
+		GridLayoutFactory.fillDefaults().numColumns(1)
+				.spacing(0, 2).applyTo(avatarContainer);
+		GridDataFactory.fillDefaults().align(SWT.CENTER, SWT.CENTER)
+				.applyTo(avatarContainer);
+
+		// Avatar canvas
+		Canvas canvas = new Canvas(avatarContainer, SWT.NONE);
+		int avatarSize = 40;
+		GridDataFactory.fillDefaults()
+				.hint(avatarSize, avatarSize)
+				.applyTo(canvas);
+
+		String displayName = reviewer.getUser().getDisplayName();
+		if (displayName == null) {
+			displayName = reviewer.getUser().getName();
+		}
+		String initials = getInitials(displayName);
+		Color bgColor = getAvatarColor(displayName);
+		boolean approved = reviewer.isApproved();
+
+		canvas.addPaintListener(
+				(PaintEvent e) -> paintAvatar(e, initials, bgColor,
+						approved, avatarSize));
+
+		// Name label below avatar
+		Label nameLabel = toolkit.createLabel(avatarContainer,
+				displayName, SWT.CENTER | SWT.WRAP);
+		GridDataFactory.fillDefaults().grab(true, false)
+				.align(SWT.CENTER, SWT.CENTER)
+				.hint(avatarSize + 20, SWT.DEFAULT)
+				.applyTo(nameLabel);
+	}
+
+	private void paintAvatar(PaintEvent e, String initials,
+			Color bgColor, boolean approved, int size) {
+		GC gc = e.gc;
+		gc.setAntialias(SWT.ON);
+
+		// Draw background circle
+		gc.setBackground(bgColor);
+		gc.fillOval(0, 0, size, size);
+
+		// Draw approved indicator (green border)
+		if (approved) {
+			gc.setForeground(
+					Display.getCurrent().getSystemColor(
+							SWT.COLOR_DARK_GREEN));
+			gc.setLineWidth(3);
+			gc.drawOval(1, 1, size - 2, size - 2);
+		}
+
+		// Draw initials
+		gc.setForeground(
+				Display.getCurrent().getSystemColor(
+						SWT.COLOR_WHITE));
+		Point textExtent = gc.textExtent(initials);
+		int x = (size - textExtent.x) / 2;
+		int y = (size - textExtent.y) / 2;
+		gc.drawText(initials, x, y, true);
+	}
+
+	private String getInitials(String name) {
+		if (name == null || name.isEmpty()) {
+			return "?"; //$NON-NLS-1$
+		}
+
+		String[] parts = name.trim().split("\\s+"); //$NON-NLS-1$
+		if (parts.length == 0) {
+			return "?"; //$NON-NLS-1$
+		}
+
+		if (parts.length == 1) {
+			// Single name - take first 2 chars
+			return parts[0].substring(0,
+					Math.min(2, parts[0].length()))
+					.toUpperCase();
+		}
+
+		// Multiple parts - take first char of first two parts
+		return (parts[0].substring(0, 1)
+				+ parts[1].substring(0, 1)).toUpperCase();
+	}
+
+	private Color getAvatarColor(String name) {
+		// Color palette for avatars (avoiding green which is for
+		// approved)
+		RGB[] palette = new RGB[] {
+				new RGB(52, 152, 219), // Blue
+				new RGB(155, 89, 182), // Purple
+				new RGB(230, 126, 34), // Orange
+				new RGB(231, 76, 60), // Red
+				new RGB(241, 196, 15), // Yellow
+				new RGB(26, 188, 156), // Teal
+				new RGB(149, 165, 166), // Gray
+				new RGB(192, 57, 43) // Dark red
+		};
+
+		int hash = Math.abs(name.hashCode());
+		int index = hash % palette.length;
+		RGB rgb = palette[index];
+
+		return new Color(Display.getCurrent(), rgb);
+	}
+
+	private void addMyselfAsReviewer() {
+		if (currentPullRequest == null) {
+			return;
+		}
+
+		AddMyselfAsReviewerAction action = new AddMyselfAsReviewerAction(
+				getSite().getShell());
+		action.setPullRequest(currentPullRequest);
+		action.setRefreshCallback(() -> refreshView());
+		action.run();
 	}
 
 	private String formatReviewers(
