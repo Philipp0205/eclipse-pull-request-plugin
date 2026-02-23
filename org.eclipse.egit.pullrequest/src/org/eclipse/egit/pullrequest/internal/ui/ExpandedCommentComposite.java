@@ -84,6 +84,14 @@ public class ExpandedCommentComposite extends Composite {
 	void onDelete(PullRequestComment comment);
 
 	/**
+	 * Called when the user clicks the Edit link.
+	 *
+	 * @param comment
+	 *            the comment being edited
+	 */
+	void onEdit(PullRequestComment comment);
+
+	/**
 	 * Called when the user clicks the Collapse link.
 	 *
 	 * @param line
@@ -306,7 +314,7 @@ public class ExpandedCommentComposite extends Composite {
 	Composite headerRow = new Composite(commentArea, SWT.NONE);
 	Color headerBg = isResolved ? resolvedHeaderBgColor : headerBgColor;
 	headerRow.setBackground(headerBg);
-	GridLayoutFactory.fillDefaults().numColumns(5).spacing(8, 0)
+	GridLayoutFactory.fillDefaults().numColumns(6).spacing(8, 0)
 			.margins(8, 6).applyTo(headerRow);
 	GridDataFactory.fillDefaults().grab(true, false)
 			.applyTo(headerRow);
@@ -364,6 +372,29 @@ public class ExpandedCommentComposite extends Composite {
 		Label placeholder = new Label(headerRow, SWT.NONE);
 		placeholder.setBackground(headerBg);
 		GridDataFactory.fillDefaults().applyTo(placeholder);
+	}
+
+	// Edit link (only if user can edit this comment)
+	if (handler != null && canEdit(comment)) {
+		Link editLink = new Link(headerRow, SWT.NONE);
+		editLink.setText("<a>Edit</a>"); //$NON-NLS-1$
+		editLink.setBackground(headerBg);
+		editLink.setFont(smallFont);
+		editLink.setForeground(linkColor);
+		editLink.addListener(SWT.MouseEnter,
+				e -> editLink.setForeground(linkHoverColor));
+		editLink.addListener(SWT.MouseExit,
+				e -> editLink.setForeground(linkColor));
+		editLink.addListener(SWT.Selection,
+				e -> handler.onEdit(comment));
+		GridDataFactory.fillDefaults().align(SWT.END, SWT.CENTER)
+				.applyTo(editLink);
+	} else {
+		// Empty placeholder to maintain layout
+		Label placeholder = new Label(headerRow, SWT.NONE);
+		placeholder.setBackground(headerBg);
+		GridDataFactory.fillDefaults().align(SWT.END, SWT.CENTER)
+				.applyTo(placeholder);
 	}
 
 	// Delete link (only if user can delete this comment)
@@ -579,6 +610,27 @@ public class ExpandedCommentComposite extends Composite {
 
 		// Allow deletion of own comments, bot comments, or Copilot comments
 		return canDelete;
+	}
+
+	/**
+	 * Checks if the current user can edit the given comment.
+	 * A comment can be edited only if the current user is the comment
+	 * author (not bot or Copilot comments).
+	 *
+	 * @param comment
+	 *            the comment to check
+	 * @return {@code true} if the comment can be edited
+	 */
+	private boolean canEdit(PullRequestComment comment) {
+		if (currentUsername == null || comment == null) {
+			return false;
+		}
+		String authorName = comment.getAuthorName();
+		if (authorName == null) {
+			return false;
+		}
+		// Allow editing only own comments (not bot or Copilot comments)
+		return currentUsername.equals(authorName);
 	}
 
 	/**

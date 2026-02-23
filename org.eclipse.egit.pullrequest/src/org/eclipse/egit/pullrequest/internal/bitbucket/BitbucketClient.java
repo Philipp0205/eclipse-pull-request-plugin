@@ -272,6 +272,28 @@ public class BitbucketClient implements IPullRequestClient {
 	}
 
 	@Override
+	@NonNull
+	public PullRequest updatePullRequestDescription(long pullRequestId,
+			int version, @NonNull String description) throws IOException {
+		// Bitbucket API: PUT /rest/api/1.0/projects/{key}/repos/{slug}/pull-requests/{id}
+		// Body requires: {"title": "...", "description": "...", "version": N}
+		// Need to fetch current PR first to get the title
+
+		PullRequest currentPr = getPullRequest(pullRequestId);
+
+		String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+				+ "/repos/" + repositorySlug //$NON-NLS-1$
+				+ "/pull-requests/" + pullRequestId; //$NON-NLS-1$
+
+		String json = "{\"title\": \"" + escapeJson(currentPr.getTitle()) //$NON-NLS-1$
+				+ "\", \"description\": \"" + escapeJson(description) //$NON-NLS-1$
+				+ "\", \"version\": " + version + "}"; //$NON-NLS-1$ //$NON-NLS-2$
+
+		String jsonResponse = executePut(url, json);
+		return BitbucketJsonParser.parseSinglePullRequest(jsonResponse);
+	}
+
+	@Override
 	public boolean testConnection() {
 		try {
 			String url = serverUrl + API_BASE_PATH + "/application-properties"; //$NON-NLS-1$
@@ -495,6 +517,80 @@ public class BitbucketClient implements IPullRequestClient {
 
 		try (InputStream in = inputStream) {
 			return in.readAllBytes();
+		}
+	}
+
+	@Override
+	@NonNull
+	public List<PullRequest.PullRequestParticipant> getReviewers(
+			long pullRequestId) throws IOException {
+		// Get the full PR which includes reviewers
+		PullRequest pr = getPullRequest(pullRequestId);
+		List<PullRequest.PullRequestParticipant> reviewers = pr
+				.getReviewers();
+		return reviewers != null ? reviewers
+				: java.util.Collections.emptyList();
+	}
+
+	@Override
+	public void addReviewer(long pullRequestId, @NonNull String username)
+			throws IOException {
+		String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+				+ "/repos/" + repositorySlug + "/pull-requests/" + pullRequestId //$NON-NLS-1$ //$NON-NLS-2$
+				+ "/participants/" + username; //$NON-NLS-1$
+
+		// Build request body
+		String requestBody = "{\"user\":{\"name\":\"" + username //$NON-NLS-1$
+				+ "\"},\"role\":\"REVIEWER\"}"; //$NON-NLS-1$
+
+		executeRequest(url, "PUT", requestBody); //$NON-NLS-1$
+	}
+
+	@Override
+	public void removeReviewer(long pullRequestId, @NonNull String username)
+			throws IOException {
+		String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+				+ "/repos/" + repositorySlug + "/pull-requests/" + pullRequestId //$NON-NLS-1$ //$NON-NLS-2$
+				+ "/participants/" + username; //$NON-NLS-1$
+
+		executeRequest(url, "DELETE", null); //$NON-NLS-1$
+	}
+
+	@Override
+	public void addReviewers(long pullRequestId,
+			@NonNull List<String> usernames) throws IOException {
+		// Bitbucket doesn't support batch add, so add one by one
+		for (String username : usernames) {
+			addReviewer(pullRequestId, username);
+		}
+	}
+
+	/**
+	 * Execute a generic HTTP request
+	 *
+	 * @param urlString
+	 *            the URL to request
+	 * @param method
+	 *            the HTTP method (GET, POST, PUT, DELETE)
+	 * @param jsonBody
+	 *            the JSON body (can be null for GET/DELETE)
+	 * @return the response string, or empty string for DELETE
+	 * @throws IOException
+	 *             if the request fails
+	 */
+	private String executeRequest(String urlString, String method,
+			String jsonBody) throws IOException {
+		if ("DELETE".equals(method)) { //$NON-NLS-1$
+			executeDelete(urlString);
+			return ""; //$NON-NLS-1$
+		} else if ("PUT".equals(method)) { //$NON-NLS-1$
+			return executePut(urlString, jsonBody);
+		} else if ("POST".equals(method)) { //$NON-NLS-1$
+			return executePost(urlString, jsonBody);
+		} else if ("GET".equals(method)) { //$NON-NLS-1$
+			return executeGet(urlString);
+		} else {
+			throw new IOException("Unsupported HTTP method: " + method); //$NON-NLS-1$
 		}
 	}
 }

@@ -148,6 +148,25 @@ public class PullRequestCompareEditorInput extends CompareEditorInput {
 	}
 
 	/**
+	 * Updates the inline comment overlays with fresh comments and refreshes
+	 * the compare editor display.
+	 * <p>
+	 * This method is called when comments are added, modified, or deleted from
+	 * other views (e.g., {@link PullRequestCommentsView}) to ensure the inline
+	 * comment overlays in the compare editor are synchronized.
+	 * </p>
+	 *
+	 * @param fileComments
+	 *            the updated list of comments for the file displayed in this
+	 *            compare editor
+	 */
+	public void updateComments(List<PullRequestComment> fileComments) {
+		if (commentOverlay != null && fileComments != null) {
+			commentOverlay.installComments(fileComments);
+		}
+	}
+
+	/**
 	 * Creates a compare input (DiffNode) for the given changed file
 	 *
 	 * @param client
@@ -282,5 +301,16 @@ public class PullRequestCompareEditorInput extends CompareEditorInput {
 			return contentViewer.getControl();
 		}
 		return null;
+	}
+
+	/**
+	 * Get the comment overlay installer for this compare editor.
+	 * This allows external code to expand and navigate to specific comments.
+	 *
+	 * @return the comment overlay installer, or {@code null} if inline
+	 *         comments are not enabled or not yet installed
+	 */
+	public CommentOverlayInstaller getCommentOverlay() {
+		return commentOverlay;
 	}
 }

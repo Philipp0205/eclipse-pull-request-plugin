@@ -180,6 +180,16 @@ class BitbucketJsonParser {
 			}
 		}
 
+		// Parse reviewers array
+		String reviewersJson = extractArrayValue(json, "\"reviewers\":"); //$NON-NLS-1$
+		if (reviewersJson != null) {
+			List<PullRequest.PullRequestParticipant> reviewers = parseReviewers(
+					reviewersJson);
+			if (!reviewers.isEmpty()) {
+				pr.setReviewers(reviewers);
+			}
+		}
+
 		return pr;
 	}
 
@@ -573,6 +583,19 @@ class BitbucketJsonParser {
 			repo.setProject(parseProject(projectJson));
 		}
 
+		// Extract clone URL from links.clone array
+		String linksJson = extractObjectValue(json, "\"links\":"); //$NON-NLS-1$
+		if (linksJson != null) {
+			String cloneArrayJson = extractArrayValue(linksJson,
+					"\"clone\":"); //$NON-NLS-1$
+			if (cloneArrayJson != null) {
+				String cloneUrl = extractHttpCloneUrl(cloneArrayJson);
+				if (cloneUrl != null) {
+					repo.setCloneUrl(cloneUrl);
+				}
+			}
+		}
+
 		return repo;
 	}
 
@@ -612,6 +635,61 @@ class BitbucketJsonParser {
 		}
 
 		return participant;
+	}
+
+	/**
+	 * Parse an array of reviewers from JSON
+	 *
+	 * @param arrayJson
+	 *            the JSON array string containing reviewers
+	 * @return list of reviewer participants
+	 */
+	private static List<PullRequest.PullRequestParticipant> parseReviewers(
+			String arrayJson) {
+		List<PullRequest.PullRequestParticipant> reviewers = new ArrayList<>();
+
+		if (!arrayJson.startsWith("[")) { //$NON-NLS-1$
+			return reviewers;
+		}
+
+		int pos = 1; // Skip opening bracket
+		while (pos < arrayJson.length()) {
+			// Skip whitespace
+			while (pos < arrayJson.length()
+					&& Character.isWhitespace(arrayJson.charAt(pos))) {
+				pos++;
+			}
+
+			if (pos >= arrayJson.length() || arrayJson.charAt(pos) == ']') {
+				break;
+			}
+
+			// Find the opening brace of the reviewer object
+			if (arrayJson.charAt(pos) == '{') {
+				int objEnd = findMatchingBrace(arrayJson, pos);
+				if (objEnd == -1) {
+					break;
+				}
+
+				String reviewerJson = arrayJson.substring(pos, objEnd + 1);
+				PullRequest.PullRequestParticipant reviewer = parseParticipant(
+						reviewerJson);
+				if (reviewer != null) {
+					reviewers.add(reviewer);
+				}
+
+				pos = objEnd + 1;
+				// Skip comma if present
+				while (pos < arrayJson.length() && (Character.isWhitespace(
+						arrayJson.charAt(pos)) || arrayJson.charAt(pos) == ',')) {
+					pos++;
+				}
+			} else {
+				pos++;
+			}
+		}
+
+		return reviewers;
 	}
 
 	private static PullRequest.User parseUser(String json) {
@@ -884,6 +962,139 @@ class BitbucketJsonParser {
 		}
 
 		return comment;
+	}
+
+	/**
+	 * Extracts an array value from JSON
+	 *
+	 * @param json
+	 *            the JSON string
+	 * @param key
+	 *            the key to search for
+	 * @return the array content including brackets, or null if not found
+	 */
+	private static String extractArrayValue(String json, String key) {
+		int keyPos = json.indexOf(key);
+		if (keyPos == -1) {
+			return null;
+		}
+
+		int arrayStart = json.indexOf('[', keyPos + key.length());
+		if (arrayStart == -1) {
+			return null;
+		}
+
+		int arrayEnd = findMatchingBracket(json, arrayStart);
+		if (arrayEnd == -1) {
+			return null;
+		}
+
+		return json.substring(arrayStart, arrayEnd + 1);
+	}
+
+	/**
+	 * Finds the matching closing bracket for an opening bracket
+	 *
+	 * @param json
+	 *            the JSON string
+	 * @param startPos
+	 *            position of the opening bracket
+	 * @return position of matching closing bracket, or -1 if not found
+	 */
+	private static int findMatchingBracket(String json, int startPos) {
+		int depth = 0;
+		boolean inString = false;
+		boolean escape = false;
+
+		for (int i = startPos; i < json.length(); i++) {
+			char c = json.charAt(i);
+
+			if (escape) {
+				escape = false;
+				continue;
+			}
+
+			if (c == '\\') {
+				escape = true;
+				continue;
+			}
+
+			if (c == '"') {
+				inString = !inString;
+				continue;
+			}
+
+			if (!inString) {
+				if (c == '[') {
+					depth++;
+				} else if (c == ']') {
+					depth--;
+					if (depth == 0) {
+						return i;
+					}
+				}
+			}
+		}
+
+		return -1;
+	}
+
+	/**
+	 * Extracts the HTTP clone URL from Bitbucket's clone links array.
+	 * Bitbucket returns an array like:
+	 * [{"href":"https://...", "name":"http"}, {"href":"ssh://...",
+	 * "name":"ssh"}]
+	 *
+	 * @param cloneArrayJson
+	 *            the clone array JSON
+	 * @return the HTTP clone URL, or null if not found
+	 */
+	private static String extractHttpCloneUrl(String cloneArrayJson) {
+		// Parse array elements
+		int pos = 1; // Skip opening bracket
+		while (pos < cloneArrayJson.length()) {
+			// Skip whitespace
+			while (pos < cloneArrayJson.length()
+					&& Character.isWhitespace(cloneArrayJson.charAt(pos))) {
+				pos++;
+			}
+
+			if (pos >= cloneArrayJson.length()
+					|| cloneArrayJson.charAt(pos) == ']') {
+				break;
+			}
+
+			// Find object
+			if (cloneArrayJson.charAt(pos) == '{') {
+				int objEnd = findMatchingBrace(cloneArrayJson, pos);
+				if (objEnd == -1) {
+					break;
+				}
+
+				String objJson = cloneArrayJson.substring(pos, objEnd + 1);
+
+				// Check if this is the http clone link
+				String name = extractStringValue(objJson, "\"name\":"); //$NON-NLS-1$
+				if ("http".equals(name)) { //$NON-NLS-1$
+					String href = extractStringValue(objJson, "\"href\":"); //$NON-NLS-1$
+					if (href != null) {
+						return href;
+					}
+				}
+
+				pos = objEnd + 1;
+				// Skip comma if present
+				while (pos < cloneArrayJson.length() && (Character
+						.isWhitespace(cloneArrayJson.charAt(pos))
+						|| cloneArrayJson.charAt(pos) == ',')) {
+					pos++;
+				}
+			} else {
+				pos++;
+			}
+		}
+
+		return null;
 	}
 
 	/**

@@ -48,6 +48,9 @@ public class PRPreferences {
 	/** Show inline comments preference */
 	public static final String PULLREQUEST_SHOW_INLINE_COMMENTS = "pullrequest_show_inline_comments"; //$NON-NLS-1$
 
+	/** Animate inline comments preference */
+	public static final String PULLREQUEST_ANIMATE_INLINE_COMMENTS = "pullrequest_animate_inline_comments"; //$NON-NLS-1$
+
 	private PRPreferences() {
 		// No instantiation
 	}

@@ -65,6 +65,8 @@ public class PullRequestPreferencePage extends PreferencePage
 
 	private Button showInlineCommentsCheckbox;
 
+	private Button animateInlineCommentsCheckbox;
+
 	/**
 	 * Creates a new {@link PullRequestPreferencePage}
 	 */
@@ -277,6 +279,13 @@ public class PullRequestPreferencePage extends PreferencePage
 				.setText("Show inline comments in pull request &compare viewer"); //$NON-NLS-1$
 		GridDataFactory.fillDefaults().grab(true, false)
 				.applyTo(showInlineCommentsCheckbox);
+
+		animateInlineCommentsCheckbox = new Button(group, SWT.CHECK);
+		animateInlineCommentsCheckbox
+				.setText("&Animate inline comment expand/collapse"); //$NON-NLS-1$
+		GridDataFactory.fillDefaults().grab(true, false)
+				.indent(20, 0)
+				.applyTo(animateInlineCommentsCheckbox);
 	}
 
 	private void updateProviderVisibility() {
@@ -325,6 +334,8 @@ public class PullRequestPreferencePage extends PreferencePage
 		// Load display options
 		showInlineCommentsCheckbox.setSelection(store
 				.getBoolean(PRPreferences.PULLREQUEST_SHOW_INLINE_COMMENTS));
+		animateInlineCommentsCheckbox.setSelection(store
+				.getBoolean(PRPreferences.PULLREQUEST_ANIMATE_INLINE_COMMENTS));
 	}
 
 	@Override
@@ -342,6 +353,7 @@ public class PullRequestPreferencePage extends PreferencePage
 		githubTokenText.setText(""); //$NON-NLS-1$
 
 		showInlineCommentsCheckbox.setSelection(true);
+		animateInlineCommentsCheckbox.setSelection(true);
 
 		updateProviderVisibility();
 
@@ -380,6 +392,8 @@ public class PullRequestPreferencePage extends PreferencePage
 		// Save display options
 		store.setValue(PRPreferences.PULLREQUEST_SHOW_INLINE_COMMENTS,
 				showInlineCommentsCheckbox.getSelection());
+		store.setValue(PRPreferences.PULLREQUEST_ANIMATE_INLINE_COMMENTS,
+				animateInlineCommentsCheckbox.getSelection());
 
 		return super.performOk();
 	}

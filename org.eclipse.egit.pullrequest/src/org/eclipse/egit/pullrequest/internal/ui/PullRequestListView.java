@@ -12,6 +12,7 @@ package org.eclipse.egit.pullrequest.internal.ui;
 
 import java.io.IOException;
 import java.text.MessageFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -20,50 +21,50 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
-import org.eclipse.egit.pullrequest.internal.model.PullRequest;
-import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
-import org.eclipse.egit.pullrequest.internal.client.PullRequestClientFactory;
 import org.eclipse.egit.pullrequest.Activator;
 import org.eclipse.egit.pullrequest.internal.PRPreferences;
-import org.eclipse.egit.ui.internal.PreferenceBasedDateFormatter;
-import org.eclipse.egit.pullrequest.internal.ui.TreeColumnPatternFilter;
+import org.eclipse.egit.pullrequest.internal.PRText;
+import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
+import org.eclipse.egit.pullrequest.internal.client.PullRequestClientFactory;
+import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.ui.internal.UIIcons;
-import org.eclipse.egit.pullrequest.internal.ui.DropDownMenuAction;
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.ActionContributionItem;
 import org.eclipse.jface.action.IAction;
 import org.eclipse.jface.action.IContributionItem;
+import org.eclipse.jface.action.IMenuListener;
 import org.eclipse.jface.action.IMenuManager;
 import org.eclipse.jface.action.IToolBarManager;
+import org.eclipse.jface.action.MenuManager;
+import org.eclipse.jface.action.Separator;
 import org.eclipse.jface.dialogs.InputDialog;
 import org.eclipse.jface.dialogs.MessageDialog;
-import org.eclipse.jface.window.Window;
 import org.eclipse.jface.layout.GridDataFactory;
 import org.eclipse.jface.layout.GridLayoutFactory;
-import org.eclipse.jface.layout.TreeColumnLayout;
+import org.eclipse.jface.layout.TableColumnLayout;
 import org.eclipse.jface.resource.JFaceResources;
 import org.eclipse.jface.resource.LocalResourceManager;
 import org.eclipse.jface.resource.ResourceManager;
+import org.eclipse.jface.viewers.ArrayContentProvider;
 import org.eclipse.jface.viewers.ColumnLabelProvider;
 import org.eclipse.jface.viewers.ColumnWeightData;
-import org.eclipse.jface.viewers.ITreeContentProvider;
-import org.eclipse.jface.viewers.TreeViewer;
 import org.eclipse.jface.viewers.DoubleClickEvent;
 import org.eclipse.jface.viewers.IDoubleClickListener;
 import org.eclipse.jface.viewers.IStructuredSelection;
-import org.eclipse.jface.viewers.StructuredSelection;
-import org.eclipse.jface.viewers.TreeViewerColumn;
+import org.eclipse.jface.viewers.TableViewer;
+import org.eclipse.jface.viewers.TableViewerColumn;
+import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.KeyAdapter;
 import org.eclipse.swt.events.KeyEvent;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Menu;
 import org.eclipse.ui.IActionBars;
 import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.PartInitException;
-import org.eclipse.ui.dialogs.FilteredTree;
 import org.eclipse.ui.forms.widgets.Form;
 import org.eclipse.ui.forms.widgets.FormToolkit;
 import org.eclipse.ui.part.ViewPart;
@@ -76,35 +77,60 @@ public class PullRequestListView extends ViewPart {
 	public static final String VIEW_ID = "org.eclipse.egit.pullrequest.PullRequestListView"; //$NON-NLS-1$
 
 	private FormToolkit toolkit;
-
+	// Styled container with the title "Pull Requests (count) and filters"
 	private Form form;
 
-	private TreeViewer pullRequestViewer;
-
-	private PreferenceBasedDateFormatter dateFormatter;
-
-	private ResourceManager imageCache;
-
-	private List<PullRequest> pullRequests = new ArrayList<>();
-
+	// Filters
 	private Action refreshAction;
-
+	private Action checkoutBranchAction;
 	private Action authorFilterAction;
-
 	private DropDownMenuAction stateFilterAction;
-
-	// Server-side filter settings
 	private String currentAuthorFilter = null;
-
 	private String currentStateFilter = null;
 
+	// List of pull requests
+	private TableViewer pullRequestViewer;
+	private List<PullRequest> pullRequests = new ArrayList<>();
+
+	private SimpleDateFormat dateFormatter;
+
+	private ResourceManager imageCache;
 	private boolean configWarningShown = false;
 
 	@Override
 	public void createPartControl(Composite parent) {
-		dateFormatter = PreferenceBasedDateFormatter.create();
+		dateFormatter = new SimpleDateFormat("yyyy-MM-dd HH:mm"); //$NON-NLS-1$
 		GridLayoutFactory.fillDefaults().applyTo(parent);
 
+		setupForm(parent);
+
+		// Create composite for table
+		Composite tableComposite = toolkit.createComposite(form.getBody());
+		GridDataFactory.fillDefaults().grab(true, true).applyTo(tableComposite);
+		final TableColumnLayout tableColumnLayout = new TableColumnLayout();
+
+		createFilteredTable(tableComposite, tableColumnLayout);
+		setupColumns(tableColumnLayout);
+
+		pullRequestViewer.setContentProvider(ArrayContentProvider.getInstance());
+		pullRequestViewer.setInput(pullRequests);
+
+		// setup actions
+		setupSelectionHandling();
+		setupContextMenu();
+		createRefreshActions();
+		createFilterActions();
+		contributeToActionBars();
+
+		// Initialize default filters
+		currentStateFilter = null; // Default to OPEN (handled in createStateFilterItem)
+		initializeAuthorFilterFromPreferences();
+
+		// Automatically refresh pull requests when view opens
+		refreshPullRequests();
+	}
+
+	private void setupForm(Composite parent) {
 		toolkit = new FormToolkit(parent.getDisplay());
 		parent.addDisposeListener(e -> toolkit.dispose());
 
@@ -113,87 +139,33 @@ public class PullRequestListView extends ViewPart {
 		GridDataFactory.fillDefaults().grab(true, true).applyTo(form);
 		toolkit.decorateFormHeading(form);
 		GridLayoutFactory.fillDefaults().applyTo(form.getBody());
+	}
 
-		// Create composite for tree
-		Composite tableComposite = toolkit.createComposite(form.getBody());
-		GridDataFactory.fillDefaults().grab(true, true).applyTo(tableComposite);
-		GridLayoutFactory.fillDefaults().applyTo(tableComposite);
-
-		final TreeColumnLayout treeColumnLayout = new TreeColumnLayout();
-
-		createFilteredTree(tableComposite, treeColumnLayout);
-		setupColumns(treeColumnLayout);
-
-		pullRequestViewer.setContentProvider(new ITreeContentProvider() {
-			@Override
-			public Object[] getElements(Object inputElement) {
-				if (inputElement instanceof List) {
-					return ((List<?>) inputElement).toArray();
-				}
-				return new Object[0];
-			}
-
-			@Override
-			public Object[] getChildren(Object parentElement) {
-				return null;
-			}
-
-			@Override
-			public Object getParent(Object element) {
-				return null;
-			}
-
-			@Override
-			public boolean hasChildren(Object element) {
-				return false;
-			}
-		});
-
-		pullRequestViewer.setInput(pullRequests);
-
-		setupSelectionHandling();
-
-		createActions();
-		createFilterActions();
-		contributeToActionBars();
-
-		// Initialize default filters
-		currentStateFilter = null; // Default to OPEN (handled in createStateFilterItem)
-
+	private void initializeAuthorFilterFromPreferences() {
 		// Try to set author from preferences
-		String username = Activator.getDefault().getPreferenceStore()
-				.getString(PRPreferences.BITBUCKET_USERNAME);
+		String username = Activator.getDefault().getPreferenceStore().getString(PRPreferences.BITBUCKET_USERNAME);
 		if (username != null && !username.isEmpty()) {
 			currentAuthorFilter = username;
 		}
-
-		// Automatically refresh pull requests when view opens
-		refreshPullRequests();
 	}
 
-	private void setupColumns(TreeColumnLayout layout) {
+	private void setupColumns(TableColumnLayout layout) {
 		// ID Column
-		TreeViewerColumn idColumn = createColumn(layout, "ID", 10, SWT.LEFT); //$NON-NLS-1$
-		idColumn.setLabelProvider(new ColumnLabelProvider() {
+		TableViewerColumn idColumn = createColumn(layout, "ID", 10, SWT.LEFT); //$NON-NLS-1$
+		idColumn.setLabelProvider(new PullRequestLabelProvider() {
 			@Override
-			public String getText(Object element) {
-				if (element instanceof PullRequest) {
-					return String.valueOf(((PullRequest) element).getId());
-				}
-				return ""; //$NON-NLS-1$
+			protected String getTextForPullRequest(PullRequest pr) {
+				return String.valueOf(pr.getId());
 			}
 		});
 
 		// Title Column
-		TreeViewerColumn titleColumn = createColumn(layout, "Title", 40, //$NON-NLS-1$
+		TableViewerColumn titleColumn = createColumn(layout, "Title", 40, //$NON-NLS-1$
 				SWT.LEFT);
-		titleColumn.setLabelProvider(new ColumnLabelProvider() {
+		titleColumn.setLabelProvider(new PullRequestLabelProvider() {
 			@Override
-			public String getText(Object element) {
-				if (element instanceof PullRequest) {
-					return ((PullRequest) element).getTitle();
-				}
-				return ""; //$NON-NLS-1$
+			protected String getTextForPullRequest(PullRequest pr) {
+				return pr.getTitle();
 			}
 
 			@Override
@@ -201,8 +173,7 @@ public class PullRequestListView extends ViewPart {
 				if (element instanceof PullRequest) {
 					PullRequest pr = (PullRequest) element;
 					if ("OPEN".equals(pr.getState())) { //$NON-NLS-1$
-						return UIIcons.getImage(getImageCache(),
-								UIIcons.BRANCH);
+						return UIIcons.getImage(getImageCache(), UIIcons.BRANCH);
 					} else if ("MERGED".equals(pr.getState())) { //$NON-NLS-1$
 						return UIIcons.getImage(getImageCache(), UIIcons.MERGE);
 					} else if ("DECLINED".equals(pr.getState())) { //$NON-NLS-1$
@@ -214,95 +185,127 @@ public class PullRequestListView extends ViewPart {
 		});
 
 		// Author Column
-		TreeViewerColumn authorColumn = createColumn(layout, "Author", 20, //$NON-NLS-1$
+		TableViewerColumn authorColumn = createColumn(layout, "Author", 20, //$NON-NLS-1$
 				SWT.LEFT);
-		authorColumn.setLabelProvider(new ColumnLabelProvider() {
+		authorColumn.setLabelProvider(new PullRequestLabelProvider() {
 			@Override
-			public String getText(Object element) {
-				if (element instanceof PullRequest) {
-					PullRequest pr = (PullRequest) element;
-					if (pr.getAuthor() != null
-							&& pr.getAuthor().getUser() != null) {
-						return pr.getAuthor().getUser().getDisplayName();
-					}
+			protected String getTextForPullRequest(PullRequest pr) {
+				if (pr.getAuthor() != null && pr.getAuthor().getUser() != null) {
+					return pr.getAuthor().getUser().getDisplayName();
 				}
 				return ""; //$NON-NLS-1$
 			}
 		});
 
 		// State Column
-		TreeViewerColumn stateColumn = createColumn(layout, "State", 10, //$NON-NLS-1$
+		TableViewerColumn stateColumn = createColumn(layout, "State", 10, //$NON-NLS-1$
 				SWT.LEFT);
-		stateColumn.setLabelProvider(new ColumnLabelProvider() {
+		stateColumn.setLabelProvider(new PullRequestLabelProvider() {
 			@Override
-			public String getText(Object element) {
-				if (element instanceof PullRequest) {
-					return ((PullRequest) element).getState();
-				}
-				return ""; //$NON-NLS-1$
+			protected String getTextForPullRequest(PullRequest pr) {
+				return pr.getState();
 			}
 		});
 
 		// Comments Column
-		TreeViewerColumn commentsColumn = createColumn(layout, "Comments", 10, //$NON-NLS-1$
+		TableViewerColumn commentsColumn = createColumn(layout, "Comments", 10, //$NON-NLS-1$
 				SWT.LEFT);
-		commentsColumn.setLabelProvider(new ColumnLabelProvider() {
+		commentsColumn.setLabelProvider(new PullRequestLabelProvider() {
 			@Override
-			public String getText(Object element) {
-				if (element instanceof PullRequest) {
-					int count = ((PullRequest) element).getCommentCount();
-					return count > 0 ? String.valueOf(count) : ""; //$NON-NLS-1$
+			protected String getTextForPullRequest(PullRequest pr) {
+				int count = pr.getCommentCount();
+				return count > 0 ? String.valueOf(count) : ""; //$NON-NLS-1$
+			}
+		});
+
+		// Reviewers Column
+		TableViewerColumn reviewersColumn = createColumn(layout, "Reviewers", //$NON-NLS-1$
+				15, SWT.LEFT);
+		reviewersColumn.setLabelProvider(new PullRequestLabelProvider() {
+			@Override
+			protected String getTextForPullRequest(PullRequest pr) {
+				List<PullRequest.PullRequestParticipant> reviewers = pr
+						.getReviewers();
+				if (reviewers == null || reviewers.isEmpty()) {
+					return ""; //$NON-NLS-1$
 				}
-				return ""; //$NON-NLS-1$
+				return formatReviewers(reviewers);
+			}
+
+			@Override
+			public String getToolTipText(Object element) {
+				if (element instanceof PullRequest) {
+					PullRequest pr = (PullRequest) element;
+					List<PullRequest.PullRequestParticipant> reviewers = pr
+							.getReviewers();
+					if (reviewers == null || reviewers.isEmpty()) {
+						return null;
+					}
+					return formatReviewersTooltip(reviewers);
+				}
+				return null;
 			}
 		});
 
 		// Updated Column
-		TreeViewerColumn updatedColumn = createColumn(layout, "Updated", 20, //$NON-NLS-1$
+		TableViewerColumn updatedColumn = createColumn(layout, "Updated", 20, //$NON-NLS-1$
 				SWT.LEFT);
-		updatedColumn.setLabelProvider(new ColumnLabelProvider() {
+		updatedColumn.setLabelProvider(new PullRequestLabelProvider() {
 			@Override
-			public String getText(Object element) {
-				if (element instanceof PullRequest) {
-					PullRequest pr = (PullRequest) element;
-					if (pr.getUpdatedDate() != null) {
-						return dateFormatter.formatDate(pr.getUpdatedDate());
-					}
+			protected String getTextForPullRequest(PullRequest pr) {
+				if (pr.getUpdatedDate() != null) {
+					return dateFormatter.format(pr.getUpdatedDate());
 				}
 				return ""; //$NON-NLS-1$
 			}
 		});
 	}
 
-	private TreeViewerColumn createColumn(TreeColumnLayout layout, String text,
-			int weight, int style) {
-		TreeViewerColumn column = new TreeViewerColumn(pullRequestViewer,
-				style);
+	/**
+	 * Base label provider for pull request columns that handles the common
+	 * type checking and delegates to a template method.
+	 */
+	private abstract static class PullRequestLabelProvider extends ColumnLabelProvider {
+		@Override
+		public final String getText(Object element) {
+			if (element instanceof PullRequest) {
+				return getTextForPullRequest((PullRequest) element);
+			}
+			return ""; //$NON-NLS-1$
+		}
+
+		/**
+		 * Returns the text for a pull request element.
+		 *
+		 * @param pr the pull request
+		 * @return the text to display
+		 */
+		protected abstract String getTextForPullRequest(PullRequest pr);
+	}
+
+	private TableViewerColumn createColumn(TableColumnLayout layout, String text, int weight, int style) {
+		TableViewerColumn column = new TableViewerColumn(pullRequestViewer, style);
 		column.getColumn().setText(text);
 		layout.setColumnData(column.getColumn(), new ColumnWeightData(weight));
 		return column;
 	}
 
-	private void createFilteredTree(Composite parent, TreeColumnLayout treeColumnLayout) {
-		FilteredTree filteredTree = new FilteredTree(parent,
-				SWT.BORDER | SWT.FULL_SELECTION | SWT.MULTI,
-				new TreeColumnPatternFilter(), true, true) {
+	private void createFilteredTable(Composite parent, TableColumnLayout tableColumnLayout) {
+		// TableColumnLayout must be the sole layout on a composite whose only
+		// child is the table control
+		parent.setLayout(tableColumnLayout);
 
-			@Override
-			protected void createControl(Composite composite, int treeStyle) {
-				super.createControl(composite, treeStyle);
-				treeComposite.setLayout(treeColumnLayout);
-			}
-		};
-
-		toolkit.adapt(filteredTree);
-		pullRequestViewer = filteredTree.getViewer();
-		pullRequestViewer.getTree().setHeaderVisible(true);
-		pullRequestViewer.getTree().setLinesVisible(true);
-		pullRequestViewer.getTree().setData(FormToolkit.KEY_DRAW_BORDER,
-				FormToolkit.TREE_BORDER);
+		// Create the table viewer
+		pullRequestViewer = new TableViewer(parent, SWT.BORDER | SWT.FULL_SELECTION | SWT.MULTI);
+		pullRequestViewer.getTable().setHeaderVisible(true);
+		pullRequestViewer.getTable().setLinesVisible(true);
+		pullRequestViewer.getTable().setData(FormToolkit.KEY_DRAW_BORDER, FormToolkit.TREE_BORDER);
+		toolkit.adapt(pullRequestViewer.getTable());
 	}
 
+	/*
+	 *  The user can load pull requests either with a double-click or by selecting a PR and pressing Enter.
+	 */
 	private void setupSelectionHandling() {
 		getSite().setSelectionProvider(pullRequestViewer);
 
@@ -320,7 +323,7 @@ public class PullRequestListView extends ViewPart {
 			}
 		});
 
-		pullRequestViewer.getTree().addKeyListener(new KeyAdapter() {
+		pullRequestViewer.getTable().addKeyListener(new KeyAdapter() {
 			@Override
 			public void keyPressed(KeyEvent e) {
 				if (e.keyCode == SWT.CR || e.keyCode == SWT.KEYPAD_CR) {
@@ -332,12 +335,94 @@ public class PullRequestListView extends ViewPart {
 							loadPullRequest((PullRequest) element);
 						}
 					}
+				} else if (e.keyCode == SWT.F5) {
+					refreshPullRequests();
 				}
 			}
 		});
 	}
 
-	private void createActions() {
+	/**
+	 * Sets up the context menu for the pull request list.
+	 */
+	private void setupContextMenu() {
+		MenuManager menuManager = new MenuManager("#PopupMenu"); //$NON-NLS-1$
+		menuManager.setRemoveAllWhenShown(true);
+		menuManager.addMenuListener(new IMenuListener() {
+			@Override
+			public void menuAboutToShow(IMenuManager manager) {
+				fillContextMenu(manager);
+			}
+		});
+
+		Menu menu = menuManager.createContextMenu(
+				pullRequestViewer.getControl());
+		pullRequestViewer.getControl().setMenu(menu);
+	}
+
+	/**
+	 * Fills the context menu with actions based on the current selection.
+	 *
+	 * @param manager
+	 *            the menu manager to fill
+	 */
+	private void fillContextMenu(IMenuManager manager) {
+		IStructuredSelection selection = (IStructuredSelection) pullRequestViewer
+				.getSelection();
+		if (selection.isEmpty()) {
+			return;
+		}
+
+		Object element = selection.getFirstElement();
+		if (!(element instanceof PullRequest)) {
+			return;
+		}
+
+		PullRequest pr = (PullRequest) element;
+
+		// Open pull request action
+		manager.add(new Action(PRText.PullRequestListView_OpenPullRequest) {
+			@Override
+			public void run() {
+				loadPullRequest(pr);
+			}
+		});
+
+		manager.add(new Separator());
+
+		// Manage Reviewers action
+		manager.add(new Action(PRText.ReviewerManagement_MenuLabel) {
+			@Override
+			public void run() {
+				ManageReviewersAction action = new ManageReviewersAction(
+						getSite().getShell());
+				action.setPullRequest(pr);
+				action.setRefreshCallback(() -> refreshPullRequests());
+				action.run();
+			}
+		});
+
+		// Add Myself as Reviewer action
+		manager.add(new Action(PRText.AddMyselfAsReviewer_MenuLabel) {
+			@Override
+			public void run() {
+				AddMyselfAsReviewerAction action = new AddMyselfAsReviewerAction(
+						getSite().getShell());
+				action.setPullRequest(pr);
+				action.setRefreshCallback(() -> refreshPullRequests());
+				action.run();
+			}
+		});
+
+		manager.add(new Separator());
+
+		// Checkout Branch action
+		if (checkoutBranchAction != null) {
+			manager.add(checkoutBranchAction);
+		}
+	}
+
+	private void createRefreshActions() {
 		refreshAction = new Action("Refresh") { //$NON-NLS-1$
 			@Override
 			public void run() {
@@ -346,6 +431,30 @@ public class PullRequestListView extends ViewPart {
 		};
 		refreshAction.setImageDescriptor(UIIcons.ELCL16_REFRESH);
 		refreshAction.setToolTipText("Refresh pull requests"); //$NON-NLS-1$
+
+		checkoutBranchAction = new Action(PRText.CheckoutBranch_ActionLabel) {
+			@Override
+			public void run() {
+				IStructuredSelection selection = (IStructuredSelection) pullRequestViewer
+						.getSelection();
+				if (!selection.isEmpty()) {
+					PullRequest pr = (PullRequest) selection
+							.getFirstElement();
+					CheckoutPullRequestBranchJob job = new CheckoutPullRequestBranchJob(
+							pr, getSite().getShell());
+					job.schedule();
+				}
+			}
+		};
+		checkoutBranchAction
+				.setToolTipText(PRText.CheckoutBranch_ActionTooltip);
+		checkoutBranchAction.setEnabled(false); // Initially disabled
+
+		// Update enabled state based on selection
+		pullRequestViewer.addSelectionChangedListener(event -> {
+			boolean hasSelection = !event.getSelection().isEmpty();
+			checkoutBranchAction.setEnabled(hasSelection);
+		});
 	}
 
 	private void createFilterActions() {
@@ -408,6 +517,7 @@ public class PullRequestListView extends ViewPart {
 		IActionBars actionBars = getViewSite().getActionBars();
 		IToolBarManager toolBarManager = actionBars.getToolBarManager();
 		toolBarManager.add(refreshAction);
+		toolBarManager.add(checkoutBranchAction);
 
 		// Add filter actions to view menu (dropdown in top-right)
 		IMenuManager menuManager = actionBars.getMenuManager();
@@ -457,10 +567,8 @@ public class PullRequestListView extends ViewPart {
 
 					Display.getDefault().asyncExec(() -> {
 						if (!pullRequestViewer.getControl().isDisposed()) {
-							pullRequests.clear();
-							pullRequests.addAll(fetchedPRs);
+							pullRequests = new ArrayList<>(fetchedPRs);
 							pullRequestViewer.setInput(pullRequests);
-							pullRequestViewer.refresh();
 
 							// Update form title with filter info
 							updateFormTitle();
@@ -514,6 +622,16 @@ public class PullRequestListView extends ViewPart {
 		try {
 			IWorkbenchPage page = getSite().getWorkbenchWindow()
 					.getActivePage();
+
+			// Update overview view
+			IWorkbenchPart overviewPart = page
+					.showView(PullRequestOverviewView.VIEW_ID);
+			if (overviewPart instanceof PullRequestOverviewView) {
+				((PullRequestOverviewView) overviewPart)
+						.loadPullRequest(pr);
+			}
+
+			// Update changed files view
 			IWorkbenchPart part = page
 					.showView(PullRequestChangedFilesView.VIEW_ID);
 
@@ -521,7 +639,7 @@ public class PullRequestListView extends ViewPart {
 				((PullRequestChangedFilesView) part).loadPullRequest(pr);
 			}
 		} catch (PartInitException e) {
-			Activator.logError("Failed to open PullRequestChangedFilesView", //$NON-NLS-1$
+			Activator.logError("Failed to open pull request views", //$NON-NLS-1$
 					e);
 		}
 	}
@@ -546,5 +664,87 @@ public class PullRequestListView extends ViewPart {
 					JFaceResources.getResources());
 		}
 		return imageCache;
+	}
+
+	/**
+	 * Formats a list of reviewers for display in the table column. Shows up to
+	 * 2 reviewer names, then "+N more" if there are additional reviewers.
+	 * Approved reviewers are indicated with a checkmark.
+	 *
+	 * @param reviewers
+	 *            the list of reviewers
+	 * @return formatted string for column display
+	 */
+	private String formatReviewers(
+			List<PullRequest.PullRequestParticipant> reviewers) {
+		if (reviewers == null || reviewers.isEmpty()) {
+			return ""; //$NON-NLS-1$
+		}
+
+		StringBuilder result = new StringBuilder();
+		int displayCount = Math.min(2, reviewers.size());
+
+		for (int i = 0; i < displayCount; i++) {
+			if (i > 0) {
+				result.append(", "); //$NON-NLS-1$
+			}
+			PullRequest.PullRequestParticipant reviewer = reviewers.get(i);
+			if (reviewer.getUser() != null) {
+				String displayName = reviewer.getUser().getDisplayName();
+				if (displayName == null || displayName.isEmpty()) {
+					displayName = reviewer.getUser().getName();
+				}
+				result.append(displayName);
+				if (reviewer.isApproved()) {
+					result.append(" \u2713"); // Unicode checkmark //$NON-NLS-1$
+				}
+			}
+		}
+
+		if (reviewers.size() > displayCount) {
+			result.append(" +"); //$NON-NLS-1$
+			result.append(reviewers.size() - displayCount);
+			result.append(" more"); //$NON-NLS-1$
+		}
+
+		return result.toString();
+	}
+
+	/**
+	 * Formats a list of reviewers for display in a tooltip. Shows all
+	 * reviewers with their approval status.
+	 *
+	 * @param reviewers
+	 *            the list of reviewers
+	 * @return formatted string for tooltip display
+	 */
+	private String formatReviewersTooltip(
+			List<PullRequest.PullRequestParticipant> reviewers) {
+		if (reviewers == null || reviewers.isEmpty()) {
+			return null;
+		}
+
+		StringBuilder tooltip = new StringBuilder();
+		tooltip.append("Reviewers:\n"); //$NON-NLS-1$
+
+		for (PullRequest.PullRequestParticipant reviewer : reviewers) {
+			tooltip.append("  "); //$NON-NLS-1$
+			if (reviewer.getUser() != null) {
+				String displayName = reviewer.getUser().getDisplayName();
+				if (displayName == null || displayName.isEmpty()) {
+					displayName = reviewer.getUser().getName();
+				}
+				tooltip.append(displayName);
+
+				if (reviewer.isApproved()) {
+					tooltip.append(" (Approved)"); //$NON-NLS-1$
+				} else {
+					tooltip.append(" (Pending)"); //$NON-NLS-1$
+				}
+			}
+			tooltip.append("\n"); //$NON-NLS-1$
+		}
+
+		return tooltip.toString();
 	}
 }

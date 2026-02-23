@@ -237,6 +237,24 @@ public interface IPullRequestClient {
 			boolean isReviewComment) throws IOException;
 
 	/**
+	 * Updates the description of a pull request
+	 *
+	 * @param pullRequestId
+	 *            the pull request ID or number
+	 * @param version
+	 *            the pull request version (for optimistic locking, may be
+	 *            ignored by some providers like GitHub)
+	 * @param description
+	 *            the new description text
+	 * @return the updated pull request
+	 * @throws IOException
+	 *             if the request fails
+	 */
+	@NonNull
+	PullRequest updatePullRequestDescription(long pullRequestId, int version,
+			@NonNull String description) throws IOException;
+
+	/**
 	 * Tests the connection to the provider
 	 *
 	 * @return true if the connection is successful
@@ -252,6 +270,58 @@ public interface IPullRequestClient {
 	 */
 	@NonNull
 	String getCurrentUser() throws IOException;
+
+	/**
+	 * Retrieves the list of reviewers for a pull request.
+	 *
+	 * @param pullRequestId
+	 *            the pull request identifier
+	 * @return list of reviewers, never null
+	 * @throws IOException
+	 *             if the request fails
+	 */
+	@NonNull
+	List<PullRequest.PullRequestParticipant> getReviewers(long pullRequestId)
+			throws IOException;
+
+	/**
+	 * Adds a reviewer to a pull request.
+	 *
+	 * @param pullRequestId
+	 *            the pull request identifier
+	 * @param username
+	 *            the username to add as reviewer
+	 * @throws IOException
+	 *             if the request fails
+	 */
+	void addReviewer(long pullRequestId, @NonNull String username)
+			throws IOException;
+
+	/**
+	 * Removes a reviewer from a pull request.
+	 *
+	 * @param pullRequestId
+	 *            the pull request identifier
+	 * @param username
+	 *            the username to remove
+	 * @throws IOException
+	 *             if the request fails
+	 */
+	void removeReviewer(long pullRequestId, @NonNull String username)
+			throws IOException;
+
+	/**
+	 * Adds multiple reviewers to a pull request.
+	 *
+	 * @param pullRequestId
+	 *            the pull request identifier
+	 * @param usernames
+	 *            the list of usernames to add as reviewers
+	 * @throws IOException
+	 *             if the request fails
+	 */
+	void addReviewers(long pullRequestId, @NonNull List<String> usernames)
+			throws IOException;
 
 	/**
 	 * @return the capabilities of this provider, indicating which features are

@@ -492,22 +492,29 @@ public class PullRequestCommentsView extends ViewPart {
 
 		manager.add(new Separator());
 
-		// Create Task action (set severity to BLOCKER)
+		// Create Task action (set severity to BLOCKER) - only if provider
+		// supports it
+		IPullRequestClient client = createClient();
+		boolean supportsTaskSeverity = client.getCapabilities()
+				.supportsTaskSeverity();
 		String severity = comment.getSeverity();
-		if (severity == null || "NORMAL".equals(severity)) { //$NON-NLS-1$
-			manager.add(new Action("Create Task") { //$NON-NLS-1$
-				@Override
-				public void run() {
-					updateSeverity(comment, "BLOCKER"); //$NON-NLS-1$
-				}
-			});
-		} else if ("BLOCKER".equals(severity)) { //$NON-NLS-1$
-			manager.add(new Action("Remove Task") { //$NON-NLS-1$
-				@Override
-				public void run() {
-					updateSeverity(comment, "NORMAL"); //$NON-NLS-1$
-				}
-			});
+
+		if (supportsTaskSeverity) {
+			if (severity == null || "NORMAL".equals(severity)) { //$NON-NLS-1$
+				manager.add(new Action("Create Task") { //$NON-NLS-1$
+					@Override
+					public void run() {
+						updateSeverity(comment, "BLOCKER"); //$NON-NLS-1$
+					}
+				});
+			} else if ("BLOCKER".equals(severity)) { //$NON-NLS-1$
+				manager.add(new Action("Remove Task") { //$NON-NLS-1$
+					@Override
+					public void run() {
+						updateSeverity(comment, "NORMAL"); //$NON-NLS-1$
+					}
+				});
+			}
 		}
 
 		// Resolve / Reopen Task action
@@ -748,6 +755,12 @@ public class PullRequestCommentsView extends ViewPart {
 					allComments.clear();
 					allComments.addAll(freshComments);
 					refreshComments();
+
+					// Refresh Changed Files View with updated comments
+					refreshChangedFilesView(freshComments);
+
+					// Refresh Compare Editor inline overlays with updated comments
+					refreshCompareEditors(freshComments);
 				}
 			});
 		} catch (IOException e) {
@@ -772,6 +785,75 @@ public class PullRequestCommentsView extends ViewPart {
 				Activator.logError("Failed to get current user", e); //$NON-NLS-1$
 				// Not critical, just means Edit/Delete won't be available
 			}
+		}
+	}
+
+	/**
+	 * Refreshes the Changed Files View with updated comments to ensure comment
+	 * counts are synchronized.
+	 *
+	 * @param freshComments
+	 *            the updated list of comments from the server
+	 */
+	private void refreshChangedFilesView(List<PullRequestComment> freshComments) {
+		try {
+			IWorkbenchPage page = getSite().getWorkbenchWindow().getActivePage();
+			if (page != null) {
+				IWorkbenchPart part = page.findView(PullRequestChangedFilesView.VIEW_ID);
+				if (part instanceof PullRequestChangedFilesView) {
+					((PullRequestChangedFilesView) part).updateComments(freshComments);
+				}
+			}
+		} catch (Exception e) {
+			Activator.logError("Failed to refresh Changed Files View", e); //$NON-NLS-1$
+		}
+	}
+
+	/**
+	 * Refreshes all open compare editors with updated inline comment overlays.
+	 *
+	 * @param freshComments
+	 *            the updated list of comments from the server
+	 */
+	private void refreshCompareEditors(List<PullRequestComment> freshComments) {
+		try {
+			IWorkbenchPage page = getSite().getWorkbenchWindow().getActivePage();
+			if (page == null) {
+				return;
+			}
+
+			IEditorReference[] editorRefs = page.getEditorReferences();
+			for (IEditorReference ref : editorRefs) {
+				try {
+					IEditorInput input = ref.getEditorInput();
+					if (input instanceof PullRequestCompareEditorInput) {
+						PullRequestCompareEditorInput compareInput = (PullRequestCompareEditorInput) input;
+						PullRequestChangedFile changedFile = compareInput.getChangedFile();
+
+						if (changedFile != null) {
+							// Filter comments for this specific file
+							String filePath = changedFile.getPath();
+							String srcPath = changedFile.getSrcPath();
+							List<PullRequestComment> fileComments = freshComments.stream()
+									.filter(comment -> {
+										String commentPath = comment.getPath();
+										return commentPath != null
+												&& (commentPath.equals(filePath)
+														|| (srcPath != null && commentPath.equals(srcPath)));
+									})
+									.collect(Collectors.toList());
+
+							// Update the compare editor with filtered comments
+							compareInput.updateComments(fileComments);
+						}
+					}
+				} catch (Exception e) {
+					// Ignore individual editor errors and continue
+					continue;
+				}
+			}
+		} catch (Exception e) {
+			Activator.logError("Failed to refresh compare editors", e); //$NON-NLS-1$
 		}
 	}
 
@@ -1218,14 +1300,25 @@ public class PullRequestCommentsView extends ViewPart {
 		editButton.setEnabled(isOwner);
 		deleteButton.setEnabled(isOwner);
 
-		// Task button - can toggle between NORMAL and BLOCKER
+		// Task button - check if provider supports task severity
+		IPullRequestClient client = createClient();
+		boolean supportsTaskSeverity = client.getCapabilities()
+				.supportsTaskSeverity();
 		String severity = comment.getSeverity();
-		if ("BLOCKER".equals(severity)) { //$NON-NLS-1$
-			taskButton.setText("Remove Task"); //$NON-NLS-1$
-			taskButton.setEnabled(true);
+
+		if (supportsTaskSeverity) {
+			if ("BLOCKER".equals(severity)) { //$NON-NLS-1$
+				taskButton.setText("Remove Task"); //$NON-NLS-1$
+				taskButton.setEnabled(true);
+			} else {
+				taskButton.setText("Create Task"); //$NON-NLS-1$
+				taskButton.setEnabled(true);
+			}
+			taskButton.setVisible(true);
 		} else {
-			taskButton.setText("Create Task"); //$NON-NLS-1$
-			taskButton.setEnabled(true);
+			// Hide task button if provider doesn't support it (e.g., GitHub)
+			taskButton.setVisible(false);
+			taskButton.setEnabled(false);
 		}
 
 		// Resolve button - only visible/enabled for BLOCKER tasks
@@ -1353,7 +1446,8 @@ public class PullRequestCommentsView extends ViewPart {
 
 	/**
 	 * Jumps to a comment's line in the compare editor. If the compare editor is
-	 * not open, this method attempts to open it first.
+	 * not open, this method attempts to open it first. Also expands the inline
+	 * comment if inline comments are enabled.
 	 *
 	 * @param comment
 	 *            the comment to jump to
@@ -1397,6 +1491,17 @@ public class PullRequestCommentsView extends ViewPart {
 								page.activate(editor);
 								// Highlight the line
 								highlightCommentInCompareEditor(comment);
+
+								// Expand the inline comment
+								CommentOverlayInstaller overlay = compareInput
+										.getCommentOverlay();
+								if (overlay != null && comment.getLine() != null
+										&& comment.getFileType() != null) {
+									overlay.expandAndScrollToComment(
+											comment.getLine(),
+											comment.getFileType());
+								}
+
 								editorFound = true;
 								break;
 							}
@@ -1439,10 +1544,30 @@ public class PullRequestCommentsView extends ViewPart {
 			if (matchingFile != null) {
 				final PullRequestComment finalComment = comment;
 				filesView.openCompareEditor(matchingFile, () -> {
-					// Schedule highlight after a short delay to ensure editor
+					// Schedule highlight and expand after a short delay to ensure editor
 					// widgets are fully initialized
-					Display.getDefault().asyncExec(
-							() -> highlightCommentInCompareEditor(finalComment));
+					Display.getDefault().asyncExec(() -> {
+						highlightCommentInCompareEditor(finalComment);
+
+						// Also expand the inline comment
+						IEditorPart activeEditor = getSite().getWorkbenchWindow()
+								.getActivePage().getActiveEditor();
+						if (activeEditor != null) {
+							IEditorInput input = activeEditor.getEditorInput();
+							if (input instanceof PullRequestCompareEditorInput) {
+								PullRequestCompareEditorInput compareInput = (PullRequestCompareEditorInput) input;
+								CommentOverlayInstaller overlay = compareInput
+										.getCommentOverlay();
+								if (overlay != null
+										&& finalComment.getLine() != null
+										&& finalComment.getFileType() != null) {
+									overlay.expandAndScrollToComment(
+											finalComment.getLine(),
+											finalComment.getFileType());
+								}
+							}
+						}
+					});
 				});
 			}
 		}
@@ -1451,6 +1576,7 @@ public class PullRequestCommentsView extends ViewPart {
 	/**
 	 * Highlights a comment line in the compare editor by finding the matching
 	 * editor and applying a LineBackgroundListener to color the line.
+	 * Also expands the inline comment if inline comments are enabled.
 	 *
 	 * @param comment
 	 *            the comment to highlight
@@ -1498,6 +1624,13 @@ public class PullRequestCommentsView extends ViewPart {
 								continue;
 							}
 
+							// Check if we have inline comment overlay
+							CommentOverlayInstaller overlay = compareInput
+									.getCommentOverlay();
+							boolean willExpand = overlay != null 
+									&& comment.getLine() != null
+									&& comment.getFileType() != null;
+
 							// Get the control directly from the editor
 							Control viewerControl = findEditorControl(editor,
 									compareInput);
@@ -1505,8 +1638,20 @@ public class PullRequestCommentsView extends ViewPart {
 							if (viewerControl != null
 									&& !viewerControl.isDisposed()) {
 								// Traverse widget tree to find StyledText
-								// controls
-								highlightLineInControl(viewerControl, comment);
+								// controls and apply highlighting
+								// Skip scrolling if we're going to expand
+								// (expand will handle scrolling)
+								highlightLineInControl(viewerControl, comment,
+										!willExpand);
+
+								// Expand the inline comment if available
+								// This will also handle scrolling
+								if (willExpand) {
+									overlay.expandAndScrollToComment(
+											comment.getLine(),
+											comment.getFileType());
+								}
+
 								return; // Found and highlighted
 							}
 						}
@@ -1628,9 +1773,11 @@ public class PullRequestCommentsView extends ViewPart {
 	 *            the control to search
 	 * @param comment
 	 *            the comment containing line number and file type
+	 * @param shouldScroll
+	 *            whether to scroll to the line (false if expand will handle scrolling)
 	 */
 	private void highlightLineInControl(Control control,
-			PullRequestComment comment) {
+			PullRequestComment comment, boolean shouldScroll) {
 		if (control == null || control.isDisposed()) {
 			return;
 		}
@@ -1684,15 +1831,17 @@ public class PullRequestCommentsView extends ViewPart {
 			targetText.addLineBackgroundListener(listener);
 			targetText.redraw();
 
-			// Scroll to the line
-			int lineIndex = targetLine - 1; // Convert to 0-based
-			try {
-				int offset = targetText.getOffsetAtLine(lineIndex);
-				targetText.setSelection(offset);
-				targetText.showSelection();
-				targetText.setTopIndex(Math.max(0, lineIndex - 5)); // Show context
-			} catch (IllegalArgumentException e) {
-				// Line doesn't exist, ignore
+			// Scroll to the line only if requested
+			if (shouldScroll) {
+				int lineIndex = targetLine - 1; // Convert to 0-based
+				try {
+					int offset = targetText.getOffsetAtLine(lineIndex);
+					targetText.setSelection(offset);
+					targetText.showSelection();
+					targetText.setTopIndex(Math.max(0, lineIndex - 5)); // Show context
+				} catch (IllegalArgumentException e) {
+					// Line doesn't exist, ignore
+				}
 			}
 
 			// Track this control and listener for cleanup

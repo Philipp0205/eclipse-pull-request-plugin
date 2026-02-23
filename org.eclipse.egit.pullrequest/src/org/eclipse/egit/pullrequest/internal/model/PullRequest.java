@@ -10,7 +10,10 @@
  *******************************************************************************/
 package org.eclipse.egit.pullrequest.internal.model;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
+import java.util.List;
 
 /**
  * Domain model representing a Bitbucket Data Center pull request
@@ -48,6 +51,8 @@ public class PullRequest {
 	private boolean isDraft;
 
 	private String[] labels;
+
+	private List<PullRequestParticipant> reviewers;
 	
 	/**
 	 * @return the pull request ID
@@ -272,6 +277,35 @@ public class PullRequest {
 	public void setLabels(String[] labels) {
 		this.labels = labels;
 	}
+
+	/**
+	 * Gets the list of reviewers for this pull request. Reviewers are
+	 * participants who have been explicitly added to review the PR, distinct
+	 * from the author or other participants.
+	 *
+	 * @return an unmodifiable list of reviewers, never null
+	 */
+	public List<PullRequestParticipant> getReviewers() {
+		if (reviewers == null) {
+			return Collections.emptyList();
+		}
+		return Collections.unmodifiableList(reviewers);
+	}
+
+	/**
+	 * Sets the list of reviewers for this pull request. The provided list is
+	 * copied defensively to prevent external modification.
+	 *
+	 * @param reviewers
+	 *            the list of reviewers to set, may be null
+	 */
+	public void setReviewers(List<PullRequestParticipant> reviewers) {
+		if (reviewers == null) {
+			this.reviewers = null;
+		} else {
+			this.reviewers = new ArrayList<>(reviewers);
+		}
+	}
 	
 	/**
 	 * Represents a branch reference in a pull request
@@ -346,6 +380,7 @@ public class PullRequest {
 		private String slug;
 		private String name;
 		private Project project;
+		private String cloneUrl;
 		
 		/**
 		 * @return the repository slug
@@ -387,6 +422,26 @@ public class PullRequest {
 		 */
 		public void setProject(Project project) {
 			this.project = project;
+		}
+		
+		/**
+		 * Get the clone URL for this repository. This is used for fork-based
+		 * pull requests where the source branch is in a different repository.
+		 *
+		 * @return the HTTPS clone URL, or null if not available
+		 */
+		public String getCloneUrl() {
+			return cloneUrl;
+		}
+		
+		/**
+		 * Set the clone URL for this repository.
+		 *
+		 * @param cloneUrl
+		 *            the HTTPS clone URL
+		 */
+		public void setCloneUrl(String cloneUrl) {
+			this.cloneUrl = cloneUrl;
 		}
 	}
 	

@@ -211,11 +211,11 @@ public class GitHubClient implements IPullRequestClient {
 		try {
 			// Query all review threads with their resolution status
 			// We need to paginate through all threads (GitHub limits to 100 per page)
-			String query = "query { repository(owner: \\\"" + owner //$NON-NLS-1$
-					+ "\\\", name: \\\"" + repo //$NON-NLS-1$
-					+ "\\\") { pullRequest(number: " + pullRequestId //$NON-NLS-1$
-					+ ") { reviewThreads(first: 100) { nodes { id isResolved " //$NON-NLS-1$
-					+ "comments(first: 100) { nodes { databaseId } } } } } } }"; //$NON-NLS-1$
+		String query = "query { repository(owner: \"" + owner //$NON-NLS-1$
+				+ "\", name: \"" + repo //$NON-NLS-1$
+				+ "\") { pullRequest(number: " + pullRequestId //$NON-NLS-1$
+				+ ") { reviewThreads(first: 100) { nodes { id isResolved " //$NON-NLS-1$
+				+ "comments(first: 100) { nodes { databaseId } } } } } } }"; //$NON-NLS-1$
 
 			Activator.logInfo("updateCommentResolutionStates: Executing GraphQL query for PR " //$NON-NLS-1$
 					+ pullRequestId);
@@ -690,6 +690,21 @@ public class GitHubClient implements IPullRequestClient {
 	}
 
 	@Override
+	public @NonNull PullRequest updatePullRequestDescription(
+			long pullRequestId, int version, @NonNull String description)
+			throws IOException {
+		// GitHub API: PATCH /repos/{owner}/{repo}/pulls/{pull_number}
+		// Body: {"body": "new description"}
+		// Version parameter is ignored for GitHub (no optimistic locking)
+
+		String path = "/repos/" + owner + "/" + repo + "/pulls/" //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				+ pullRequestId;
+		String body = "{\"body\":\"" + escapeJson(description) + "\"}"; //$NON-NLS-1$ //$NON-NLS-2$
+		String json = doPatch(path, body);
+		return GitHubJsonParser.parseSinglePullRequest(json);
+	}
+
+	@Override
 	public boolean testConnection() {
 		try {
 			// Try to get the repository info
@@ -920,6 +935,35 @@ public class GitHubClient implements IPullRequestClient {
 	}
 
 	/**
+	 * Execute a generic HTTP request
+	 *
+	 * @param path
+	 *            the API path (relative to API base URL)
+	 * @param method
+	 *            the HTTP method (GET, POST, PUT, PATCH, DELETE)
+	 * @param jsonBody
+	 *            the JSON body (can be null for GET/DELETE)
+	 * @return the response string, or empty string for DELETE
+	 * @throws IOException
+	 *             if the request fails
+	 */
+	private String executeRequest(String path, String method,
+			String jsonBody) throws IOException {
+		if ("DELETE".equals(method)) { //$NON-NLS-1$
+			doDelete(path);
+			return ""; //$NON-NLS-1$
+		} else if ("POST".equals(method)) { //$NON-NLS-1$
+			return doPost(path, jsonBody);
+		} else if ("PATCH".equals(method)) { //$NON-NLS-1$
+			return doPatch(path, jsonBody);
+		} else if ("GET".equals(method)) { //$NON-NLS-1$
+			return doGet(path);
+		} else {
+			throw new IOException("Unsupported HTTP method: " + method); //$NON-NLS-1$
+		}
+	}
+
+	/**
 	 * Executes a GraphQL query or mutation against GitHub's GraphQL API
 	 *
 	 * @param query
@@ -1070,5 +1114,62 @@ public class GitHubClient implements IPullRequestClient {
 				.replace("\n", "\\n") //$NON-NLS-1$ //$NON-NLS-2$
 				.replace("\r", "\\r") //$NON-NLS-1$ //$NON-NLS-2$
 				.replace("\t", "\\t"); //$NON-NLS-1$ //$NON-NLS-2$
+	}
+
+	@Override
+	public @NonNull List<PullRequest.PullRequestParticipant> getReviewers(
+			long pullRequestId) throws IOException {
+		// Get the full PR which includes reviewers
+		PullRequest pr = getPullRequest(pullRequestId);
+		List<PullRequest.PullRequestParticipant> reviewers = pr
+				.getReviewers();
+		return reviewers != null ? reviewers
+				: java.util.Collections.emptyList();
+	}
+
+	@Override
+	public void addReviewer(long pullRequestId, @NonNull String username)
+			throws IOException {
+		// GitHub supports adding a single reviewer or multiple in one call
+		List<String> reviewers = new ArrayList<>();
+		reviewers.add(username);
+		addReviewers(pullRequestId, reviewers);
+	}
+
+	@Override
+	public void removeReviewer(long pullRequestId, @NonNull String username)
+			throws IOException {
+		String path = "/repos/" + owner + "/" + repo + "/pulls/" //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				+ pullRequestId + "/requested_reviewers"; //$NON-NLS-1$
+
+		// Build JSON body with reviewers array
+		StringBuilder json = new StringBuilder();
+		json.append("{\"reviewers\":[\""); //$NON-NLS-1$
+		json.append(escapeJson(username));
+		json.append("\"]}"); //$NON-NLS-1$
+
+		executeRequest(path, "DELETE", json.toString()); //$NON-NLS-1$
+	}
+
+	@Override
+	public void addReviewers(long pullRequestId,
+			@NonNull List<String> usernames) throws IOException {
+		String path = "/repos/" + owner + "/" + repo + "/pulls/" //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				+ pullRequestId + "/requested_reviewers"; //$NON-NLS-1$
+
+		// Build JSON body with reviewers array
+		StringBuilder json = new StringBuilder();
+		json.append("{\"reviewers\":["); //$NON-NLS-1$
+		for (int i = 0; i < usernames.size(); i++) {
+			if (i > 0) {
+				json.append(","); //$NON-NLS-1$
+			}
+			json.append("\""); //$NON-NLS-1$
+			json.append(escapeJson(usernames.get(i)));
+			json.append("\""); //$NON-NLS-1$
+		}
+		json.append("]}"); //$NON-NLS-1$
+
+		executeRequest(path, "POST", json.toString()); //$NON-NLS-1$
 	}
 }

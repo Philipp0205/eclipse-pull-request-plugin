@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
 
-import org.eclipse.egit.core.Activator;
+import org.eclipse.egit.pullrequest.Activator;
 import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
@@ -181,6 +181,17 @@ class GitHubJsonParser {
 		// Parse comment count
 		pr.setCommentCount(extractInt(json, "comments")); //$NON-NLS-1$
 
+		// Parse reviewers (requested_reviewers)
+		String requestedReviewersJson = extractArray(json,
+				"requested_reviewers"); //$NON-NLS-1$
+		if (requestedReviewersJson != null) {
+			List<PullRequest.PullRequestParticipant> reviewers = parseReviewers(
+					requestedReviewersJson);
+			if (!reviewers.isEmpty()) {
+				pr.setReviewers(reviewers);
+			}
+		}
+
 		// Parse links
 		PullRequest.PullRequestLinks links = new PullRequest.PullRequestLinks();
 		PullRequest.Link[] self = new PullRequest.Link[1];
@@ -210,6 +221,7 @@ class GitHubJsonParser {
 			PullRequest.Repository repo = new PullRequest.Repository();
 			repo.setSlug(extractString(repoJson, "name")); //$NON-NLS-1$
 			repo.setName(extractString(repoJson, "full_name")); //$NON-NLS-1$
+			repo.setCloneUrl(extractString(repoJson, "clone_url")); //$NON-NLS-1$
 
 			String ownerJson = extractObject(repoJson, "owner"); //$NON-NLS-1$
 			if (ownerJson != null) {
@@ -661,19 +673,14 @@ class GitHubJsonParser {
 
 	private static String extractString(String json, String key,
 			String defaultValue) {
-		String pattern = "\"" + key + "\""; //$NON-NLS-1$ //$NON-NLS-2$
-		int keyIndex = json.indexOf(pattern);
-		if (keyIndex == -1) {
-			return defaultValue;
-		}
-
-		int colonIndex = json.indexOf(':', keyIndex);
+		String pattern = "\"" + key + "\":"; //$NON-NLS-1$ //$NON-NLS-2$
+		int colonIndex = json.indexOf(pattern);
 		if (colonIndex == -1) {
 			return defaultValue;
 		}
 
 		// Skip whitespace after colon
-		int startIndex = colonIndex + 1;
+		int startIndex = colonIndex + pattern.length();
 		while (startIndex < json.length()
 				&& Character.isWhitespace(json.charAt(startIndex))) {
 			startIndex++;
@@ -753,18 +760,13 @@ class GitHubJsonParser {
 	}
 
 	private static boolean extractBoolean(String json, String key) {
-		String pattern = "\"" + key + "\""; //$NON-NLS-1$ //$NON-NLS-2$
-		int keyIndex = json.indexOf(pattern);
-		if (keyIndex == -1) {
-			return false;
-		}
-
-		int colonIndex = json.indexOf(':', keyIndex);
+		String pattern = "\"" + key + "\":"; //$NON-NLS-1$ //$NON-NLS-2$
+		int colonIndex = json.indexOf(pattern);
 		if (colonIndex == -1) {
 			return false;
 		}
 
-		int startIndex = colonIndex + 1;
+		int startIndex = colonIndex + pattern.length();
 		while (startIndex < json.length()
 				&& Character.isWhitespace(json.charAt(startIndex))) {
 			startIndex++;
@@ -774,18 +776,13 @@ class GitHubJsonParser {
 	}
 
 	private static String extractNumberString(String json, String key) {
-		String pattern = "\"" + key + "\""; //$NON-NLS-1$ //$NON-NLS-2$
-		int keyIndex = json.indexOf(pattern);
-		if (keyIndex == -1) {
-			return null;
-		}
-
-		int colonIndex = json.indexOf(':', keyIndex);
+		String pattern = "\"" + key + "\":"; //$NON-NLS-1$ //$NON-NLS-2$
+		int colonIndex = json.indexOf(pattern);
 		if (colonIndex == -1) {
 			return null;
 		}
 
-		int startIndex = colonIndex + 1;
+		int startIndex = colonIndex + pattern.length();
 		while (startIndex < json.length()
 				&& Character.isWhitespace(json.charAt(startIndex))) {
 			startIndex++;
@@ -834,18 +831,13 @@ class GitHubJsonParser {
 	}
 
 	private static String extractObject(String json, String key) {
-		String pattern = "\"" + key + "\""; //$NON-NLS-1$ //$NON-NLS-2$
-		int keyIndex = json.indexOf(pattern);
-		if (keyIndex == -1) {
-			return null;
-		}
-
-		int colonIndex = json.indexOf(':', keyIndex);
+		String pattern = "\"" + key + "\":"; //$NON-NLS-1$ //$NON-NLS-2$
+		int colonIndex = json.indexOf(pattern);
 		if (colonIndex == -1) {
 			return null;
 		}
 
-		int startIndex = colonIndex + 1;
+		int startIndex = colonIndex + pattern.length();
 		while (startIndex < json.length()
 				&& Character.isWhitespace(json.charAt(startIndex))) {
 			startIndex++;
@@ -886,5 +878,196 @@ class GitHubJsonParser {
 		}
 
 		return json.substring(startIndex, endIndex + 1);
+	}
+
+	/**
+	 * Extracts an array value from JSON
+	 *
+	 * @param json
+	 *            the JSON string
+	 * @param key
+	 *            the key to extract
+	 * @return the array JSON string including brackets, or null if not found
+	 */
+	private static String extractArray(String json, String key) {
+		String pattern = "\"" + key + "\":"; //$NON-NLS-1$ //$NON-NLS-2$
+		int colonIndex = json.indexOf(pattern);
+		if (colonIndex == -1) {
+			return null;
+		}
+
+		int startIndex = colonIndex + pattern.length();
+		while (startIndex < json.length()
+				&& Character.isWhitespace(json.charAt(startIndex))) {
+			startIndex++;
+		}
+
+		if (startIndex >= json.length()) {
+			return null;
+		}
+
+		// Check for null
+		if (json.startsWith("null", startIndex)) { //$NON-NLS-1$
+			return null;
+		}
+
+		// Must start with [
+		if (json.charAt(startIndex) != '[') {
+			return null;
+		}
+
+		// Find matching closing bracket
+		int depth = 0;
+		int endIndex = startIndex;
+		boolean inString = false;
+		boolean escaped = false;
+
+		while (endIndex < json.length()) {
+			char c = json.charAt(endIndex);
+
+			if (escaped) {
+				escaped = false;
+				endIndex++;
+				continue;
+			}
+
+			if (c == '\\') {
+				escaped = true;
+				endIndex++;
+				continue;
+			}
+
+			if (c == '"') {
+				inString = !inString;
+			}
+
+			if (!inString) {
+				if (c == '[') {
+					depth++;
+				} else if (c == ']') {
+					depth--;
+					if (depth == 0) {
+						break;
+					}
+				}
+			}
+
+			endIndex++;
+		}
+
+		if (endIndex >= json.length()) {
+			return null;
+		}
+
+		return json.substring(startIndex, endIndex + 1);
+	}
+
+	/**
+	 * Parses an array of reviewers from GitHub's requested_reviewers JSON
+	 *
+	 * @param arrayJson
+	 *            the JSON array string
+	 * @return list of reviewer participants
+	 */
+	private static List<PullRequest.PullRequestParticipant> parseReviewers(
+			String arrayJson) {
+		List<PullRequest.PullRequestParticipant> reviewers = new ArrayList<>();
+
+		if (arrayJson == null || arrayJson.trim().isEmpty()
+				|| arrayJson.trim().equals("[]")) { //$NON-NLS-1$
+			return reviewers;
+		}
+
+		arrayJson = arrayJson.trim();
+		if (!arrayJson.startsWith("[")) { //$NON-NLS-1$
+			return reviewers;
+		}
+
+		// Parse array
+		int depth = 0;
+		int start = 1;
+		boolean inString = false;
+		boolean escaped = false;
+
+		for (int i = 1; i < arrayJson.length(); i++) {
+			char c = arrayJson.charAt(i);
+
+			// Handle escape sequences
+			if (escaped) {
+				escaped = false;
+				continue;
+			}
+			if (c == '\\') {
+				escaped = true;
+				continue;
+			}
+
+			// Track string boundaries
+			if (c == '"') {
+				inString = !inString;
+				continue;
+			}
+
+			// Only process structural characters when NOT inside a string
+			if (!inString) {
+				if (c == '{') {
+					depth++;
+				} else if (c == '}') {
+					depth--;
+					if (depth == 0) {
+						String reviewerJson = arrayJson.substring(start, i + 1);
+						PullRequest.PullRequestParticipant reviewer = parseReviewer(
+								reviewerJson);
+						if (reviewer != null) {
+							reviewers.add(reviewer);
+						}
+						while (i + 1 < arrayJson.length()
+								&& (arrayJson.charAt(i + 1) == ','
+										|| Character.isWhitespace(
+												arrayJson.charAt(i + 1)))) {
+							i++;
+						}
+						start = i + 1;
+					}
+				}
+			}
+		}
+
+		return reviewers;
+	}
+
+	/**
+	 * Parses a single reviewer participant from GitHub JSON
+	 *
+	 * @param json
+	 *            the JSON object representing a user or team
+	 * @return the reviewer participant
+	 */
+	private static PullRequest.PullRequestParticipant parseReviewer(
+			String json) {
+		PullRequest.PullRequestParticipant reviewer = new PullRequest.PullRequestParticipant();
+
+		// Create user object
+		PullRequest.User user = new PullRequest.User();
+		user.setName(extractString(json, "login")); //$NON-NLS-1$
+
+		// For teams, use slug as name
+		String type = extractString(json, "type"); //$NON-NLS-1$
+		if ("Team".equals(type)) { //$NON-NLS-1$
+			String slug = extractString(json, "slug"); //$NON-NLS-1$
+			if (slug != null) {
+				user.setName(slug);
+			}
+		}
+
+		user.setDisplayName(extractString(json, "name", //$NON-NLS-1$
+				extractString(json, "login"))); //$NON-NLS-1$
+		reviewer.setUser(user);
+		reviewer.setRole("REVIEWER"); //$NON-NLS-1$
+
+		// GitHub requested_reviewers are always pending (not yet approved)
+		reviewer.setApproved(false);
+
+		return reviewer;
 	}
 }

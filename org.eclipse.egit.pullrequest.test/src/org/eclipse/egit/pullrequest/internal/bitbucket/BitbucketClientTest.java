@@ -89,4 +89,48 @@ public class BitbucketClientTest {
 		assertThat(ref.getRepository().getProject().getKey(),
 				equalTo("PROJ")); //$NON-NLS-1$
 	}
+
+	@Test
+	public void testParseBitbucketCloneUrl() {
+		String json = "{\"id\":42,\"version\":1,\"title\":\"Test PR\"," //$NON-NLS-1$
+				+ "\"state\":\"OPEN\",\"open\":true,\"closed\":false," //$NON-NLS-1$
+				+ "\"createdDate\":1705318800000,\"updatedDate\":1705319100000," //$NON-NLS-1$
+				+ "\"fromRef\":{\"id\":\"refs/heads/feature/test\"," //$NON-NLS-1$
+				+ "\"displayId\":\"feature/test\"," //$NON-NLS-1$
+				+ "\"latestCommit\":\"abc123\"," //$NON-NLS-1$
+				+ "\"repository\":{\"slug\":\"fork-repo\"," //$NON-NLS-1$
+				+ "\"name\":\"Fork Repository\"," //$NON-NLS-1$
+				+ "\"project\":{\"key\":\"FORK\",\"name\":\"Fork Project\"}," //$NON-NLS-1$
+				+ "\"links\":{\"clone\":[" //$NON-NLS-1$
+				+ "{\"href\":\"https://bitbucket.example.com/scm/fork/fork-repo.git\",\"name\":\"http\"}," //$NON-NLS-1$
+				+ "{\"href\":\"ssh://git@bitbucket.example.com:7999/fork/fork-repo.git\",\"name\":\"ssh\"}" //$NON-NLS-1$
+				+ "]}}}," //$NON-NLS-1$
+				+ "\"toRef\":{\"id\":\"refs/heads/main\"," //$NON-NLS-1$
+				+ "\"displayId\":\"main\"," //$NON-NLS-1$
+				+ "\"latestCommit\":\"def456\"," //$NON-NLS-1$
+				+ "\"repository\":{\"slug\":\"test-repo\"," //$NON-NLS-1$
+				+ "\"name\":\"Test Repository\"," //$NON-NLS-1$
+				+ "\"project\":{\"key\":\"PROJ\",\"name\":\"Test Project\"}," //$NON-NLS-1$
+				+ "\"links\":{\"clone\":[" //$NON-NLS-1$
+				+ "{\"href\":\"https://bitbucket.example.com/scm/proj/test-repo.git\",\"name\":\"http\"}," //$NON-NLS-1$
+				+ "{\"href\":\"ssh://git@bitbucket.example.com:7999/proj/test-repo.git\",\"name\":\"ssh\"}" //$NON-NLS-1$
+				+ "]}}}," //$NON-NLS-1$
+				+ "\"author\":{\"user\":{\"name\":\"jdoe\",\"displayName\":\"John Doe\"," //$NON-NLS-1$
+				+ "\"emailAddress\":\"jdoe@example.com\"}}}"; //$NON-NLS-1$
+
+		PullRequest pr = BitbucketJsonParser
+				.parseSinglePullRequest(json);
+
+		assertThat(pr, notNullValue());
+
+		// Fork repo should have HTTP clone URL
+		assertThat(pr.getFromRef().getRepository(), notNullValue());
+		assertThat(pr.getFromRef().getRepository().getCloneUrl(), equalTo(
+				"https://bitbucket.example.com/scm/fork/fork-repo.git")); //$NON-NLS-1$
+
+		// Base repo should have HTTP clone URL
+		assertThat(pr.getToRef().getRepository(), notNullValue());
+		assertThat(pr.getToRef().getRepository().getCloneUrl(), equalTo(
+				"https://bitbucket.example.com/scm/proj/test-repo.git")); //$NON-NLS-1$
+	}
 }

@@ -415,4 +415,219 @@ public class GitHubJsonParserTest {
 		assertThat(pr.getToRef().getLatestCommit(),
 				equalTo("789xyz000111")); //$NON-NLS-1$
 	}
+
+	@Test
+	public void testParseCloneUrl() {
+		String json = "{\"number\":42,\"title\":\"Test PR\"," //$NON-NLS-1$
+				+ "\"state\":\"open\",\"body\":\"desc\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\"," //$NON-NLS-1$
+				+ "\"head\":{\"ref\":\"feature-branch\"," //$NON-NLS-1$
+				+ "\"sha\":\"abc123def456\"," //$NON-NLS-1$
+				+ "\"repo\":{\"name\":\"fork-repo\"," //$NON-NLS-1$
+				+ "\"full_name\":\"forker/fork-repo\"," //$NON-NLS-1$
+				+ "\"clone_url\":\"https://github.com/forker/fork-repo.git\"," //$NON-NLS-1$
+				+ "\"owner\":{\"login\":\"forker\"}}}," //$NON-NLS-1$
+				+ "\"base\":{\"ref\":\"main\"," //$NON-NLS-1$
+				+ "\"sha\":\"789xyz000111\"," //$NON-NLS-1$
+				+ "\"repo\":{\"name\":\"my-repo\"," //$NON-NLS-1$
+				+ "\"full_name\":\"owner/my-repo\"," //$NON-NLS-1$
+				+ "\"clone_url\":\"https://github.com/owner/my-repo.git\"," //$NON-NLS-1$
+				+ "\"owner\":{\"login\":\"owner\"}}}," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"author\"}," //$NON-NLS-1$
+				+ "\"html_url\":\"https://github.com/owner/my-repo/pull/42\"," //$NON-NLS-1$
+				+ "\"comments\":5}"; //$NON-NLS-1$
+
+		PullRequest pr = GitHubJsonParser.parseSinglePullRequest(json);
+
+		assertThat(pr, notNullValue());
+
+		// Head ref (fromRef) should have fork's clone URL
+		assertThat(pr.getFromRef().getRepository(), notNullValue());
+		assertThat(pr.getFromRef().getRepository().getCloneUrl(),
+				equalTo("https://github.com/forker/fork-repo.git")); //$NON-NLS-1$
+
+		// Base ref (toRef) should have base repo's clone URL
+		assertThat(pr.getToRef().getRepository(), notNullValue());
+		assertThat(pr.getToRef().getRepository().getCloneUrl(),
+				equalTo("https://github.com/owner/my-repo.git")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseCommentCountWithUrlFields() {
+		// Test that comment count is correctly extracted even when
+		// comments_url, review_comments_url appear before comments field
+		// (regression test for substring matching bug)
+		String json = "{\"number\":42,\"title\":\"Test PR\"," //$NON-NLS-1$
+				+ "\"state\":\"open\",\"body\":\"desc\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\"," //$NON-NLS-1$
+				+ "\"comments_url\":\"https://api.github.com/repos/owner/repo/issues/42/comments\"," //$NON-NLS-1$
+				+ "\"review_comments_url\":\"https://api.github.com/repos/owner/repo/pulls/42/comments\"," //$NON-NLS-1$
+				+ "\"review_comments\":3," //$NON-NLS-1$
+				+ "\"comments\":7," //$NON-NLS-1$
+				+ "\"head\":{\"ref\":\"feature\"," //$NON-NLS-1$
+				+ "\"sha\":\"abc123\"," //$NON-NLS-1$
+				+ "\"repo\":{\"name\":\"repo\"," //$NON-NLS-1$
+				+ "\"full_name\":\"owner/repo\"," //$NON-NLS-1$
+				+ "\"owner\":{\"login\":\"owner\"}}}," //$NON-NLS-1$
+				+ "\"base\":{\"ref\":\"main\"," //$NON-NLS-1$
+				+ "\"sha\":\"xyz789\"," //$NON-NLS-1$
+				+ "\"repo\":{\"name\":\"repo\"," //$NON-NLS-1$
+				+ "\"full_name\":\"owner/repo\"," //$NON-NLS-1$
+				+ "\"owner\":{\"login\":\"owner\"}}}," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"author\"}," //$NON-NLS-1$
+				+ "\"html_url\":\"https://github.com/owner/repo/pull/42\"}"; //$NON-NLS-1$
+
+		PullRequest pr = GitHubJsonParser.parseSinglePullRequest(json);
+
+		assertThat(pr, notNullValue());
+		// The comment count should be 7, not 0 or 3
+		assertThat(pr.getCommentCount(), equalTo(7));
+	}
+
+	@Test
+	public void testParsePullRequestRefShaWithCommentCount() {
+		// Add assertion for comment count in existing test
+		String json = "{\"number\":42,\"title\":\"Test PR\"," //$NON-NLS-1$
+				+ "\"state\":\"open\",\"body\":\"desc\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\"," //$NON-NLS-1$
+				+ "\"head\":{\"ref\":\"feature-branch\"," //$NON-NLS-1$
+				+ "\"sha\":\"abc123def456\"," //$NON-NLS-1$
+				+ "\"repo\":{\"name\":\"my-repo\"," //$NON-NLS-1$
+				+ "\"full_name\":\"owner/my-repo\"," //$NON-NLS-1$
+				+ "\"owner\":{\"login\":\"owner\"}}}," //$NON-NLS-1$
+				+ "\"base\":{\"ref\":\"main\"," //$NON-NLS-1$
+				+ "\"sha\":\"789xyz000111\"," //$NON-NLS-1$
+				+ "\"repo\":{\"name\":\"my-repo\"," //$NON-NLS-1$
+				+ "\"full_name\":\"owner/my-repo\"," //$NON-NLS-1$
+				+ "\"owner\":{\"login\":\"owner\"}}}," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"author\"}," //$NON-NLS-1$
+				+ "\"html_url\":\"https://github.com/owner/my-repo/pull/42\"," //$NON-NLS-1$
+				+ "\"comments\":5}"; //$NON-NLS-1$
+
+		PullRequest pr = GitHubJsonParser.parseSinglePullRequest(json);
+
+		assertThat(pr, notNullValue());
+		assertThat(pr.getCommentCount(), equalTo(5));
+
+		// Head ref (fromRef) should have branch name and SHA
+		assertThat(pr.getFromRef(), notNullValue());
+		assertThat(pr.getFromRef().getId(),
+				equalTo("feature-branch")); //$NON-NLS-1$
+		assertThat(pr.getFromRef().getLatestCommit(),
+				equalTo("abc123def456")); //$NON-NLS-1$
+
+		// Base ref (toRef) should have branch name and SHA
+		assertThat(pr.getToRef(), notNullValue());
+		assertThat(pr.getToRef().getId(),
+				equalTo("main")); //$NON-NLS-1$
+		assertThat(pr.getToRef().getLatestCommit(),
+				equalTo("789xyz000111")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseReviewersEmpty() {
+		String json = "{\"number\":42,\"title\":\"Test PR\"," //$NON-NLS-1$
+				+ "\"state\":\"open\",\"draft\":false," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\"," //$NON-NLS-1$
+				+ "\"requested_reviewers\":[]," //$NON-NLS-1$
+				+ "\"head\":{\"ref\":\"feature\",\"sha\":\"abc123\"}," //$NON-NLS-1$
+				+ "\"base\":{\"ref\":\"main\",\"sha\":\"def456\"}," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"author\"}}"; //$NON-NLS-1$
+
+		PullRequest pr = GitHubJsonParser.parseSinglePullRequest(json);
+
+		assertThat(pr, notNullValue());
+		assertThat(pr.getReviewers(), notNullValue());
+		assertThat(pr.getReviewers(), hasSize(0));
+	}
+
+	@Test
+	public void testParseSingleReviewer() {
+		String json = "{\"number\":42,\"title\":\"Test PR\"," //$NON-NLS-1$
+				+ "\"state\":\"open\",\"draft\":false," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\"," //$NON-NLS-1$
+				+ "\"requested_reviewers\":[" //$NON-NLS-1$
+				+ "{\"login\":\"reviewer1\"," //$NON-NLS-1$
+				+ "\"name\":\"Reviewer One\"," //$NON-NLS-1$
+				+ "\"email\":\"reviewer1@example.com\"}]," //$NON-NLS-1$
+				+ "\"head\":{\"ref\":\"feature\",\"sha\":\"abc123\"}," //$NON-NLS-1$
+				+ "\"base\":{\"ref\":\"main\",\"sha\":\"def456\"}," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"author\"}}"; //$NON-NLS-1$
+
+		PullRequest pr = GitHubJsonParser.parseSinglePullRequest(json);
+
+		assertThat(pr, notNullValue());
+		assertThat(pr.getReviewers(), notNullValue());
+		assertThat(pr.getReviewers(), hasSize(1));
+
+		PullRequest.PullRequestParticipant reviewer =
+				pr.getReviewers().get(0);
+		assertThat(reviewer.getUser().getName(),
+				equalTo("reviewer1")); //$NON-NLS-1$
+		assertThat(reviewer.getUser().getDisplayName(),
+				equalTo("Reviewer One")); //$NON-NLS-1$
+		assertThat(reviewer.getUser().getEmailAddress(),
+				equalTo("reviewer1@example.com")); //$NON-NLS-1$
+		assertThat(reviewer.getRole(), equalTo("REVIEWER")); //$NON-NLS-1$
+		assertThat(reviewer.isApproved(), equalTo(false));
+	}
+
+	@Test
+	public void testParseMultipleReviewers() {
+		String json = "{\"number\":42,\"title\":\"Test PR\"," //$NON-NLS-1$
+				+ "\"state\":\"open\",\"draft\":false," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\"," //$NON-NLS-1$
+				+ "\"requested_reviewers\":[" //$NON-NLS-1$
+				+ "{\"login\":\"alice\",\"name\":\"Alice\"}," //$NON-NLS-1$
+				+ "{\"login\":\"bob\",\"name\":\"Bob\"}," //$NON-NLS-1$
+				+ "{\"login\":\"charlie\"}]," //$NON-NLS-1$
+				+ "\"head\":{\"ref\":\"feature\",\"sha\":\"abc123\"}," //$NON-NLS-1$
+				+ "\"base\":{\"ref\":\"main\",\"sha\":\"def456\"}," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"author\"}}"; //$NON-NLS-1$
+
+		PullRequest pr = GitHubJsonParser.parseSinglePullRequest(json);
+
+		assertThat(pr, notNullValue());
+		assertThat(pr.getReviewers(), hasSize(3));
+		assertThat(pr.getReviewers().get(0).getUser().getName(),
+				equalTo("alice")); //$NON-NLS-1$
+		assertThat(pr.getReviewers().get(1).getUser().getName(),
+				equalTo("bob")); //$NON-NLS-1$
+		assertThat(pr.getReviewers().get(2).getUser().getName(),
+				equalTo("charlie")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseReviewersWithTeams() {
+		// GitHub supports team reviewers, which should be handled gracefully
+		String json = "{\"number\":42,\"title\":\"Test PR\"," //$NON-NLS-1$
+				+ "\"state\":\"open\",\"draft\":false," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\"," //$NON-NLS-1$
+				+ "\"requested_reviewers\":[" //$NON-NLS-1$
+				+ "{\"login\":\"reviewer1\"}]," //$NON-NLS-1$
+				+ "\"requested_teams\":[" //$NON-NLS-1$
+				+ "{\"slug\":\"core-team\",\"name\":\"Core Team\"}]," //$NON-NLS-1$
+				+ "\"head\":{\"ref\":\"feature\",\"sha\":\"abc123\"}," //$NON-NLS-1$
+				+ "\"base\":{\"ref\":\"main\",\"sha\":\"def456\"}," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"author\"}}"; //$NON-NLS-1$
+
+		PullRequest pr = GitHubJsonParser.parseSinglePullRequest(json);
+
+		assertThat(pr, notNullValue());
+		// Should have both individual and team reviewers
+		assertThat(pr.getReviewers(), hasSize(2));
+		assertThat(pr.getReviewers().get(0).getUser().getName(),
+				equalTo("reviewer1")); //$NON-NLS-1$
+		assertThat(pr.getReviewers().get(1).getUser().getName(),
+				equalTo("core-team")); //$NON-NLS-1$
+		assertThat(pr.getReviewers().get(1).getUser().getDisplayName(),
+				equalTo("Core Team")); //$NON-NLS-1$
+	}
 }

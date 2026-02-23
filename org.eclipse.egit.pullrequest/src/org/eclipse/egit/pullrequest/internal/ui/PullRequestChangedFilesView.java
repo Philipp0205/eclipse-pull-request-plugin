@@ -304,57 +304,8 @@ public class PullRequestChangedFilesView extends ViewPart {
 	 * @return the matching Git repository, or null if not found
 	 */
 	private Repository resolveGitRepository(PullRequest pr) {
-		String providerType = Activator.getDefault().getPreferenceStore()
-				.getString(PRPreferences.PULLREQUEST_PROVIDER_TYPE);
-
-		String serverUrl = null;
-		String pathFragment = null;
-
-		if ("BITBUCKET".equals(providerType)) { //$NON-NLS-1$
-			serverUrl = Activator.getDefault().getPreferenceStore()
-					.getString(PRPreferences.BITBUCKET_SERVER_URL);
-			String projectKey = pr.getToRef().getRepository().getProject()
-					.getKey();
-			String repoSlug = pr.getToRef().getRepository().getSlug();
-			// Build expected path fragment: /scm/{projectKey}/{repoSlug}
-			pathFragment = "/scm/" + projectKey.toLowerCase() + "/" //$NON-NLS-1$ //$NON-NLS-2$
-					+ repoSlug.toLowerCase();
-		} else if ("GITHUB".equals(providerType)) { //$NON-NLS-1$
-			serverUrl = "github.com"; //$NON-NLS-1$
-			String owner = Activator.getDefault().getPreferenceStore()
-					.getString(PRPreferences.GITHUB_OWNER);
-			String repo = Activator.getDefault().getPreferenceStore()
-					.getString(PRPreferences.GITHUB_REPO);
-			// Build expected path fragment: /{owner}/{repo}
-			pathFragment = "/" + owner.toLowerCase() + "/" //$NON-NLS-1$ //$NON-NLS-2$
-					+ repo.toLowerCase();
-		}
-
-		if (serverUrl == null || pathFragment == null) {
-			return null;
-		}
-
-		// Search all repositories in the workspace
-		for (Repository repo : RepositoryCache.INSTANCE.getAllRepositories()) {
-			try {
-				for (RemoteConfig remote : RemoteConfig
-						.getAllRemoteConfigs(repo.getConfig())) {
-					for (URIish uri : remote.getURIs()) {
-						String uriStr = uri.toString().toLowerCase();
-						// Check if URI contains the server URL and path fragment
-						if (uriStr.contains(
-								serverUrl.toLowerCase().replaceAll("https?://", //$NON-NLS-1$
-										"")) //$NON-NLS-1$
-								&& uriStr.contains(pathFragment)) {
-							return repo;
-						}
-					}
-				}
-			} catch (Exception e) {
-				// Skip repos with config issues
-			}
-		}
-		return null;
+		return org.eclipse.egit.pullrequest.internal.util.RepositoryResolver
+				.resolve(pr);
 	}
 
 	private void onPRSelected(PullRequest pr) {
@@ -609,6 +560,32 @@ public class PullRequestChangedFilesView extends ViewPart {
 	 */
 	public List<PullRequestComment> getAllComments() {
 		return allComments;
+	}
+
+	/**
+	 * Updates the comments for the currently selected pull request and
+	 * refreshes the view to reflect updated comment counts.
+	 * <p>
+	 * This method is called by other views (e.g., {@link PullRequestCommentsView}
+	 * or inline comment overlay) when comments are added, modified, or deleted
+	 * to ensure the comment counts displayed in the "Comments" column are
+	 * synchronized.
+	 * </p>
+	 *
+	 * @param comments
+	 *            the updated list of comments; if {@code null}, existing
+	 *            comments are cleared
+	 */
+	public void updateComments(List<PullRequestComment> comments) {
+		allComments.clear();
+		if (comments != null) {
+			allComments.addAll(comments);
+		}
+		Display.getDefault().asyncExec(() -> {
+			if (!changedFilesViewer.getControl().isDisposed()) {
+				changedFilesViewer.refresh();
+			}
+		});
 	}
 
 	/**

@@ -22,6 +22,7 @@ import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.egit.pullrequest.Activator;
+import org.eclipse.egit.pullrequest.internal.PRPreferences;
 import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
 import org.eclipse.egit.pullrequest.internal.client.PullRequestClientFactory;
 import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderType;
@@ -67,6 +68,10 @@ class CommentOverlayInstaller {
 
 	private ExpandedCommentComposite rightExpandedComposite;
 
+	private boolean leftAnimating;
+
+	private boolean rightAnimating;
+
 	private List<PullRequestComment> currentComments;
 
 	private String currentFilePath;
@@ -78,6 +83,10 @@ class CommentOverlayInstaller {
 	private String currentUsername;
 
 	private PullRequestProviderType providerType;
+
+	private static final int ANIMATION_DURATION_MS = 180;
+
+	private static final int ANIMATION_STEP_MS = 16;
 
 	/**
 	 * Creates a new installer for the given viewer.
@@ -293,9 +302,22 @@ class CommentOverlayInstaller {
 	 *            the list of comments for the current file
 	 */
 	private void applyComments(List<PullRequestComment> comments) {
+		// Save the currently expanded line and side before collapsing
+		int expandedLine = -1;
+		boolean expandedOnLeft = false;
+		if (leftRulerColumn != null
+				&& leftRulerColumn.getExpandedLine() != -1) {
+			expandedLine = leftRulerColumn.getExpandedLine();
+			expandedOnLeft = true;
+		} else if (rightRulerColumn != null
+				&& rightRulerColumn.getExpandedLine() != -1) {
+			expandedLine = rightRulerColumn.getExpandedLine();
+			expandedOnLeft = false;
+		}
+
 		// Collapse any expanded comment
-		collapseExpanded(leftSourceViewer, true);
-		collapseExpanded(rightSourceViewer, false);
+		collapseExpanded(leftSourceViewer, true, false);
+		collapseExpanded(rightSourceViewer, false, false);
 
 		// Always install ruler columns so the "+" add-comment icon
 		// is available even when there are no existing comments
@@ -355,6 +377,98 @@ class CommentOverlayInstaller {
 		if (rightRulerColumn != null) {
 			rightRulerColumn.setComments(rightComments);
 		}
+
+		// Re-expand the previously expanded comment if it still exists
+		if (expandedLine != -1) {
+			List<PullRequestComment> commentsToExpand = expandedOnLeft
+					? leftComments : rightComments;
+			SourceViewer viewerToExpand = expandedOnLeft
+					? leftSourceViewer : rightSourceViewer;
+
+			// Find comments for the expanded line
+			List<PullRequestComment> lineComments = new ArrayList<>();
+			for (PullRequestComment comment : commentsToExpand) {
+				if (comment.getLine() != null
+						&& comment.getLine().intValue() == expandedLine) {
+					lineComments.add(comment);
+				}
+			}
+
+			// Re-expand if comments still exist for that line
+			if (!lineComments.isEmpty()
+					&& viewerToExpand != null) {
+				expandComment(viewerToExpand, expandedOnLeft,
+						expandedLine, lineComments);
+			}
+		}
+	}
+
+	/**
+	 * Expands and scrolls to a comment by line number and file type. This
+	 * method is called when a comment is selected in the Comments View to
+	 * navigate to the inline comment in the compare editor.
+	 *
+	 * @param line
+	 *            the line number (1-based) to expand
+	 * @param fileType
+	 *            the file type: "FROM" for left side, "TO" for right side
+	 */
+	public void expandAndScrollToComment(int line, String fileType) {
+		boolean isLeft = "FROM".equals(fileType); //$NON-NLS-1$
+		SourceViewer sv = isLeft ? leftSourceViewer : rightSourceViewer;
+
+		if (sv == null || sv.getTextWidget() == null
+				|| sv.getTextWidget().isDisposed()) {
+			return;
+		}
+
+		// Find comments for this line and file type
+		List<PullRequestComment> lineComments = new ArrayList<>();
+		if (currentComments != null) {
+			for (PullRequestComment comment : currentComments) {
+				if (comment.getLine() != null
+						&& comment.getLine().intValue() == line
+						&& fileType.equals(comment.getFileType())) {
+					lineComments.add(comment);
+				}
+			}
+		}
+
+		if (lineComments.isEmpty()) {
+			return;
+		}
+
+		// Collapse any existing expanded comment first
+		collapseExpanded(sv, isLeft, false);
+
+		// Expand the comment
+		expandComment(sv, isLeft, line, lineComments);
+
+		// Check if animation is enabled
+		boolean animationEnabled = Activator.getDefault()
+				.getPreferenceStore()
+				.getBoolean(
+						PRPreferences.PULLREQUEST_ANIMATE_INLINE_COMMENTS);
+
+		// Schedule scrolling after expansion (with delay if animated)
+		StyledText styledText = sv.getTextWidget();
+		int lineIndex = line - 1; // Convert to 0-based
+		
+		// If animation is enabled, wait for it to complete before scrolling
+		int delay = animationEnabled ? ANIMATION_DURATION_MS + 50 : 50;
+		
+		Display.getDefault().timerExec(delay, () -> {
+			if (styledText != null && !styledText.isDisposed()) {
+				try {
+					int offset = styledText.getOffsetAtLine(lineIndex);
+					styledText.setSelection(offset);
+					styledText.showSelection();
+					styledText.setTopIndex(Math.max(0, lineIndex - 5)); // Show context
+				} catch (IllegalArgumentException e) {
+					// Line doesn't exist, ignore
+				}
+			}
+		});
 	}
 
 	/**
@@ -414,15 +528,21 @@ class CommentOverlayInstaller {
 	private void handleCommentClick(SourceViewer sv,
 			boolean isLeft, int line,
 			List<PullRequestComment> comments) {
+		boolean animating = isLeft ? leftAnimating
+				: rightAnimating;
+		if (animating) {
+			return;
+		}
+
 		CommentRulerColumn column = isLeft ? leftRulerColumn
 				: rightRulerColumn;
 
 		if (column != null && column.getExpandedLine() == line) {
-			collapseExpanded(sv, isLeft);
+			collapseExpanded(sv, isLeft, true);
 			return;
 		}
 
-		collapseExpanded(sv, isLeft);
+		collapseExpanded(sv, isLeft, false);
 		expandComment(sv, isLeft, line, comments);
 	}
 
@@ -466,6 +586,12 @@ class CommentOverlayInstaller {
 				}
 
 				@Override
+				public void onEdit(
+						PullRequestComment comment) {
+					handleEdit(comment);
+				}
+
+				@Override
 				public void onCollapse(int collapseLine) {
 						collapseExpanded(sv, isLeft);
 					}
@@ -498,20 +624,6 @@ class CommentOverlayInstaller {
 				SWT.DEFAULT);
 		int indentHeight = preferredSize.y + 8;
 
-		styledText.setLineVerticalIndent(lineIndex,
-				indentHeight);
-
-		positionExpandedComposite(styledText, composite,
-				lineIndex, indentHeight);
-
-		styledText.addListener(SWT.Resize, e -> {
-			if (!composite.isDisposed()
-					&& !styledText.isDisposed()) {
-				positionExpandedComposite(styledText,
-						composite, lineIndex, indentHeight);
-			}
-		});
-
 		CommentRulerColumn column = isLeft ? leftRulerColumn
 				: rightRulerColumn;
 		if (column != null) {
@@ -522,6 +634,35 @@ class CommentOverlayInstaller {
 			leftExpandedComposite = composite;
 		} else {
 			rightExpandedComposite = composite;
+		}
+
+		boolean animationEnabled = Activator.getDefault()
+				.getPreferenceStore()
+				.getBoolean(
+						PRPreferences.PULLREQUEST_ANIMATE_INLINE_COMMENTS);
+
+		if (animationEnabled) {
+			if (isLeft) {
+				leftAnimating = true;
+			} else {
+				rightAnimating = true;
+			}
+			animateExpand(styledText, composite, lineIndex,
+					indentHeight, isLeft);
+		} else {
+			styledText.setLineVerticalIndent(lineIndex,
+					indentHeight);
+			positionExpandedComposite(styledText, composite,
+					lineIndex, indentHeight);
+			composite.setVisible(true);
+
+			styledText.addListener(SWT.Resize, e -> {
+				if (!composite.isDisposed()
+						&& !styledText.isDisposed()) {
+					positionExpandedComposite(styledText,
+							composite, lineIndex, indentHeight);
+				}
+			});
 		}
 	}
 
@@ -553,6 +694,16 @@ class CommentOverlayInstaller {
 
 	private void collapseExpanded(SourceViewer sv,
 			boolean isLeft) {
+		collapseExpanded(sv, isLeft, true);
+	}
+
+	private void collapseExpanded(SourceViewer sv,
+			boolean isLeft, boolean animate) {
+		boolean animationEnabled = Activator.getDefault()
+				.getPreferenceStore()
+				.getBoolean(
+						PRPreferences.PULLREQUEST_ANIMATE_INLINE_COMMENTS);
+
 		ExpandedCommentComposite composite = isLeft
 				? leftExpandedComposite
 				: rightExpandedComposite;
@@ -561,6 +712,30 @@ class CommentOverlayInstaller {
 
 		if (composite != null && !composite.isDisposed()) {
 			int line = composite.getLine();
+
+			if (sv != null && animate && animationEnabled) {
+				StyledText styledText = sv.getTextWidget();
+				if (styledText != null
+						&& !styledText.isDisposed()) {
+					int lineIndex = line;
+					if (lineIndex >= 0 && lineIndex
+							< styledText.getLineCount()) {
+						int currentHeight = styledText
+								.getLineVerticalIndent(
+										lineIndex);
+						if (isLeft) {
+							leftAnimating = true;
+						} else {
+							rightAnimating = true;
+						}
+						animateCollapse(styledText, composite,
+								lineIndex, currentHeight,
+								isLeft);
+						return;
+					}
+				}
+			}
+
 			composite.dispose();
 
 			if (sv != null) {
@@ -751,6 +926,64 @@ class CommentOverlayInstaller {
 		job.schedule();
 	}
 
+	private void handleEdit(PullRequestComment comment) {
+		MultiLineInputDialog dialog = new MultiLineInputDialog(
+				viewer.getControl().getShell(),
+				"Edit Comment", //$NON-NLS-1$
+				"Edit your comment:", //$NON-NLS-1$
+				comment.getText());
+		if (dialog.open() != Window.OK) {
+			return;
+		}
+
+		String newText = dialog.getValue();
+		if (newText == null || newText.trim().isEmpty()) {
+			return;
+		}
+
+		PullRequest pr = getSelectedPullRequest();
+		if (pr == null) {
+			return;
+		}
+
+		Job job = new Job("Editing comment") { //$NON-NLS-1$
+			@Override
+			protected IStatus run(IProgressMonitor monitor) {
+				try {
+					IPullRequestClient client =
+							PullRequestClientFactory
+									.createClient();
+					if (client == null) {
+						return new Status(IStatus.ERROR,
+								Activator.PLUGIN_ID,
+								"Pull request provider" //$NON-NLS-1$
+										+ " not configured"); //$NON-NLS-1$
+					}
+
+					client.editComment(pr.getId(),
+							comment.getId(),
+							comment.getVersion(), newText,
+							comment.isReviewComment());
+
+					refreshAfterReply(pr, client);
+					return Status.OK_STATUS;
+				} catch (IOException e) {
+					Activator.logError(
+							"Failed to edit comment", //$NON-NLS-1$
+							e);
+					return new Status(IStatus.ERROR,
+							Activator.PLUGIN_ID,
+							"Failed to edit comment:" //$NON-NLS-1$
+									+ " " //$NON-NLS-1$
+									+ e.getMessage(),
+							e);
+				}
+			}
+		};
+		job.setUser(true);
+		job.schedule();
+	}
+
 	private void handleNewComment(int line, String fileType) {
 		MultiLineInputDialog dialog = new MultiLineInputDialog(
 				viewer.getControl().getShell(),
@@ -886,6 +1119,7 @@ class CommentOverlayInstaller {
 				}
 
 				refreshCommentsView(freshComments);
+				refreshChangedFilesView(freshComments);
 			});
 		} catch (IOException e) {
 			Activator.logError(
@@ -943,6 +1177,27 @@ class CommentOverlayInstaller {
 		}
 	}
 
+	private void refreshChangedFilesView(
+			List<PullRequestComment> freshComments) {
+		try {
+			IWorkbenchPage page = PlatformUI.getWorkbench()
+					.getActiveWorkbenchWindow().getActivePage();
+			if (page == null) {
+				return;
+			}
+			IViewPart part = page.findView(
+					PullRequestChangedFilesView.VIEW_ID);
+			if (part instanceof PullRequestChangedFilesView) {
+				((PullRequestChangedFilesView) part)
+						.updateComments(freshComments);
+			}
+		} catch (Exception e) {
+			Activator.logError(
+					"Failed to refresh changed files view", //$NON-NLS-1$
+					e);
+		}
+	}
+
 	private void ensureCurrentUsername() {
 		if (currentUsername == null || providerType == null) {
 			try {
@@ -964,13 +1219,214 @@ class CommentOverlayInstaller {
 		}
 	}
 
+	// ---- Animation helpers -----------------------------------------------
+
+	/**
+	 * Easing function for smooth animation deceleration.
+	 *
+	 * @param t
+	 *            time progress from 0.0 to 1.0
+	 * @return eased value (ease-out quadratic)
+	 */
+	private float easeOutQuad(float t) {
+		return t * (2 - t);
+	}
+
+	/**
+	 * Animates expansion of a comment composite by gradually
+	 * increasing the line vertical indent.
+	 *
+	 * @param styledText
+	 *            the text widget
+	 * @param composite
+	 *            the expanded comment composite
+	 * @param lineIndex
+	 *            the line index
+	 * @param targetHeight
+	 *            the target indent height
+	 * @param isLeft
+	 *            whether this is the left side
+	 */
+	private void animateExpand(StyledText styledText,
+			ExpandedCommentComposite composite, int lineIndex,
+			int targetHeight, boolean isLeft) {
+		final long startTime = System.currentTimeMillis();
+		final int steps = ANIMATION_DURATION_MS / ANIMATION_STEP_MS;
+
+		composite.setVisible(false);
+
+		Runnable[] animation = new Runnable[1];
+		animation[0] = new Runnable() {
+			int step = 0;
+
+			@Override
+			public void run() {
+				if (styledText.isDisposed()
+						|| composite.isDisposed()) {
+					if (isLeft) {
+						leftAnimating = false;
+					} else {
+						rightAnimating = false;
+					}
+					return;
+				}
+
+				step++;
+				float progress = Math.min(1.0f,
+						(float) step / steps);
+				float easedProgress = easeOutQuad(progress);
+				int currentHeight =
+						(int) (targetHeight * easedProgress);
+
+				styledText.setLineVerticalIndent(lineIndex,
+						currentHeight);
+				positionExpandedComposite(styledText, composite,
+						lineIndex, currentHeight);
+
+				if (progress >= 0.5f && !composite.isVisible()) {
+					composite.setVisible(true);
+				}
+
+				if (step < steps) {
+					Display.getCurrent().timerExec(
+							ANIMATION_STEP_MS, animation[0]);
+				} else {
+					styledText.setLineVerticalIndent(lineIndex,
+							targetHeight);
+					positionExpandedComposite(styledText,
+							composite, lineIndex, targetHeight);
+					composite.setVisible(true);
+
+					styledText.addListener(SWT.Resize, e -> {
+						if (!composite.isDisposed()
+								&& !styledText.isDisposed()) {
+							positionExpandedComposite(
+									styledText, composite,
+									lineIndex, targetHeight);
+						}
+					});
+
+					if (isLeft) {
+						leftAnimating = false;
+					} else {
+						rightAnimating = false;
+					}
+				}
+			}
+		};
+
+		Display.getCurrent().timerExec(ANIMATION_STEP_MS,
+				animation[0]);
+	}
+
+	/**
+	 * Animates collapse of a comment composite by gradually
+	 * reducing the line vertical indent.
+	 *
+	 * @param styledText
+	 *            the text widget
+	 * @param composite
+	 *            the expanded comment composite
+	 * @param lineIndex
+	 *            the line index
+	 * @param startHeight
+	 *            the starting indent height
+	 * @param isLeft
+	 *            whether this is the left side
+	 */
+	private void animateCollapse(StyledText styledText,
+			ExpandedCommentComposite composite, int lineIndex,
+			int startHeight, boolean isLeft) {
+		final long startTime = System.currentTimeMillis();
+		final int steps = ANIMATION_DURATION_MS / ANIMATION_STEP_MS;
+
+		Runnable[] animation = new Runnable[1];
+		animation[0] = new Runnable() {
+			int step = 0;
+
+			@Override
+			public void run() {
+				if (styledText.isDisposed()) {
+					if (composite != null
+							&& !composite.isDisposed()) {
+						composite.dispose();
+					}
+					if (isLeft) {
+						leftAnimating = false;
+						leftExpandedComposite = null;
+					} else {
+						rightAnimating = false;
+						rightExpandedComposite = null;
+					}
+					return;
+				}
+
+				step++;
+				float progress = Math.min(1.0f,
+						(float) step / steps);
+				float easedProgress = easeOutQuad(progress);
+				int currentHeight = (int) (startHeight
+						* (1.0f - easedProgress));
+
+				if (lineIndex >= 0 && lineIndex
+						< styledText.getLineCount()) {
+					styledText.setLineVerticalIndent(lineIndex,
+							currentHeight);
+				}
+
+				if (!composite.isDisposed()) {
+					positionExpandedComposite(styledText,
+							composite, lineIndex, currentHeight);
+
+					if (progress >= 0.5f
+							&& composite.isVisible()) {
+						composite.setVisible(false);
+					}
+				}
+
+				if (step < steps) {
+					Display.getCurrent().timerExec(
+							ANIMATION_STEP_MS, animation[0]);
+				} else {
+					if (!composite.isDisposed()) {
+						composite.dispose();
+					}
+
+					if (lineIndex >= 0 && lineIndex
+							< styledText.getLineCount()) {
+						styledText.setLineVerticalIndent(
+								lineIndex, 0);
+					}
+
+					CommentRulerColumn column = isLeft
+							? leftRulerColumn
+							: rightRulerColumn;
+					if (column != null) {
+						column.setExpandedLine(-1);
+					}
+
+					if (isLeft) {
+						leftAnimating = false;
+						leftExpandedComposite = null;
+					} else {
+						rightAnimating = false;
+						rightExpandedComposite = null;
+					}
+				}
+			}
+		};
+
+		Display.getCurrent().timerExec(ANIMATION_STEP_MS,
+				animation[0]);
+	}
+
 	/**
 	 * Disposes all resources managed by this installer. Should be
 	 * called when the compare editor is closed.
 	 */
 	void dispose() {
-		collapseExpanded(leftSourceViewer, true);
-		collapseExpanded(rightSourceViewer, false);
+		collapseExpanded(leftSourceViewer, true, false);
+		collapseExpanded(rightSourceViewer, false, false);
 		leftRulerColumn = null;
 		rightRulerColumn = null;
 		leftSourceViewer = null;

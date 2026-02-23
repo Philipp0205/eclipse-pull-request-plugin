@@ -4,8 +4,69 @@
 **Repository**: Philipp0205/eclipse-pull-request-plugin  
 **Author**: Philipp K. (@Philipp0205)  
 **Created**: 2026-02-19  
+**Updated**: 2026-02-22  
 **Priority**: High  
 **Complexity**: Large  
+**Status**: ✅ **IMPLEMENTATION COMPLETE** - All core features implemented and ready for testing
+
+---
+
+## Current Implementation Status
+
+### ✅ **COMPLETED** (All 6 Phases)
+
+**Phase 1: Foundation - Data Model & Parsing** ✅
+- Extended `PullRequest` model with reviewers field
+- Updated `BitbucketJsonParser` to parse reviewers
+- Updated `GitHubJsonParser` to parse reviewers (including teams)
+- All unit tests passing
+
+**Phase 2: API Client Implementation** ✅
+- Added reviewer management methods to `IPullRequestClient` interface
+- Implemented all methods in `BitbucketClient`
+- Implemented all methods in `GitHubClient`
+
+**Phase 3: UI Display Layer** ✅
+- Added "Reviewers" column to `PullRequestListView`
+- Added reviewers section to `PullRequestOverviewView`
+- All UI strings externalized to `prtext.properties` and `PRText.java`
+
+**Phase 4: Interactive Management** ✅
+- Created `ReviewerManagementDialog.java` with full add/remove functionality
+- Created `ManageReviewersAction.java`
+
+**Phase 5: Quick Actions** ✅
+- Created `AddMyselfAsReviewerAction.java`
+
+**Phase 6: Testing & Documentation** ✅
+- Added comprehensive unit tests for both parsers
+- All tests in `GitHubJsonParserTest.java` (5 new test cases)
+- All tests in `BitbucketJsonParserTest.java` (6 new test cases)
+
+**UI Wiring** ✅ **JUST COMPLETED**
+- Added "Manage Reviewers" button to `PullRequestOverviewView`
+- Added context menu to `PullRequestListView` with reviewer actions
+- Users can now access reviewer management via:
+  - **Right-click menu** in Pull Request List View
+  - **"Manage Reviewers" button** in Pull Request Overview View
+  - **Context menu** with "Add Myself as Reviewer" quick action
+
+### 📍 Where Users Can Edit Reviewers Now
+
+**Option 1: From Pull Request List View**
+1. Right-click on any pull request in the list
+2. Select "Manage Reviewers" from context menu
+3. Add or remove reviewers in the dialog
+
+**Option 2: From Pull Request Overview View**
+1. Double-click a pull request to open the overview
+2. Click the "Manage Reviewers" button in the Actions section
+3. Add or remove reviewers in the dialog
+
+**Quick Action: Add Yourself as Reviewer**
+1. Right-click on a pull request in the list
+2. Select "Add Myself as Reviewer" from context menu
+3. You're automatically added without opening a dialog
 
 ---
 
