@@ -16,6 +16,7 @@ import java.util.List;
 import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
 import org.eclipse.jgit.annotations.NonNull;
 import org.eclipse.jgit.annotations.Nullable;
 
@@ -351,6 +352,47 @@ public interface IPullRequestClient {
 	 *             if the request fails
 	 */
 	void unapproveReview(long pullRequestId) throws IOException;
+
+	/**
+	 * Get the list of commits in the pull request.
+	 *
+	 * @param pullRequestId
+	 *            the pull request ID
+	 * @return list of commits in chronological order
+	 * @throws IOException
+	 *             if an I/O error occurs
+	 */
+	List<PullRequestCommit> getPullRequestCommits(long pullRequestId)
+			throws IOException;
+
+	/**
+	 * Retrieves changed files for a specific commit.
+	 *
+	 * @param commitSha
+	 *            the commit SHA
+	 * @return list of changed files in the commit
+	 * @throws IOException
+	 *             if the request fails
+	 */
+	@NonNull
+	List<ChangedFile> getCommitChanges(@NonNull String commitSha)
+			throws IOException;
+
+	/**
+	 * Retrieves changed files for a range of commits. The range is inclusive
+	 * of both base and head commits.
+	 *
+	 * @param baseCommitSha
+	 *            the starting commit SHA (older commit)
+	 * @param headCommitSha
+	 *            the ending commit SHA (newer commit)
+	 * @return list of changed files across the commit range
+	 * @throws IOException
+	 *             if the request fails
+	 */
+	@NonNull
+	List<ChangedFile> getCommitRangeChanges(@NonNull String baseCommitSha,
+			@NonNull String headCommitSha) throws IOException;
 
 	/**
 	 * @return the capabilities of this provider, indicating which features are

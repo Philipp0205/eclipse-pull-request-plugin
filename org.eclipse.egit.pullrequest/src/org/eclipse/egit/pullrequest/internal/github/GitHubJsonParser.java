@@ -24,6 +24,7 @@ import org.eclipse.egit.pullrequest.Activator;
 import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
 
 /**
  * Parser for GitHub API JSON responses
@@ -667,11 +668,11 @@ class GitHubJsonParser {
 
 	// Helper methods for JSON parsing
 
-	private static String extractString(String json, String key) {
+	static String extractString(String json, String key) {
 		return extractString(json, key, null);
 	}
 
-	private static String extractString(String json, String key,
+	static String extractString(String json, String key,
 			String defaultValue) {
 		String pattern = "\"" + key + "\":"; //$NON-NLS-1$ //$NON-NLS-2$
 		int colonIndex = json.indexOf(pattern);
@@ -723,7 +724,7 @@ class GitHubJsonParser {
 				.replace("\\t", "\t"); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
-	private static long extractLong(String json, String key) {
+	static long extractLong(String json, String key) {
 		String value = extractNumberString(json, key);
 		if (value == null) {
 			return 0;
@@ -830,7 +831,7 @@ class GitHubJsonParser {
 		}
 	}
 
-	private static String extractObject(String json, String key) {
+	static String extractObject(String json, String key) {
 		String pattern = "\"" + key + "\":"; //$NON-NLS-1$ //$NON-NLS-2$
 		int colonIndex = json.indexOf(pattern);
 		if (colonIndex == -1) {
@@ -889,7 +890,7 @@ class GitHubJsonParser {
 	 *            the key to extract
 	 * @return the array JSON string including brackets, or null if not found
 	 */
-	private static String extractArray(String json, String key) {
+	static String extractArray(String json, String key) {
 		String pattern = "\"" + key + "\":"; //$NON-NLS-1$ //$NON-NLS-2$
 		int colonIndex = json.indexOf(pattern);
 		if (colonIndex == -1) {
@@ -1069,5 +1070,176 @@ class GitHubJsonParser {
 		reviewer.setApproved(false);
 
 		return reviewer;
+	}
+
+	/**
+	 * Parses a list of commits from GitHub API JSON
+	 *
+	 * @param json
+	 *            the JSON response (array of commits)
+	 * @return list of pull request commits
+	 */
+	static List<PullRequestCommit> parseCommits(String json) {
+		List<PullRequestCommit> result = new ArrayList<>();
+		if (json == null || json.trim().isEmpty()
+				|| json.trim().equals("[]")) { //$NON-NLS-1$
+			return result;
+		}
+
+		// Parse array of commits
+		json = json.trim();
+		if (!json.startsWith("[")) { //$NON-NLS-1$
+			return result;
+		}
+
+		// Parse array with string boundary tracking
+		int depth = 0;
+		int start = 1; // Skip opening [
+		boolean inString = false;
+		boolean escaped = false;
+
+		for (int i = 1; i < json.length(); i++) {
+			char c = json.charAt(i);
+
+			// Handle escape sequences
+			if (escaped) {
+				escaped = false;
+				continue;
+			}
+			if (c == '\\') {
+				escaped = true;
+				continue;
+			}
+
+			// Track string boundaries
+			if (c == '"') {
+				inString = !inString;
+				continue;
+			}
+
+			// Only process structural characters when NOT inside a string
+			if (!inString) {
+				if (c == '{') {
+					depth++;
+				} else if (c == '}') {
+					depth--;
+					if (depth == 0) {
+						// End of an object
+						String commitJson = json.substring(start, i + 1);
+						PullRequestCommit commit = parseCommit(commitJson);
+						if (commit != null) {
+							result.add(commit);
+						}
+						// Skip comma and whitespace
+						while (i + 1 < json.length() && (json.charAt(i + 1) == ','
+								|| Character.isWhitespace(json.charAt(i + 1)))) {
+							i++;
+						}
+						start = i + 1;
+					}
+				}
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * Parses a single commit from GitHub API JSON
+	 *
+	 * @param json
+	 *            the JSON commit object
+	 * @return the parsed commit, or null if parsing failed
+	 */
+	static PullRequestCommit parseCommit(String json) {
+		if (json == null || json.trim().isEmpty()) {
+			return null;
+		}
+
+		// Extract sha
+		String sha = extractString(json, "sha"); //$NON-NLS-1$
+		if (sha == null) {
+			return null;
+		}
+
+		// Extract commit object
+		String commitObject = extractObject(json, "commit"); //$NON-NLS-1$
+		if (commitObject == null) {
+			return null;
+		}
+
+		// Extract message from commit object
+		String message = extractString(commitObject, "message"); //$NON-NLS-1$
+
+		// Extract author object from commit object
+		String authorObject = extractObject(commitObject, "author"); //$NON-NLS-1$
+		String authorName = null;
+		String authorEmail = null;
+		long authorDate = 0;
+
+		if (authorObject != null) {
+			authorName = extractString(authorObject, "name"); //$NON-NLS-1$
+			authorEmail = extractString(authorObject, "email"); //$NON-NLS-1$
+			Date date = extractDate(authorObject, "date"); //$NON-NLS-1$
+			if (date != null) {
+				authorDate = date.getTime();
+			}
+		}
+
+		// Extract parents array
+		List<String> parents = new ArrayList<>();
+		String parentsArray = extractArray(json, "parents"); //$NON-NLS-1$
+		if (parentsArray != null && !parentsArray.equals("[]")) { //$NON-NLS-1$
+			// Parse array elements
+			int depth = 0;
+			int start = 1; // Skip opening [
+			boolean inString = false;
+			boolean escaped = false;
+
+			for (int i = 1; i < parentsArray.length(); i++) {
+				char c = parentsArray.charAt(i);
+
+				if (escaped) {
+					escaped = false;
+					continue;
+				}
+				if (c == '\\') {
+					escaped = true;
+					continue;
+				}
+
+				if (c == '"') {
+					inString = !inString;
+					continue;
+				}
+
+				if (!inString) {
+					if (c == '{') {
+						depth++;
+					} else if (c == '}') {
+						depth--;
+						if (depth == 0) {
+							String parentObject = parentsArray.substring(start,
+									i + 1);
+							String parentSha = extractString(parentObject,
+									"sha"); //$NON-NLS-1$
+							if (parentSha != null) {
+								parents.add(parentSha);
+							}
+							while (i + 1 < parentsArray.length()
+									&& (parentsArray.charAt(i + 1) == ','
+											|| Character.isWhitespace(
+													parentsArray.charAt(i + 1)))) {
+								i++;
+							}
+							start = i + 1;
+						}
+					}
+				}
+			}
+		}
+
+		return new PullRequestCommit(sha, message, authorName, authorEmail,
+				authorDate, parents);
 	}
 }

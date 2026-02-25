@@ -16,6 +16,7 @@ import java.util.List;
 import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
 
 /**
  * Utility class for parsing JSON responses from Bitbucket Data Center REST API
@@ -348,6 +349,144 @@ class BitbucketJsonParser {
 		}
 
 		return result;
+	}
+
+	/**
+	 * Parse commits from JSON response
+	 *
+	 * @param json
+	 *            the JSON response from /commits endpoint
+	 * @return list of PullRequestCommit objects
+	 */
+	public static List<PullRequestCommit> parseCommits(String json) {
+		List<PullRequestCommit> result = new ArrayList<>();
+
+		// Find the "values" array
+		int valuesStart = json.indexOf("\"values\":"); //$NON-NLS-1$
+		if (valuesStart == -1) {
+			return result;
+		}
+
+		int arrayStart = json.indexOf('[', valuesStart);
+		if (arrayStart == -1) {
+			return result;
+		}
+
+		// Parse each commit object
+		int pos = arrayStart + 1;
+		while (pos < json.length()) {
+			while (pos < json.length()
+					&& Character.isWhitespace(json.charAt(pos))) {
+				pos++;
+			}
+
+			if (pos >= json.length() || json.charAt(pos) == ']') {
+				break;
+			}
+
+			if (json.charAt(pos) == '{') {
+				int objEnd = findMatchingBrace(json, pos);
+				if (objEnd == -1) {
+					break;
+				}
+
+				String commitJson = json.substring(pos, objEnd + 1);
+				PullRequestCommit commit = parseCommit(commitJson);
+				if (commit != null) {
+					result.add(commit);
+				}
+
+				pos = objEnd + 1;
+				// Skip comma if present
+				while (pos < json.length() && (Character.isWhitespace(
+						json.charAt(pos)) || json.charAt(pos) == ',')) {
+					pos++;
+				}
+			} else {
+				pos++;
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * Parse a single commit from JSON
+	 *
+	 * @param json
+	 *            the commit JSON object
+	 * @return PullRequestCommit or null
+	 */
+	public static PullRequestCommit parseCommit(String json) {
+		// Extract id (SHA)
+		String id = extractStringValue(json, "\"id\":"); //$NON-NLS-1$
+		if (id == null) {
+			return null;
+		}
+
+		// Extract message
+		String message = extractStringValue(json, "\"message\":"); //$NON-NLS-1$
+		if (message == null) {
+			message = ""; //$NON-NLS-1$
+		}
+
+		// Extract author information
+		String authorJson = extractObjectValue(json, "\"author\":"); //$NON-NLS-1$
+		String authorName = null;
+		String authorEmail = null;
+		if (authorJson != null) {
+			authorName = extractStringValue(authorJson, "\"name\":"); //$NON-NLS-1$
+			authorEmail = extractStringValue(authorJson, "\"emailAddress\":"); //$NON-NLS-1$
+		}
+
+		// Extract authorTimestamp (in milliseconds)
+		Long authorTimestamp = extractLongValue(json, "\"authorTimestamp\":"); //$NON-NLS-1$
+		long authorDate = (authorTimestamp != null) ? authorTimestamp.longValue()
+				: 0L;
+
+		// Extract parents array
+		List<String> parents = new ArrayList<>();
+		String parentsJson = extractArrayValue(json, "\"parents\":"); //$NON-NLS-1$
+		if (parentsJson != null) {
+			int parentPos = 0;
+			while (parentPos < parentsJson.length()) {
+				while (parentPos < parentsJson.length() && Character
+						.isWhitespace(parentsJson.charAt(parentPos))) {
+					parentPos++;
+				}
+
+				if (parentPos >= parentsJson.length()
+						|| parentsJson.charAt(parentPos) == ']') {
+					break;
+				}
+
+				if (parentsJson.charAt(parentPos) == '{') {
+					int parentObjEnd = findMatchingBrace(parentsJson, parentPos);
+					if (parentObjEnd == -1) {
+						break;
+					}
+
+					String parentJson = parentsJson.substring(parentPos,
+							parentObjEnd + 1);
+					String parentId = extractStringValue(parentJson, "\"id\":"); //$NON-NLS-1$
+					if (parentId != null) {
+						parents.add(parentId);
+					}
+
+					parentPos = parentObjEnd + 1;
+					while (parentPos < parentsJson.length() && (Character
+							.isWhitespace(parentsJson.charAt(parentPos))
+							|| parentsJson.charAt(parentPos) == ',')) {
+						parentPos++;
+					}
+				} else {
+					parentPos++;
+				}
+			}
+		}
+
+		return new PullRequestCommit(id, message, authorName, authorEmail,
+				authorDate, parents);
 	}
 
 	/**

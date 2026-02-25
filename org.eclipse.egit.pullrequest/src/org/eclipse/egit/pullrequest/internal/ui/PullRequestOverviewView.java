@@ -952,6 +952,8 @@ public class PullRequestOverviewView extends EditorPart {
 		}
 
 		final String reviewBody = body;
+		final PullRequest pullRequest = currentPullRequest;
+		final IPullRequestClient jobClient = client;
 		Job job = new Job(PRText.SubmitReview_JobName) {
 			@Override
 			protected IStatus run(IProgressMonitor monitor) {

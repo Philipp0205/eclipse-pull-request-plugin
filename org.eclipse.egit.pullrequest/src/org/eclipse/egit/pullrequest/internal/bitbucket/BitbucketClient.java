@@ -26,6 +26,7 @@ import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderType;
 import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
 import org.eclipse.jgit.annotations.NonNull;
 import org.eclipse.jgit.annotations.Nullable;
 
@@ -314,6 +315,18 @@ public class BitbucketClient implements IPullRequestClient {
 		return BitbucketJsonParser.extractJsonString(jsonResponse, "name"); //$NON-NLS-1$
 	}
 
+	@Override
+	@NonNull
+	public List<PullRequestCommit> getPullRequestCommits(long pullRequestId)
+			throws IOException {
+		String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+				+ "/repos/" + repositorySlug //$NON-NLS-1$
+				+ "/pull-requests/" + pullRequestId //$NON-NLS-1$
+				+ "/commits?limit=1000"; //$NON-NLS-1$
+		String jsonResponse = executeGet(url);
+		return BitbucketJsonParser.parseCommits(jsonResponse);
+	}
+
 	private String executeGet(String urlString) throws IOException {
 		URL url = new URL(urlString);
 		HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -548,6 +561,21 @@ public class BitbucketClient implements IPullRequestClient {
 	}
 
 	/**
+	 * Builds the base URL for pull request API endpoints.
+	 *
+	 * @param pullRequestId
+	 *            the pull request ID
+	 * @param suffix
+	 *            additional path suffix (e.g., "/approve", "/comments")
+	 * @return the complete URL
+	 */
+	private String buildPullRequestUrl(long pullRequestId, String suffix) {
+		return serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+				+ "/repos/" + repositorySlug //$NON-NLS-1$
+				+ "/pull-requests/" + pullRequestId + suffix; //$NON-NLS-1$
+	}
+
+	/**
 	 * Escapes a string for use in JSON
 	 *
 	 * @param text
@@ -608,14 +636,14 @@ public class BitbucketClient implements IPullRequestClient {
 	}
 
 	/**
-	 * Execute a generic HTTP request
+	 * Execute an HTTP request with the specified method and optional body
 	 *
 	 * @param urlString
-	 *            the URL to request
+	 *            the full URL
 	 * @param method
-	 *            the HTTP method (GET, POST, PUT, DELETE)
+	 *            HTTP method (GET, POST, PUT, DELETE)
 	 * @param jsonBody
-	 *            the JSON body (can be null for GET/DELETE)
+	 *            the JSON body for POST/PUT requests, null for GET/DELETE
 	 * @return the response string, or empty string for DELETE
 	 * @throws IOException
 	 *             if the request fails
@@ -634,5 +662,32 @@ public class BitbucketClient implements IPullRequestClient {
 		} else {
 			throw new IOException("Unsupported HTTP method: " + method); //$NON-NLS-1$
 		}
+	}
+
+	@Override
+	public @NonNull List<ChangedFile> getCommitChanges(
+			@NonNull String commitSha) throws IOException {
+		// Bitbucket: GET /rest/api/1.0/projects/{key}/repos/{slug}/commits/{sha}/changes
+		String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+				+ "/repos/" + repositorySlug //$NON-NLS-1$
+				+ "/commits/" + commitSha + "/changes?limit=1000"; //$NON-NLS-1$ //$NON-NLS-2$
+
+		String jsonResponse = executeGet(url);
+		return BitbucketJsonParser.parseChangedFiles(jsonResponse);
+	}
+
+	@Override
+	public @NonNull List<ChangedFile> getCommitRangeChanges(
+			@NonNull String baseCommitSha, @NonNull String headCommitSha)
+			throws IOException {
+		// Bitbucket: GET /rest/api/1.0/projects/{key}/repos/{slug}/commits/{sha}/changes
+		// with sinceId parameter to get changes between commits
+		String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+				+ "/repos/" + repositorySlug //$NON-NLS-1$
+				+ "/commits/" + headCommitSha + "/changes?sinceId=" //$NON-NLS-1$ //$NON-NLS-2$
+				+ baseCommitSha + "&limit=1000"; //$NON-NLS-1$
+
+		String jsonResponse = executeGet(url);
+		return BitbucketJsonParser.parseChangedFiles(jsonResponse);
 	}
 }

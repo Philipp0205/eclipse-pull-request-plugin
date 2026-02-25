@@ -628,17 +628,25 @@ public class PullRequestListView extends ViewPart {
 					new PullRequestOverviewEditorInput(pr);
 			page.openEditor(input, PullRequestOverviewView.EDITOR_ID);
 
-			// Update changed files view
-			IWorkbenchPart part = page
-					.showView(PullRequestChangedFilesView.VIEW_ID);
+		// Update changed files view
+		IWorkbenchPart part = page
+				.showView(PullRequestChangedFilesView.VIEW_ID);
 
-			if (part instanceof PullRequestChangedFilesView) {
-				((PullRequestChangedFilesView) part).loadPullRequest(pr);
-			}
-		} catch (PartInitException e) {
-			Activator.logError("Failed to open pull request views", //$NON-NLS-1$
-					e);
+		if (part instanceof PullRequestChangedFilesView) {
+			((PullRequestChangedFilesView) part).loadPullRequest(pr);
 		}
+
+		// Update commits view
+		IWorkbenchPart commitsPart = page
+				.showView(PullRequestCommitsView.VIEW_ID);
+
+		if (commitsPart instanceof PullRequestCommitsView) {
+			((PullRequestCommitsView) commitsPart).loadPullRequest(pr);
+		}
+	} catch (PartInitException e) {
+		Activator.logError("Failed to open pull request views", //$NON-NLS-1$
+				e);
+	}
 	}
 
 	@Override

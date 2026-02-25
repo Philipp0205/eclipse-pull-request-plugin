@@ -26,6 +26,7 @@ import java.util.regex.Pattern;
 import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
 import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
 import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderCapabilities;
 import org.eclipse.egit.pullrequest.Activator;
@@ -722,6 +723,24 @@ public class GitHubClient implements IPullRequestClient {
 		return GitHubJsonParser.parseCurrentUser(json);
 	}
 
+	@Override
+	public @NonNull List<PullRequestCommit> getPullRequestCommits(
+			long pullRequestId) throws IOException {
+		String path = "/repos/" + owner + "/" + repo + "/pulls/" //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				+ pullRequestId + "/commits?per_page=100"; //$NON-NLS-1$
+
+		List<String> pages = doGetAllPages(path);
+		List<PullRequestCommit> allCommits = new ArrayList<>();
+
+		for (String page : pages) {
+			List<PullRequestCommit> commits = GitHubJsonParser
+					.parseCommits(page);
+			allCommits.addAll(commits);
+		}
+
+		return allCommits;
+	}
+
 	/**
 	 * Performs a GET request to the GitHub API
 	 *
@@ -933,11 +952,15 @@ public class GitHubClient implements IPullRequestClient {
 			}
 
 			int responseCode = conn.getResponseCode();
-			if (responseCode != 200) {
+			if (responseCode < 200 || responseCode >= 300) {
 				String error = readError(conn);
 				throw new IOException(
 						"GitHub API request failed: HTTP " + responseCode //$NON-NLS-1$
 								+ " - " + error); //$NON-NLS-1$
+			}
+
+			if (responseCode == HttpURLConnection.HTTP_NO_CONTENT) {
+				return ""; //$NON-NLS-1$
 			}
 
 			return readResponse(conn);
@@ -1231,11 +1254,14 @@ public class GitHubClient implements IPullRequestClient {
 				break;
 			}
 			String obj = reviewsJson.substring(objStart, objEnd + 1);
-			String state = extractStringValue(obj, "state"); //$NON-NLS-1$
-			String login = extractNestedLogin(obj);
+			String state = GitHubJsonParser.extractString(obj, "state"); //$NON-NLS-1$
+			String userObj = GitHubJsonParser.extractObject(obj, "user"); //$NON-NLS-1$
+			String login = userObj != null
+					? GitHubJsonParser.extractString(userObj, "login") //$NON-NLS-1$
+					: null;
 			if ("APPROVED".equals(state) //$NON-NLS-1$
 					&& username.equals(login)) {
-				long id = extractLongValue(obj, "id"); //$NON-NLS-1$
+				long id = GitHubJsonParser.extractLong(obj, "id"); //$NON-NLS-1$
 				if (id > latestId) {
 					latestId = id;
 				}
@@ -1243,30 +1269,6 @@ public class GitHubClient implements IPullRequestClient {
 			idx = objEnd + 1;
 		}
 		return latestId;
-	}
-
-	/**
-	 * Extracts the "login" field from the nested "user" object.
-	 *
-	 * @param json
-	 *            the JSON object containing a user field
-	 * @return the login value, or null if not found
-	 */
-	private String extractNestedLogin(String json) {
-		int userIdx = json.indexOf("\"user\""); //$NON-NLS-1$
-		if (userIdx == -1) {
-			return null;
-		}
-		int braceStart = json.indexOf('{', userIdx);
-		if (braceStart == -1) {
-			return null;
-		}
-		int braceEnd = findMatchingBrace(json, braceStart);
-		if (braceEnd == -1) {
-			return null;
-		}
-		String userObj = json.substring(braceStart, braceEnd + 1);
-		return extractStringValue(userObj, "login"); //$NON-NLS-1$
 	}
 
 	/**
@@ -1308,82 +1310,6 @@ public class GitHubClient implements IPullRequestClient {
 			}
 		}
 		return -1;
-	}
-
-	/**
-	 * Extracts a string value from a JSON object.
-	 *
-	 * @param json
-	 *            the JSON object string
-	 * @param key
-	 *            the key to extract
-	 * @return the string value, or null if not found
-	 */
-	private String extractStringValue(String json, String key) {
-		String searchKey = "\"" + key + "\""; //$NON-NLS-1$ //$NON-NLS-2$
-		int keyIdx = json.indexOf(searchKey);
-		if (keyIdx == -1) {
-			return null;
-		}
-		int colonIdx = json.indexOf(':', keyIdx);
-		if (colonIdx == -1) {
-			return null;
-		}
-		int quoteStart = json.indexOf('"', colonIdx);
-		if (quoteStart == -1) {
-			return null;
-		}
-		int quoteEnd = quoteStart + 1;
-		while (quoteEnd < json.length()) {
-			if (json.charAt(quoteEnd) == '"'
-					&& json.charAt(quoteEnd - 1) != '\\') {
-				break;
-			}
-			quoteEnd++;
-		}
-		if (quoteEnd >= json.length()) {
-			return null;
-		}
-		return json.substring(quoteStart + 1, quoteEnd);
-	}
-
-	/**
-	 * Extracts a long value from a JSON object.
-	 *
-	 * @param json
-	 *            the JSON object string
-	 * @param key
-	 *            the key to extract
-	 * @return the long value, or -1 if not found
-	 */
-	private long extractLongValue(String json, String key) {
-		String searchKey = "\"" + key + "\""; //$NON-NLS-1$ //$NON-NLS-2$
-		int keyIdx = json.indexOf(searchKey);
-		if (keyIdx == -1) {
-			return -1;
-		}
-		int colonIdx = json.indexOf(':', keyIdx);
-		if (colonIdx == -1) {
-			return -1;
-		}
-		int numStart = colonIdx + 1;
-		while (numStart < json.length()
-				&& Character.isWhitespace(json.charAt(numStart))) {
-			numStart++;
-		}
-		int numEnd = numStart;
-		while (numEnd < json.length()
-				&& Character.isDigit(json.charAt(numEnd))) {
-			numEnd++;
-		}
-		if (numStart >= numEnd) {
-			return -1;
-		}
-		try {
-			return Long.parseLong(json.substring(numStart, numEnd));
-		} catch (NumberFormatException e) {
-			return -1;
-		}
 	}
 
 	@Override
@@ -1441,5 +1367,37 @@ public class GitHubClient implements IPullRequestClient {
 		json.append("]}"); //$NON-NLS-1$
 
 		executeRequest(path, "POST", json.toString()); //$NON-NLS-1$
+	}
+
+	@Override
+	public @NonNull List<ChangedFile> getCommitChanges(
+			@NonNull String commitSha) throws IOException {
+		String path = "/repos/" + owner + "/" + repo + "/commits/" //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				+ commitSha;
+		String response = doGet(path);
+
+		// GitHub returns commit object with files array
+		String filesJson = GitHubJsonParser.extractArray(response, "files"); //$NON-NLS-1$
+		if (filesJson == null) {
+			return new ArrayList<>();
+		}
+		return GitHubJsonParser.parseChangedFiles(filesJson);
+	}
+
+	@Override
+	public @NonNull List<ChangedFile> getCommitRangeChanges(
+			@NonNull String baseCommitSha, @NonNull String headCommitSha)
+			throws IOException {
+		// GitHub compare API: GET /repos/{owner}/{repo}/compare/{base}...{head}
+		String path = "/repos/" + owner + "/" + repo + "/compare/" //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				+ baseCommitSha + "..." + headCommitSha; //$NON-NLS-1$
+		String response = doGet(path);
+
+		// Response contains files array with changed files
+		String filesJson = GitHubJsonParser.extractArray(response, "files"); //$NON-NLS-1$
+		if (filesJson == null) {
+			return new ArrayList<>();
+		}
+		return GitHubJsonParser.parseChangedFiles(filesJson);
 	}
 }
