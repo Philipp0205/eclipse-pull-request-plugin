@@ -28,6 +28,7 @@ import org.eclipse.egit.core.RepositoryCache;
 import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
 import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
 import org.eclipse.egit.pullrequest.internal.client.PullRequestClientFactory;
 import org.eclipse.egit.pullrequest.Activator;
@@ -399,6 +400,174 @@ public class PullRequestChangedFilesView extends ViewPart {
 					});
 					return new Status(IStatus.ERROR, Activator.PLUGIN_ID,
 							"Failed to fetch changed files", e); //$NON-NLS-1$
+				} finally {
+					monitor.done();
+				}
+			}
+		};
+		job.setUser(true);
+		job.schedule();
+	}
+
+	/**
+	 * Loads and displays changed files for a specific commit.
+	 *
+	 * @param pr
+	 *            the pull request context
+	 * @param commit
+	 *            the commit to load
+	 */
+	public void loadCommit(PullRequest pr, PullRequestCommit commit) {
+		selectedPullRequest = pr;
+
+		// Resolve the Git repository for this PR
+		final Repository resolvedRepo = resolveGitRepository(pr);
+
+		// Fetch commit changes in a background job
+		Job job = new Job(
+				MessageFormat.format("Fetching changes for commit {0}", //$NON-NLS-1$
+						commit.getShortId())) {
+			@Override
+			protected IStatus run(IProgressMonitor monitor) {
+				monitor.beginTask("Fetching commit changes", //$NON-NLS-1$
+						IProgressMonitor.UNKNOWN);
+
+				try {
+					IPullRequestClient client = PullRequestClientFactory
+							.createClient();
+					if (client == null) {
+						return new Status(IStatus.ERROR, Activator.PLUGIN_ID,
+								"Pull request provider not configured"); //$NON-NLS-1$
+					}
+
+					// Fetch changed files for this commit
+					List<ChangedFile> apiChangedFiles = client
+							.getCommitChanges(commit.getId());
+
+					final List<PullRequestChangedFile> uiChangedFiles = apiChangedFiles
+							.stream()
+							.map(PullRequestChangedFile::fromChangedFile)
+							.collect(Collectors.toList());
+
+					Display.getDefault().asyncExec(() -> {
+						if (!changedFilesViewer.getControl().isDisposed()) {
+							changedFiles.clear();
+							changedFiles.addAll(uiChangedFiles);
+							allComments.clear(); // Commits don't have inline comments
+
+							// Set the resolved repository on the view and all files
+							gitRepository = resolvedRepo;
+							if (gitRepository != null) {
+								for (PullRequestChangedFile file : changedFiles) {
+									file.setRepository(gitRepository);
+								}
+							}
+
+							changedFilesViewer.setInput(changedFiles);
+							changedFilesViewer.refresh();
+							updateFormTitle();
+						}
+					});
+
+					return Status.OK_STATUS;
+				} catch (IOException e) {
+					Display.getDefault().asyncExec(() -> {
+						if (!changedFilesViewer.getControl().isDisposed()) {
+							MessageDialog.openError(
+									changedFilesViewer.getControl().getShell(),
+									"Error", //$NON-NLS-1$
+									"Failed to fetch commit changes: " //$NON-NLS-1$
+											+ e.getMessage());
+						}
+					});
+					return new Status(IStatus.ERROR, Activator.PLUGIN_ID,
+							"Failed to fetch commit changes", e); //$NON-NLS-1$
+				} finally {
+					monitor.done();
+				}
+			}
+		};
+		job.setUser(true);
+		job.schedule();
+	}
+
+	/**
+	 * Loads and displays changed files for a range of commits.
+	 *
+	 * @param pr
+	 *            the pull request context
+	 * @param baseCommit
+	 *            the starting commit (older)
+	 * @param headCommit
+	 *            the ending commit (newer)
+	 */
+	public void loadCommitRange(PullRequest pr, PullRequestCommit baseCommit,
+			PullRequestCommit headCommit) {
+		selectedPullRequest = pr;
+
+		// Resolve the Git repository for this PR
+		final Repository resolvedRepo = resolveGitRepository(pr);
+
+		// Fetch commit range changes in a background job
+		Job job = new Job(MessageFormat.format(
+				"Fetching changes from {0} to {1}", //$NON-NLS-1$
+				baseCommit.getShortId(), headCommit.getShortId())) {
+			@Override
+			protected IStatus run(IProgressMonitor monitor) {
+				monitor.beginTask("Fetching commit range changes", //$NON-NLS-1$
+						IProgressMonitor.UNKNOWN);
+
+				try {
+					IPullRequestClient client = PullRequestClientFactory
+							.createClient();
+					if (client == null) {
+						return new Status(IStatus.ERROR, Activator.PLUGIN_ID,
+								"Pull request provider not configured"); //$NON-NLS-1$
+					}
+
+					// Fetch changed files for this commit range
+					List<ChangedFile> apiChangedFiles = client
+							.getCommitRangeChanges(baseCommit.getId(),
+									headCommit.getId());
+
+					final List<PullRequestChangedFile> uiChangedFiles = apiChangedFiles
+							.stream()
+							.map(PullRequestChangedFile::fromChangedFile)
+							.collect(Collectors.toList());
+
+					Display.getDefault().asyncExec(() -> {
+						if (!changedFilesViewer.getControl().isDisposed()) {
+							changedFiles.clear();
+							changedFiles.addAll(uiChangedFiles);
+							allComments.clear(); // Range view doesn't show inline comments
+
+							// Set the resolved repository on the view and all files
+							gitRepository = resolvedRepo;
+							if (gitRepository != null) {
+								for (PullRequestChangedFile file : changedFiles) {
+									file.setRepository(gitRepository);
+								}
+							}
+
+							changedFilesViewer.setInput(changedFiles);
+							changedFilesViewer.refresh();
+							updateFormTitle();
+						}
+					});
+
+					return Status.OK_STATUS;
+				} catch (IOException e) {
+					Display.getDefault().asyncExec(() -> {
+						if (!changedFilesViewer.getControl().isDisposed()) {
+							MessageDialog.openError(
+									changedFilesViewer.getControl().getShell(),
+									"Error", //$NON-NLS-1$
+									"Failed to fetch commit range changes: " //$NON-NLS-1$
+											+ e.getMessage());
+						}
+					});
+					return new Status(IStatus.ERROR, Activator.PLUGIN_ID,
+							"Failed to fetch commit range changes", e); //$NON-NLS-1$
 				} finally {
 					monitor.done();
 				}

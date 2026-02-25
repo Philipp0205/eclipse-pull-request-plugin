@@ -26,6 +26,7 @@ import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderType;
 import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
 import org.eclipse.jgit.annotations.NonNull;
 import org.eclipse.jgit.annotations.Nullable;
 
@@ -68,6 +69,7 @@ public class BitbucketClient implements IPullRequestClient {
 		this.repositorySlug = repositorySlug;
 		this.token = token;
 		this.capabilities = new PullRequestProviderCapabilities(true, true,
+				true, true,
 				"OPEN", "MERGED", "DECLINED", "ALL"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 	}
 
@@ -313,14 +315,16 @@ public class BitbucketClient implements IPullRequestClient {
 		return BitbucketJsonParser.extractJsonString(jsonResponse, "name"); //$NON-NLS-1$
 	}
 
-
-
-	private static String escapeJson(String text) {
-		return text.replace("\\", "\\\\") //$NON-NLS-1$ //$NON-NLS-2$
-				.replace("\"", "\\\"") //$NON-NLS-1$ //$NON-NLS-2$
-				.replace("\n", "\\n") //$NON-NLS-1$ //$NON-NLS-2$
-				.replace("\r", "\\r") //$NON-NLS-1$ //$NON-NLS-2$
-				.replace("\t", "\\t"); //$NON-NLS-1$ //$NON-NLS-2$
+	@Override
+	@NonNull
+	public List<PullRequestCommit> getPullRequestCommits(long pullRequestId)
+			throws IOException {
+		String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+				+ "/repos/" + repositorySlug //$NON-NLS-1$
+				+ "/pull-requests/" + pullRequestId //$NON-NLS-1$
+				+ "/commits?limit=1000"; //$NON-NLS-1$
+		String jsonResponse = executeGet(url);
+		return BitbucketJsonParser.parseCommits(jsonResponse);
 	}
 
 	private String executeGet(String urlString) throws IOException {
@@ -521,6 +525,66 @@ public class BitbucketClient implements IPullRequestClient {
 	}
 
 	@Override
+	public void submitReview(long pullRequestId, @NonNull String event,
+			@Nullable String body) throws IOException {
+		if ("APPROVE".equals(event)) { //$NON-NLS-1$
+			// POST .../approve
+			String url = buildPullRequestUrl(pullRequestId, "/approve"); //$NON-NLS-1$
+			executePost(url, ""); //$NON-NLS-1$
+		} else if ("REQUEST_CHANGES".equals(event)) { //$NON-NLS-1$
+			// PUT participant status to NEEDS_WORK
+			String currentUser = getCurrentUser();
+			String url = buildPullRequestUrl(pullRequestId,
+					"/participants/" + currentUser); //$NON-NLS-1$
+			String json = "{\"user\":{\"name\":\"" //$NON-NLS-1$
+					+ escapeJson(currentUser)
+					+ "\"},\"status\":\"NEEDS_WORK\"}"; //$NON-NLS-1$
+			executePut(url, json);
+		} else if ("COMMENT".equals(event) //$NON-NLS-1$
+				&& body != null && !body.isEmpty()) {
+			// Add a general comment with the review body
+			addComment(pullRequestId, body, -1);
+		}
+	}
+
+	@Override
+	public void unapproveReview(long pullRequestId) throws IOException {
+		// DELETE .../approve
+		String url = buildPullRequestUrl(pullRequestId, "/approve"); //$NON-NLS-1$
+		executeDelete(url);
+	}
+
+	/**
+	 * Builds the base URL for pull request API endpoints.
+	 *
+	 * @param pullRequestId
+	 *            the pull request ID
+	 * @param suffix
+	 *            additional path suffix (e.g., "/approve", "/comments")
+	 * @return the complete URL
+	 */
+	private String buildPullRequestUrl(long pullRequestId, String suffix) {
+		return serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+				+ "/repos/" + repositorySlug //$NON-NLS-1$
+				+ "/pull-requests/" + pullRequestId + suffix; //$NON-NLS-1$
+	}
+
+	/**
+	 * Escapes a string for use in JSON
+	 *
+	 * @param text
+	 *            the text to escape
+	 * @return the escaped text
+	 */
+	private String escapeJson(String text) {
+		return text.replace("\\", "\\\\") //$NON-NLS-1$ //$NON-NLS-2$
+				.replace("\"", "\\\"") //$NON-NLS-1$ //$NON-NLS-2$
+				.replace("\n", "\\n") //$NON-NLS-1$ //$NON-NLS-2$
+				.replace("\r", "\\r") //$NON-NLS-1$ //$NON-NLS-2$
+				.replace("\t", "\\t"); //$NON-NLS-1$ //$NON-NLS-2$
+	}
+
+	@Override
 	@NonNull
 	public List<PullRequest.PullRequestParticipant> getReviewers(
 			long pullRequestId) throws IOException {
@@ -566,14 +630,14 @@ public class BitbucketClient implements IPullRequestClient {
 	}
 
 	/**
-	 * Execute a generic HTTP request
+	 * Execute an HTTP request with the specified method and optional body
 	 *
 	 * @param urlString
-	 *            the URL to request
+	 *            the full URL
 	 * @param method
-	 *            the HTTP method (GET, POST, PUT, DELETE)
+	 *            HTTP method (GET, POST, PUT, DELETE)
 	 * @param jsonBody
-	 *            the JSON body (can be null for GET/DELETE)
+	 *            the JSON body for POST/PUT requests, null for GET/DELETE
 	 * @return the response string, or empty string for DELETE
 	 * @throws IOException
 	 *             if the request fails
@@ -592,5 +656,32 @@ public class BitbucketClient implements IPullRequestClient {
 		} else {
 			throw new IOException("Unsupported HTTP method: " + method); //$NON-NLS-1$
 		}
+	}
+
+	@Override
+	public @NonNull List<ChangedFile> getCommitChanges(
+			@NonNull String commitSha) throws IOException {
+		// Bitbucket: GET /rest/api/1.0/projects/{key}/repos/{slug}/commits/{sha}/changes
+		String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+				+ "/repos/" + repositorySlug //$NON-NLS-1$
+				+ "/commits/" + commitSha + "/changes?limit=1000"; //$NON-NLS-1$ //$NON-NLS-2$
+
+		String jsonResponse = executeGet(url);
+		return BitbucketJsonParser.parseChangedFiles(jsonResponse);
+	}
+
+	@Override
+	public @NonNull List<ChangedFile> getCommitRangeChanges(
+			@NonNull String baseCommitSha, @NonNull String headCommitSha)
+			throws IOException {
+		// Bitbucket: GET /rest/api/1.0/projects/{key}/repos/{slug}/commits/{sha}/changes
+		// with sinceId parameter to get changes between commits
+		String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+				+ "/repos/" + repositorySlug //$NON-NLS-1$
+				+ "/commits/" + headCommitSha + "/changes?sinceId=" //$NON-NLS-1$ //$NON-NLS-2$
+				+ baseCommitSha + "&limit=1000"; //$NON-NLS-1$
+
+		String jsonResponse = executeGet(url);
+		return BitbucketJsonParser.parseChangedFiles(jsonResponse);
 	}
 }

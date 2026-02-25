@@ -26,6 +26,7 @@ import java.util.regex.Pattern;
 import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
 import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
 import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderCapabilities;
 import org.eclipse.egit.pullrequest.Activator;
@@ -722,6 +723,24 @@ public class GitHubClient implements IPullRequestClient {
 		return GitHubJsonParser.parseCurrentUser(json);
 	}
 
+	@Override
+	public @NonNull List<PullRequestCommit> getPullRequestCommits(
+			long pullRequestId) throws IOException {
+		String path = "/repos/" + owner + "/" + repo + "/pulls/" //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				+ pullRequestId + "/commits?per_page=100"; //$NON-NLS-1$
+
+		List<String> pages = doGetAllPages(path);
+		List<PullRequestCommit> allCommits = new ArrayList<>();
+
+		for (String page : pages) {
+			List<PullRequestCommit> commits = GitHubJsonParser
+					.parseCommits(page);
+			allCommits.addAll(commits);
+		}
+
+		return allCommits;
+	}
+
 	/**
 	 * Performs a GET request to the GitHub API
 	 *
@@ -895,6 +914,49 @@ public class GitHubClient implements IPullRequestClient {
 				throw new IOException(
 						"GitHub API request failed: HTTP " + responseCode //$NON-NLS-1$
 								+ " - " + error); //$NON-NLS-1$
+			}
+
+			return readResponse(conn);
+
+		} finally {
+			if (conn != null) {
+				conn.disconnect();
+			}
+		}
+	}
+
+	/**
+	 * Performs a PUT request to the GitHub API
+	 *
+	 * @param path
+	 *            the API path (relative to API base URL)
+	 * @param body
+	 *            the JSON body to send
+	 * @return the response body
+	 * @throws IOException
+	 *             if the request fails
+	 */
+	private String doPut(String path, String body) throws IOException {
+		HttpURLConnection conn = null;
+		try {
+			conn = createConnection(path, "PUT"); //$NON-NLS-1$
+			conn.setDoOutput(true);
+
+			// Write request body
+			try (OutputStream os = conn.getOutputStream()) {
+				os.write(body.getBytes(StandardCharsets.UTF_8));
+			}
+
+			int responseCode = conn.getResponseCode();
+			if (responseCode < 200 || responseCode >= 300) {
+				String error = readError(conn);
+				throw new IOException(
+						"GitHub API request failed: HTTP " + responseCode //$NON-NLS-1$
+								+ " - " + error); //$NON-NLS-1$
+			}
+
+			if (responseCode == HttpURLConnection.HTTP_NO_CONTENT) {
+				return ""; //$NON-NLS-1$
 			}
 
 			return readResponse(conn);
@@ -1117,6 +1179,130 @@ public class GitHubClient implements IPullRequestClient {
 	}
 
 	@Override
+	public void submitReview(long pullRequestId, @NonNull String event,
+			@Nullable String body) throws IOException {
+		String path = "/repos/" + owner + "/" + repo //$NON-NLS-1$ //$NON-NLS-2$
+				+ "/pulls/" + pullRequestId + "/reviews"; //$NON-NLS-1$ //$NON-NLS-2$
+
+		String json = body != null && !body.isEmpty()
+				? "{\"event\":\"" + escapeJson(event) + "\",\"body\":\"" //$NON-NLS-1$ //$NON-NLS-2$
+						+ escapeJson(body) + "\"}" //$NON-NLS-1$
+				: "{\"event\":\"" + escapeJson(event) + "\"}"; //$NON-NLS-1$ //$NON-NLS-2$
+
+		doPost(path, json);
+	}
+
+	@Override
+	public void unapproveReview(long pullRequestId) throws IOException {
+		// GitHub: dismiss the latest APPROVED review by current user
+		// First, list reviews to find the latest approval
+		String path = "/repos/" + owner + "/" + repo //$NON-NLS-1$ //$NON-NLS-2$
+				+ "/pulls/" + pullRequestId + "/reviews"; //$NON-NLS-1$ //$NON-NLS-2$
+		List<String> pages = doGetAllPages(path);
+
+		// Find the latest review with state "APPROVED" by current user
+		String currentUser = getCurrentUser();
+		long reviewId = -1;
+		for (String page : pages) {
+			long id = findLatestApprovalReviewId(page, currentUser);
+			if (id > reviewId) {
+				reviewId = id;
+			}
+		}
+		if (reviewId == -1) {
+			return; // No approval to dismiss
+		}
+
+		// Dismiss the review
+		String dismissPath = path + "/" + reviewId + "/dismissals"; //$NON-NLS-1$ //$NON-NLS-2$
+		String dismissBody = "{\"message\":\"Review dismissed\"}"; //$NON-NLS-1$
+		// GitHub uses PUT to dismiss
+		doPut(dismissPath, dismissBody);
+	}
+
+	/**
+	 * Finds the ID of the latest APPROVED review by the given user from a
+	 * reviews JSON array response.
+	 *
+	 * @param reviewsJson
+	 *            the JSON array of reviews
+	 * @param username
+	 *            the username to match
+	 * @return the review ID, or -1 if not found
+	 */
+	private long findLatestApprovalReviewId(String reviewsJson,
+			String username) {
+		long latestId = -1;
+		int idx = 0;
+		while (true) {
+			int objStart = reviewsJson.indexOf('{', idx);
+			if (objStart == -1) {
+				break;
+			}
+			int objEnd = findMatchingBrace(reviewsJson, objStart);
+			if (objEnd == -1) {
+				break;
+			}
+			String obj = reviewsJson.substring(objStart, objEnd + 1);
+			String state = GitHubJsonParser.extractString(obj, "state"); //$NON-NLS-1$
+			String userObj = GitHubJsonParser.extractObject(obj, "user"); //$NON-NLS-1$
+			String login = userObj != null
+					? GitHubJsonParser.extractString(userObj, "login") //$NON-NLS-1$
+					: null;
+			if ("APPROVED".equals(state) //$NON-NLS-1$
+					&& username.equals(login)) {
+				long id = GitHubJsonParser.extractLong(obj, "id"); //$NON-NLS-1$
+				if (id > latestId) {
+					latestId = id;
+				}
+			}
+			idx = objEnd + 1;
+		}
+		return latestId;
+	}
+
+	/**
+	 * Finds the matching closing brace for an opening brace.
+	 *
+	 * @param json
+	 *            the JSON string
+	 * @param startIdx
+	 *            the index of the opening brace
+	 * @return the index of the matching closing brace, or -1 if not found
+	 */
+	private int findMatchingBrace(String json, int startIdx) {
+		int depth = 0;
+		boolean inString = false;
+		boolean escaped = false;
+		for (int i = startIdx; i < json.length(); i++) {
+			char c = json.charAt(i);
+			if (escaped) {
+				escaped = false;
+				continue;
+			}
+			if (c == '\\') {
+				escaped = true;
+				continue;
+			}
+			if (c == '"') {
+				inString = !inString;
+				continue;
+			}
+			if (!inString) {
+				if (c == '{') {
+					depth++;
+				} else if (c == '}') {
+					depth--;
+					if (depth == 0) {
+						return i;
+					}
+				}
+			}
+		}
+		return -1;
+	}
+
+	@Override
 	public @NonNull List<PullRequest.PullRequestParticipant> getReviewers(
 			long pullRequestId) throws IOException {
 		// Get the full PR which includes reviewers
@@ -1171,5 +1357,37 @@ public class GitHubClient implements IPullRequestClient {
 		json.append("]}"); //$NON-NLS-1$
 
 		executeRequest(path, "POST", json.toString()); //$NON-NLS-1$
+	}
+
+	@Override
+	public @NonNull List<ChangedFile> getCommitChanges(
+			@NonNull String commitSha) throws IOException {
+		String path = "/repos/" + owner + "/" + repo + "/commits/" //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				+ commitSha;
+		String response = doGet(path);
+
+		// GitHub returns commit object with files array
+		String filesJson = GitHubJsonParser.extractArray(response, "files"); //$NON-NLS-1$
+		if (filesJson == null) {
+			return new ArrayList<>();
+		}
+		return GitHubJsonParser.parseChangedFiles(filesJson);
+	}
+
+	@Override
+	public @NonNull List<ChangedFile> getCommitRangeChanges(
+			@NonNull String baseCommitSha, @NonNull String headCommitSha)
+			throws IOException {
+		// GitHub compare API: GET /repos/{owner}/{repo}/compare/{base}...{head}
+		String path = "/repos/" + owner + "/" + repo + "/compare/" //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				+ baseCommitSha + "..." + headCommitSha; //$NON-NLS-1$
+		String response = doGet(path);
+
+		// Response contains files array with changed files
+		String filesJson = GitHubJsonParser.extractArray(response, "files"); //$NON-NLS-1$
+		if (filesJson == null) {
+			return new ArrayList<>();
+		}
+		return GitHubJsonParser.parseChangedFiles(filesJson);
 	}
 }

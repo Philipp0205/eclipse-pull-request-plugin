@@ -24,6 +24,10 @@ public class PullRequestProviderCapabilities {
 
 	private final boolean supportsCommentState;
 
+	private final boolean supportsReviewSubmission;
+
+	private final boolean supportsRequestChanges;
+
 	private final List<String> supportedStates;
 
 	/**
@@ -34,14 +38,23 @@ public class PullRequestProviderCapabilities {
 	 *            severity levels (NORMAL, BLOCKER)
 	 * @param supportsCommentState
 	 *            whether the provider supports comment state (OPEN, RESOLVED)
+	 * @param supportsReviewSubmission
+	 *            whether the provider supports submitting formal reviews
+	 *            (approve, request changes, comment)
+	 * @param supportsRequestChanges
+	 *            whether the provider supports the "request changes" review
+	 *            action
 	 * @param supportedStates
 	 *            the PR states supported by this provider (e.g., OPEN, MERGED,
 	 *            DECLINED for Bitbucket; OPEN, CLOSED for GitHub)
 	 */
 	public PullRequestProviderCapabilities(boolean supportsTaskSeverity,
-			boolean supportsCommentState, String... supportedStates) {
+			boolean supportsCommentState, boolean supportsReviewSubmission,
+			boolean supportsRequestChanges, String... supportedStates) {
 		this.supportsTaskSeverity = supportsTaskSeverity;
 		this.supportsCommentState = supportsCommentState;
+		this.supportsReviewSubmission = supportsReviewSubmission;
+		this.supportsRequestChanges = supportsRequestChanges;
 		this.supportedStates = Collections
 				.unmodifiableList(Arrays.asList(supportedStates));
 	}
@@ -63,6 +76,21 @@ public class PullRequestProviderCapabilities {
 	}
 
 	/**
+	 * @return true if the provider supports submitting formal reviews (approve,
+	 *         request changes, comment)
+	 */
+	public boolean supportsReviewSubmission() {
+		return supportsReviewSubmission;
+	}
+
+	/**
+	 * @return true if the provider supports the "request changes" review action
+	 */
+	public boolean supportsRequestChanges() {
+		return supportsRequestChanges;
+	}
+
+	/**
 	 * @return the list of PR states supported by this provider (e.g., OPEN,
 	 *         MERGED, DECLINED for Bitbucket; OPEN, CLOSED for GitHub)
 	 */
@@ -81,13 +109,16 @@ public class PullRequestProviderCapabilities {
 			PullRequestProviderType providerType) {
 		switch (providerType) {
 		case BITBUCKET:
-			return new PullRequestProviderCapabilities(true, true, "OPEN", //$NON-NLS-1$
+			return new PullRequestProviderCapabilities(true, true, true, true,
+					"OPEN", //$NON-NLS-1$
 					"MERGED", "DECLINED", "ALL"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		case GITHUB:
-			return new PullRequestProviderCapabilities(false, true, "open", //$NON-NLS-1$
+			return new PullRequestProviderCapabilities(false, true, true, true,
+					"open", //$NON-NLS-1$
 					"closed", "all"); //$NON-NLS-1$ //$NON-NLS-2$
 		default:
-			return new PullRequestProviderCapabilities(false, false, "OPEN"); //$NON-NLS-1$
+			return new PullRequestProviderCapabilities(false, false, false,
+					false, "OPEN"); //$NON-NLS-1$
 		}
 	}
 }

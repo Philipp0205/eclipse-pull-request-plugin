@@ -85,6 +85,8 @@ public class PullRequestOverviewView extends EditorPart {
 
 	private StyledText descriptionWidget;
 
+	private IPullRequestClient client;
+
 	@Override
 	public void init(IEditorSite site, IEditorInput input)
 			throws PartInitException {
@@ -105,6 +107,7 @@ public class PullRequestOverviewView extends EditorPart {
 	@Override
 	public void createPartControl(Composite parent) {
 		dateFormatter = PreferenceBasedDateFormatter.create();
+		client = createClient();
 		toolkit = new FormToolkit(parent.getDisplay());
 		parent.addDisposeListener(e -> {
 			toolkit.dispose();
@@ -408,7 +411,7 @@ public class PullRequestOverviewView extends EditorPart {
 	private void renderActions(Composite parent) {
 		Composite buttonRow = toolkit.createComposite(
 				parent);
-		GridLayoutFactory.fillDefaults().numColumns(6)
+		GridLayoutFactory.fillDefaults().numColumns(8)
 				.spacing(8, 0).applyTo(buttonRow);
 		GridDataFactory.fillDefaults().grab(true, false)
 				.span(2, 1).applyTo(buttonRow);
@@ -443,6 +446,28 @@ public class PullRequestOverviewView extends EditorPart {
 				PRText.CheckoutBranch_ActionLabel, SWT.PUSH);
 		checkoutBtn.addListener(SWT.Selection,
 				e -> checkoutSourceBranch());
+
+		if (client != null
+				&& client.getCapabilities()
+						.supportsReviewSubmission()) {
+			Button approveBtn = toolkit.createButton(buttonRow,
+					PRText.SubmitReview_ApproveAction, SWT.PUSH);
+			approveBtn.setToolTipText(
+					PRText.SubmitReview_ApproveTooltip);
+			approveBtn.addListener(SWT.Selection,
+					e -> submitReview("APPROVE")); //$NON-NLS-1$
+
+			if (client.getCapabilities().supportsRequestChanges()) {
+				Button requestChangesBtn = toolkit.createButton(
+						buttonRow,
+						PRText.SubmitReview_RequestChangesAction,
+						SWT.PUSH);
+				requestChangesBtn.setToolTipText(
+						PRText.SubmitReview_RequestChangesTooltip);
+				requestChangesBtn.addListener(SWT.Selection,
+						e -> submitReview("REQUEST_CHANGES")); //$NON-NLS-1$
+			}
+		}
 	}
 
 	private void createMetaRow(Composite parent, String label,
@@ -900,5 +925,50 @@ public class PullRequestOverviewView extends EditorPart {
 			}
 		}
 		return sb.toString();
+	}
+
+	private void submitReview(String event) {
+		if (currentPullRequest == null || client == null) {
+			return;
+		}
+
+		// For REQUEST_CHANGES, prompt for a body message
+		String body = null;
+		if ("REQUEST_CHANGES".equals(event)) { //$NON-NLS-1$
+			MultiLineInputDialog dialog = new MultiLineInputDialog(
+					getSite().getShell(),
+					PRText.SubmitReview_DialogTitle,
+					PRText.SubmitReview_DialogMessage,
+					""); //$NON-NLS-1$
+			if (dialog.open() != org.eclipse.jface.window.Window.OK) {
+				return;
+			}
+			body = dialog.getValue();
+		}
+
+		final String reviewBody = body;
+		final PullRequest pullRequest = currentPullRequest;
+		final IPullRequestClient jobClient = client;
+		Job job = new Job(PRText.SubmitReview_JobName) {
+			@Override
+			protected IStatus run(IProgressMonitor monitor) {
+				try {
+					jobClient.submitReview(
+							pullRequest.getId(),
+							event, reviewBody);
+					Display.getDefault().asyncExec(
+							() -> refreshView());
+					return Status.OK_STATUS;
+				} catch (IOException e) {
+					Activator.logError(
+							PRText.SubmitReview_Error, e);
+					return new Status(IStatus.ERROR,
+							Activator.PLUGIN_ID,
+							PRText.SubmitReview_Error, e);
+				}
+			}
+		};
+		job.setUser(true);
+		job.schedule();
 	}
 }
