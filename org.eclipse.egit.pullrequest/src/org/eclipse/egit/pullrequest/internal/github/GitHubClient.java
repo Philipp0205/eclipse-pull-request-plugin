@@ -1117,6 +1117,227 @@ public class GitHubClient implements IPullRequestClient {
 	}
 
 	@Override
+	public void submitReview(long pullRequestId, @NonNull String event,
+			@Nullable String body) throws IOException {
+		String path = "/repos/" + owner + "/" + repo //$NON-NLS-1$ //$NON-NLS-2$
+				+ "/pulls/" + pullRequestId + "/reviews"; //$NON-NLS-1$ //$NON-NLS-2$
+
+		StringBuilder json = new StringBuilder();
+		json.append("{\"event\":\""); //$NON-NLS-1$
+		json.append(escapeJson(event));
+		json.append("\""); //$NON-NLS-1$
+		if (body != null && !body.isEmpty()) {
+			json.append(",\"body\":\""); //$NON-NLS-1$
+			json.append(escapeJson(body));
+			json.append("\""); //$NON-NLS-1$
+		}
+		json.append("}"); //$NON-NLS-1$
+
+		doPost(path, json.toString());
+	}
+
+	@Override
+	public void unapproveReview(long pullRequestId) throws IOException {
+		// GitHub: dismiss the latest APPROVED review by current user
+		// First, list reviews to find the latest approval
+		String path = "/repos/" + owner + "/" + repo //$NON-NLS-1$ //$NON-NLS-2$
+				+ "/pulls/" + pullRequestId + "/reviews"; //$NON-NLS-1$ //$NON-NLS-2$
+		String response = doGet(path);
+
+		// Find the latest review with state "APPROVED" by current user
+		String currentUser = getCurrentUser();
+		long reviewId = findLatestApprovalReviewId(response, currentUser);
+		if (reviewId == -1) {
+			return; // No approval to dismiss
+		}
+
+		// Dismiss the review
+		String dismissPath = path + "/" + reviewId + "/dismissals"; //$NON-NLS-1$ //$NON-NLS-2$
+		String dismissBody = "{\"message\":\"Review dismissed\"}"; //$NON-NLS-1$
+		// GitHub uses PUT to dismiss
+		doPut(dismissPath, dismissBody);
+	}
+
+	/**
+	 * Finds the ID of the latest APPROVED review by the given user from a
+	 * reviews JSON array response.
+	 *
+	 * @param reviewsJson
+	 *            the JSON array of reviews
+	 * @param username
+	 *            the username to match
+	 * @return the review ID, or -1 if not found
+	 */
+	private long findLatestApprovalReviewId(String reviewsJson,
+			String username) {
+		long latestId = -1;
+		int idx = 0;
+		while (true) {
+			int objStart = reviewsJson.indexOf('{', idx);
+			if (objStart == -1) {
+				break;
+			}
+			int objEnd = findMatchingBrace(reviewsJson, objStart);
+			if (objEnd == -1) {
+				break;
+			}
+			String obj = reviewsJson.substring(objStart, objEnd + 1);
+			String state = extractStringValue(obj, "state"); //$NON-NLS-1$
+			String login = extractNestedLogin(obj);
+			if ("APPROVED".equals(state) //$NON-NLS-1$
+					&& username.equals(login)) {
+				long id = extractLongValue(obj, "id"); //$NON-NLS-1$
+				if (id > latestId) {
+					latestId = id;
+				}
+			}
+			idx = objEnd + 1;
+		}
+		return latestId;
+	}
+
+	/**
+	 * Extracts the "login" field from the nested "user" object.
+	 *
+	 * @param json
+	 *            the JSON object containing a user field
+	 * @return the login value, or null if not found
+	 */
+	private String extractNestedLogin(String json) {
+		int userIdx = json.indexOf("\"user\""); //$NON-NLS-1$
+		if (userIdx == -1) {
+			return null;
+		}
+		int braceStart = json.indexOf('{', userIdx);
+		if (braceStart == -1) {
+			return null;
+		}
+		int braceEnd = findMatchingBrace(json, braceStart);
+		if (braceEnd == -1) {
+			return null;
+		}
+		String userObj = json.substring(braceStart, braceEnd + 1);
+		return extractStringValue(userObj, "login"); //$NON-NLS-1$
+	}
+
+	/**
+	 * Finds the matching closing brace for an opening brace.
+	 *
+	 * @param json
+	 *            the JSON string
+	 * @param startIdx
+	 *            the index of the opening brace
+	 * @return the index of the matching closing brace, or -1 if not found
+	 */
+	private int findMatchingBrace(String json, int startIdx) {
+		int depth = 0;
+		boolean inString = false;
+		boolean escaped = false;
+		for (int i = startIdx; i < json.length(); i++) {
+			char c = json.charAt(i);
+			if (escaped) {
+				escaped = false;
+				continue;
+			}
+			if (c == '\\') {
+				escaped = true;
+				continue;
+			}
+			if (c == '"') {
+				inString = !inString;
+				continue;
+			}
+			if (!inString) {
+				if (c == '{') {
+					depth++;
+				} else if (c == '}') {
+					depth--;
+					if (depth == 0) {
+						return i;
+					}
+				}
+			}
+		}
+		return -1;
+	}
+
+	/**
+	 * Extracts a string value from a JSON object.
+	 *
+	 * @param json
+	 *            the JSON object string
+	 * @param key
+	 *            the key to extract
+	 * @return the string value, or null if not found
+	 */
+	private String extractStringValue(String json, String key) {
+		String searchKey = "\"" + key + "\""; //$NON-NLS-1$ //$NON-NLS-2$
+		int keyIdx = json.indexOf(searchKey);
+		if (keyIdx == -1) {
+			return null;
+		}
+		int colonIdx = json.indexOf(':', keyIdx);
+		if (colonIdx == -1) {
+			return null;
+		}
+		int quoteStart = json.indexOf('"', colonIdx);
+		if (quoteStart == -1) {
+			return null;
+		}
+		int quoteEnd = quoteStart + 1;
+		while (quoteEnd < json.length()) {
+			if (json.charAt(quoteEnd) == '"'
+					&& json.charAt(quoteEnd - 1) != '\\') {
+				break;
+			}
+			quoteEnd++;
+		}
+		if (quoteEnd >= json.length()) {
+			return null;
+		}
+		return json.substring(quoteStart + 1, quoteEnd);
+	}
+
+	/**
+	 * Extracts a long value from a JSON object.
+	 *
+	 * @param json
+	 *            the JSON object string
+	 * @param key
+	 *            the key to extract
+	 * @return the long value, or -1 if not found
+	 */
+	private long extractLongValue(String json, String key) {
+		String searchKey = "\"" + key + "\""; //$NON-NLS-1$ //$NON-NLS-2$
+		int keyIdx = json.indexOf(searchKey);
+		if (keyIdx == -1) {
+			return -1;
+		}
+		int colonIdx = json.indexOf(':', keyIdx);
+		if (colonIdx == -1) {
+			return -1;
+		}
+		int numStart = colonIdx + 1;
+		while (numStart < json.length()
+				&& Character.isWhitespace(json.charAt(numStart))) {
+			numStart++;
+		}
+		int numEnd = numStart;
+		while (numEnd < json.length()
+				&& Character.isDigit(json.charAt(numEnd))) {
+			numEnd++;
+		}
+		if (numStart >= numEnd) {
+			return -1;
+		}
+		try {
+			return Long.parseLong(json.substring(numStart, numEnd));
+		} catch (NumberFormatException e) {
+			return -1;
+		}
+	}
+
+	@Override
 	public @NonNull List<PullRequest.PullRequestParticipant> getReviewers(
 			long pullRequestId) throws IOException {
 		// Get the full PR which includes reviewers

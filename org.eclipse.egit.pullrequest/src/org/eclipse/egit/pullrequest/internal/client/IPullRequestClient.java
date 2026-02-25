@@ -324,6 +324,35 @@ public interface IPullRequestClient {
 			throws IOException;
 
 	/**
+	 * Submits a review for a pull request. The review event determines the
+	 * action: approve, request changes, or leave a comment.
+	 *
+	 * @param pullRequestId
+	 *            the pull request ID or number
+	 * @param event
+	 *            the review event: "APPROVE", "REQUEST_CHANGES", or "COMMENT"
+	 * @param body
+	 *            optional review body text, may be null for approvals
+	 * @throws IOException
+	 *             if the request fails
+	 * @throws UnsupportedOperationException
+	 *             if the provider does not support review submission
+	 */
+	void submitReview(long pullRequestId, @NonNull String event,
+			@Nullable String body) throws IOException;
+
+	/**
+	 * Removes the current user's approval from a pull request. For GitHub this
+	 * dismisses the review; for Bitbucket this removes the approval.
+	 *
+	 * @param pullRequestId
+	 *            the pull request ID or number
+	 * @throws IOException
+	 *             if the request fails
+	 */
+	void unapproveReview(long pullRequestId) throws IOException;
+
+	/**
 	 * @return the capabilities of this provider, indicating which features are
 	 *         supported
 	 */

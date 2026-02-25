@@ -521,6 +521,59 @@ public class BitbucketClient implements IPullRequestClient {
 	}
 
 	@Override
+	public void submitReview(long pullRequestId, @NonNull String event,
+			@Nullable String body) throws IOException {
+		String currentUser = getCurrentUser();
+		if ("APPROVE".equals(event)) { //$NON-NLS-1$
+			// POST .../approve
+			String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+					+ "/repos/" + repositorySlug //$NON-NLS-1$
+					+ "/pull-requests/" + pullRequestId //$NON-NLS-1$
+					+ "/approve"; //$NON-NLS-1$
+			executePost(url, ""); //$NON-NLS-1$
+		} else if ("REQUEST_CHANGES".equals(event)) { //$NON-NLS-1$
+			// PUT participant status to NEEDS_WORK
+			String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+					+ "/repos/" + repositorySlug //$NON-NLS-1$
+					+ "/pull-requests/" + pullRequestId //$NON-NLS-1$
+					+ "/participants/" + currentUser; //$NON-NLS-1$
+			String json = "{\"user\":{\"name\":\"" //$NON-NLS-1$
+					+ escapeJson(currentUser)
+					+ "\"},\"status\":\"NEEDS_WORK\"}"; //$NON-NLS-1$
+			executePut(url, json);
+		} else if ("COMMENT".equals(event) //$NON-NLS-1$
+				&& body != null && !body.isEmpty()) {
+			// Add a general comment with the review body
+			addComment(pullRequestId, body, -1);
+		}
+	}
+
+	@Override
+	public void unapproveReview(long pullRequestId) throws IOException {
+		// DELETE .../approve
+		String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+				+ "/repos/" + repositorySlug //$NON-NLS-1$
+				+ "/pull-requests/" + pullRequestId //$NON-NLS-1$
+				+ "/approve"; //$NON-NLS-1$
+		executeDelete(url);
+	}
+
+	/**
+	 * Escapes a string for use in JSON
+	 *
+	 * @param text
+	 *            the text to escape
+	 * @return the escaped text
+	 */
+	private String escapeJson(String text) {
+		return text.replace("\\", "\\\\") //$NON-NLS-1$ //$NON-NLS-2$
+				.replace("\"", "\\\"") //$NON-NLS-1$ //$NON-NLS-2$
+				.replace("\n", "\\n") //$NON-NLS-1$ //$NON-NLS-2$
+				.replace("\r", "\\r") //$NON-NLS-1$ //$NON-NLS-2$
+				.replace("\t", "\\t"); //$NON-NLS-1$ //$NON-NLS-2$
+	}
+
+	@Override
 	@NonNull
 	public List<PullRequest.PullRequestParticipant> getReviewers(
 			long pullRequestId) throws IOException {

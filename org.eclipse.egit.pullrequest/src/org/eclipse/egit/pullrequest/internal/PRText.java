@@ -203,6 +203,39 @@ public class PRText extends NLS {
 	/** */
 	public static String OverviewView_AddReviewerTooltip;
 
+	/** */
+	public static String SubmitReview_ApproveAction;
+
+	/** */
+	public static String SubmitReview_RequestChangesAction;
+
+	/** */
+	public static String SubmitReview_CommentAction;
+
+	/** */
+	public static String SubmitReview_UnapproveAction;
+
+	/** */
+	public static String SubmitReview_JobName;
+
+	/** */
+	public static String SubmitReview_Error;
+
+	/** */
+	public static String SubmitReview_Success;
+
+	/** */
+	public static String SubmitReview_DialogTitle;
+
+	/** */
+	public static String SubmitReview_DialogMessage;
+
+	/** */
+	public static String SubmitReview_ApproveTooltip;
+
+	/** */
+	public static String SubmitReview_RequestChangesTooltip;
+
 	static {
 		initializeMessages("org.eclipse.egit.pullrequest.internal.prtext", //$NON-NLS-1$
 				PRText.class);
