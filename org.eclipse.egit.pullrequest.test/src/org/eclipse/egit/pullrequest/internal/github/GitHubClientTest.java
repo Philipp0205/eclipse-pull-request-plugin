@@ -23,8 +23,8 @@ public class GitHubClientTest {
 
 	@Test
 	public void testClientConstruction() {
-		GitHubClient client = new GitHubClient("testowner", "testrepo", //$NON-NLS-1$ //$NON-NLS-2$
-				"test-token"); //$NON-NLS-1$
+		GitHubClient client = new GitHubClient(
+				"test-owner", "test-repo", "test-token"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		assertThat(client, notNullValue());
 	}
 

@@ -932,6 +932,11 @@ public class PullRequestOverviewView extends EditorPart {
 			return;
 		}
 
+		// Capture mutable state before creating Job to prevent race conditions
+		final IPullRequestClient capturedClient = client;
+		final PullRequest capturedPullRequest = currentPullRequest;
+		final String capturedEvent = event;
+
 		// For REQUEST_CHANGES, prompt for a body message
 		String body = null;
 		if ("REQUEST_CHANGES".equals(event)) { //$NON-NLS-1$
@@ -953,9 +958,9 @@ public class PullRequestOverviewView extends EditorPart {
 			@Override
 			protected IStatus run(IProgressMonitor monitor) {
 				try {
-					jobClient.submitReview(
-							pullRequest.getId(),
-							event, reviewBody);
+					capturedClient.submitReview(
+							capturedPullRequest.getId(),
+							capturedEvent, reviewBody);
 					Display.getDefault().asyncExec(
 							() -> refreshView());
 					return Status.OK_STATUS;
