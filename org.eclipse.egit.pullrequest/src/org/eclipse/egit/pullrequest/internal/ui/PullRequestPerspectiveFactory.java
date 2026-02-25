@@ -34,27 +34,31 @@ public class PullRequestPerspectiveFactory implements IPerspectiveFactory {
 				0.3f,
 				editorArea);
 
-		// Changed Files View below the PR List on the left (60% height of left area)
-		layout.addView(
-				PullRequestChangedFilesView.VIEW_ID,
-				IPageLayout.BOTTOM,
-				0.6f,
-				PullRequestListView.VIEW_ID);
+	// Changed Files and Commits Views below the PR List on the left
+	// (60% height of left area) in a tabbed folder
+	IFolderLayout leftBottom = layout.createFolder(
+			"leftBottom", //$NON-NLS-1$
+			IPageLayout.BOTTOM,
+			0.6f,
+			PullRequestListView.VIEW_ID);
+	leftBottom.addView(PullRequestChangedFilesView.VIEW_ID);
+	leftBottom.addView(PullRequestCommitsView.VIEW_ID);
 
-		// Comments View at the bottom (30% height)
-		IFolderLayout bottom = layout.createFolder(
-				"bottom", //$NON-NLS-1$
-				IPageLayout.BOTTOM,
-				0.7f,
-				editorArea);
-		bottom.addView(PullRequestCommentsView.VIEW_ID);
-		bottom.addView(IPageLayout.ID_PROP_SHEET);
+	// Comments View at the bottom (30% height)
+	IFolderLayout bottom = layout.createFolder(
+			"bottom", //$NON-NLS-1$
+			IPageLayout.BOTTOM,
+			0.7f,
+			editorArea);
+	bottom.addView(PullRequestCommentsView.VIEW_ID);
+	bottom.addView(IPageLayout.ID_PROP_SHEET);
 
-		// Window->Show View shortcuts
-		layout.addShowViewShortcut(PullRequestListView.VIEW_ID);
-		layout.addShowViewShortcut(PullRequestChangedFilesView.VIEW_ID);
-		layout.addShowViewShortcut(PullRequestCommentsView.VIEW_ID);
-		layout.addShowViewShortcut(IPageLayout.ID_PROP_SHEET);
+	// Window->Show View shortcuts
+	layout.addShowViewShortcut(PullRequestListView.VIEW_ID);
+	layout.addShowViewShortcut(PullRequestChangedFilesView.VIEW_ID);
+	layout.addShowViewShortcut(PullRequestCommitsView.VIEW_ID);
+	layout.addShowViewShortcut(PullRequestCommentsView.VIEW_ID);
+	layout.addShowViewShortcut(IPageLayout.ID_PROP_SHEET);
 
 		// Window->Perspective->Open shortcuts
 		layout.addPerspectiveShortcut("org.eclipse.egit.ui.GitRepositoriesPerspective"); //$NON-NLS-1$
