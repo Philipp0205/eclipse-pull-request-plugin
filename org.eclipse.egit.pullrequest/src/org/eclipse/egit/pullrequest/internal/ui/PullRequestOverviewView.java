@@ -457,14 +457,16 @@ public class PullRequestOverviewView extends EditorPart {
 			approveBtn.addListener(SWT.Selection,
 					e -> submitReview("APPROVE")); //$NON-NLS-1$
 
-			Button requestChangesBtn = toolkit.createButton(
-					buttonRow,
-					PRText.SubmitReview_RequestChangesAction,
-					SWT.PUSH);
-			requestChangesBtn.setToolTipText(
-					PRText.SubmitReview_RequestChangesTooltip);
-			requestChangesBtn.addListener(SWT.Selection,
-					e -> submitReview("REQUEST_CHANGES")); //$NON-NLS-1$
+			if (client.getCapabilities().supportsRequestChanges()) {
+				Button requestChangesBtn = toolkit.createButton(
+						buttonRow,
+						PRText.SubmitReview_RequestChangesAction,
+						SWT.PUSH);
+				requestChangesBtn.setToolTipText(
+						PRText.SubmitReview_RequestChangesTooltip);
+				requestChangesBtn.addListener(SWT.Selection,
+						e -> submitReview("REQUEST_CHANGES")); //$NON-NLS-1$
+			}
 		}
 	}
 
@@ -945,12 +947,14 @@ public class PullRequestOverviewView extends EditorPart {
 		}
 
 		final String reviewBody = body;
+		final PullRequest pullRequest = currentPullRequest;
+		final IPullRequestClient jobClient = client;
 		Job job = new Job(PRText.SubmitReview_JobName) {
 			@Override
 			protected IStatus run(IProgressMonitor monitor) {
 				try {
-					client.submitReview(
-							currentPullRequest.getId(),
+					jobClient.submitReview(
+							pullRequest.getId(),
 							event, reviewBody);
 					Display.getDefault().asyncExec(
 							() -> refreshView());

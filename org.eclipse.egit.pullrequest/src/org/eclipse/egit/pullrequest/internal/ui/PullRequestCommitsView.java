@@ -26,6 +26,11 @@ import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
 import org.eclipse.egit.pullrequest.internal.client.PullRequestClientFactory;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
+import org.eclipse.jface.action.Action;
+import org.eclipse.jface.action.IMenuListener;
+import org.eclipse.jface.action.IMenuManager;
+import org.eclipse.jface.action.MenuManager;
+import org.eclipse.jface.action.Separator;
 import org.eclipse.jface.layout.GridDataFactory;
 import org.eclipse.jface.layout.GridLayoutFactory;
 import org.eclipse.jface.layout.TableColumnLayout;
@@ -40,6 +45,8 @@ import org.eclipse.jface.viewers.TableViewerColumn;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Menu;
+import org.eclipse.ui.IWorkbenchActionConstants;
 import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.PartInitException;
@@ -95,7 +102,7 @@ public class PullRequestCommitsView extends ViewPart {
 
 		commitsViewer.setInput(commits);
 
-		// Add double-click listener to view single commit or range
+		// Add double-click listener to view single commit
 		commitsViewer.addDoubleClickListener(new IDoubleClickListener() {
 			@Override
 			public void doubleClick(DoubleClickEvent event) {
@@ -103,9 +110,74 @@ public class PullRequestCommitsView extends ViewPart {
 			}
 		});
 
+		// Create context menu
+		createContextMenu();
+
 		// Register as selection provider for view communication
 		getSite().setSelectionProvider(commitsViewer);
 	}
+
+	/**
+	 * Creates the context menu for the commits viewer
+	 */
+	private void createContextMenu() {
+		MenuManager menuMgr = new MenuManager("#PopupMenu"); //$NON-NLS-1$
+		menuMgr.setRemoveAllWhenShown(true);
+		menuMgr.addMenuListener(new IMenuListener() {
+			@Override
+			public void menuAboutToShow(IMenuManager manager) {
+				fillContextMenu(manager);
+			}
+		});
+
+		Menu menu = menuMgr.createContextMenu(commitsViewer.getControl());
+		commitsViewer.getControl().setMenu(menu);
+		getSite().registerContextMenu(menuMgr, commitsViewer);
+	}
+
+	/**
+	 * Fills the context menu with actions based on current selection
+	 *
+	 * @param manager
+	 *            the menu manager
+	 */
+	private void fillContextMenu(IMenuManager manager) {
+		IStructuredSelection selection = (IStructuredSelection) commitsViewer
+				.getSelection();
+
+		if (selection.isEmpty()) {
+			return;
+		}
+
+		if (selection.size() == 1) {
+			// Single commit selected - show "Review Commit" action
+			Action reviewCommitAction = new Action(
+					"Review Commit Changes") { //$NON-NLS-1$
+				@Override
+				public void run() {
+					reviewSingleCommit((PullRequestCommit) selection
+							.getFirstElement());
+				}
+			};
+			manager.add(reviewCommitAction);
+		} else if (selection.size() > 1) {
+			// Multiple commits selected - show "Review Selected Range" action
+			Action reviewRangeAction = new Action(
+					"Review Selected Range") { //$NON-NLS-1$
+				@Override
+				public void run() {
+					reviewCommitRange(selection);
+				}
+			};
+			manager.add(reviewRangeAction);
+		}
+
+		// Add separator for extensibility
+		manager.add(new Separator(IWorkbenchActionConstants.MB_ADDITIONS));
+	}
+
+	@Override
+	public void setFocus() {
 
 	private void setupColumns(TableColumnLayout layout) {
 		// SHA Column
@@ -242,21 +314,32 @@ public class PullRequestCommitsView extends ViewPart {
 	}
 
 	/**
-	 * Handles double-click events on commits. If one commit is selected, shows
-	 * changes for that single commit. If multiple commits are selected, shows
-	 * the combined changes across the range.
+	 * Handles double-click events on commits. Only works for single commit
+	 * selection. For multiple commits, use the context menu.
 	 *
 	 * @param event
 	 *            the double-click event
 	 */
 	private void handleDoubleClick(DoubleClickEvent event) {
-		if (selectedPullRequest == null) {
+		IStructuredSelection selection = (IStructuredSelection) event
+				.getSelection();
+		if (selection.isEmpty() || selection.size() != 1) {
 			return;
 		}
 
-		IStructuredSelection selection = (IStructuredSelection) event
-				.getSelection();
-		if (selection.isEmpty()) {
+		PullRequestCommit commit = (PullRequestCommit) selection
+				.getFirstElement();
+		reviewSingleCommit(commit);
+	}
+
+	/**
+	 * Reviews a single commit by showing its changes in the Changed Files View
+	 *
+	 * @param commit
+	 *            the commit to review
+	 */
+	private void reviewSingleCommit(PullRequestCommit commit) {
+		if (selectedPullRequest == null || commit == null) {
 			return;
 		}
 
@@ -275,50 +358,78 @@ public class PullRequestCommitsView extends ViewPart {
 			}
 
 			PullRequestChangedFilesView changedFilesView = (PullRequestChangedFilesView) part;
+			changedFilesView.loadCommit(selectedPullRequest, commit);
+		} catch (PartInitException e) {
+			Activator.logError("Failed to show changed files view", e); //$NON-NLS-1$
+		}
+	}
 
-			List<?> selectedItems = selection.toList();
-			if (selectedItems.size() == 1) {
-				// Single commit selected - show changes for this commit only
-				PullRequestCommit commit = (PullRequestCommit) selectedItems
-						.get(0);
-				changedFilesView.loadCommit(selectedPullRequest, commit);
-			} else if (selectedItems.size() > 1) {
-				// Multiple commits selected - show range
-				// Find the earliest and latest commits in the selection
-				List<PullRequestCommit> selectedCommits = new ArrayList<>();
-				for (Object item : selectedItems) {
-					if (item instanceof PullRequestCommit) {
-						selectedCommits.add((PullRequestCommit) item);
-					}
+	/**
+	 * Reviews a range of commits by showing combined changes in the Changed
+	 * Files View
+	 *
+	 * @param selection
+	 *            the selection containing multiple commits
+	 */
+	private void reviewCommitRange(IStructuredSelection selection) {
+		if (selectedPullRequest == null || selection.isEmpty()
+				|| selection.size() < 2) {
+			return;
+		}
+
+		// Find the earliest and latest commits in the selection
+		List<PullRequestCommit> selectedCommits = new ArrayList<>();
+		for (Object item : selection.toList()) {
+			if (item instanceof PullRequestCommit) {
+				selectedCommits.add((PullRequestCommit) item);
+			}
+		}
+
+		if (selectedCommits.size() < 2) {
+			return;
+		}
+
+		// Find indices in the commits list to determine range
+		int earliestIndex = Integer.MAX_VALUE;
+		int latestIndex = -1;
+		PullRequestCommit earliestCommit = null;
+		PullRequestCommit latestCommit = null;
+
+		for (PullRequestCommit selectedCommit : selectedCommits) {
+			int index = commits.indexOf(selectedCommit);
+			if (index >= 0) {
+				if (index < earliestIndex) {
+					earliestIndex = index;
+					earliestCommit = selectedCommit;
 				}
-
-				if (selectedCommits.size() >= 2) {
-					// Find indices in the commits list to determine range
-					int earliestIndex = Integer.MAX_VALUE;
-					int latestIndex = -1;
-					PullRequestCommit earliestCommit = null;
-					PullRequestCommit latestCommit = null;
-
-					for (PullRequestCommit selectedCommit : selectedCommits) {
-						int index = commits.indexOf(selectedCommit);
-						if (index >= 0) {
-							if (index < earliestIndex) {
-								earliestIndex = index;
-								earliestCommit = selectedCommit;
-							}
-							if (index > latestIndex) {
-								latestIndex = index;
-								latestCommit = selectedCommit;
-							}
-						}
-					}
-
-					if (earliestCommit != null && latestCommit != null) {
-						changedFilesView.loadCommitRange(selectedPullRequest,
-								earliestCommit, latestCommit);
-					}
+				if (index > latestIndex) {
+					latestIndex = index;
+					latestCommit = selectedCommit;
 				}
 			}
+		}
+
+		if (earliestCommit == null || latestCommit == null) {
+			return;
+		}
+
+		try {
+			IWorkbenchPage page = getSite().getWorkbenchWindow()
+					.getActivePage();
+			if (page == null) {
+				return;
+			}
+
+			// Find or show the changed files view
+			IWorkbenchPart part = page
+					.showView(PullRequestChangedFilesView.VIEW_ID);
+			if (!(part instanceof PullRequestChangedFilesView)) {
+				return;
+			}
+
+			PullRequestChangedFilesView changedFilesView = (PullRequestChangedFilesView) part;
+			changedFilesView.loadCommitRange(selectedPullRequest,
+					earliestCommit, latestCommit);
 		} catch (PartInitException e) {
 			Activator.logError("Failed to show changed files view", e); //$NON-NLS-1$
 		}

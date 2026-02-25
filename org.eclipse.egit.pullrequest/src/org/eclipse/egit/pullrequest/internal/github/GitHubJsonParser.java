@@ -890,7 +890,7 @@ class GitHubJsonParser {
 	 *            the key to extract
 	 * @return the array JSON string including brackets, or null if not found
 	 */
-	private static String extractArray(String json, String key) {
+	static String extractArray(String json, String key) {
 		String pattern = "\"" + key + "\":"; //$NON-NLS-1$ //$NON-NLS-2$
 		int colonIndex = json.indexOf(pattern);
 		if (colonIndex == -1) {

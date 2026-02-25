@@ -28,6 +28,7 @@ import org.eclipse.egit.core.RepositoryCache;
 import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
 import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
 import org.eclipse.egit.pullrequest.internal.client.PullRequestClientFactory;
 import org.eclipse.egit.pullrequest.Activator;

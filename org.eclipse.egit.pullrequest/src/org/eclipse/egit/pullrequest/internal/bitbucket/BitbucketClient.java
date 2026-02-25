@@ -685,6 +685,3 @@ public class BitbucketClient implements IPullRequestClient {
 		return BitbucketJsonParser.parseChangedFiles(jsonResponse);
 	}
 }
-
-	}
-}
