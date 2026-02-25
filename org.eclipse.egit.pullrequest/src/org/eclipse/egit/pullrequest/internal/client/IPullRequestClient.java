@@ -16,6 +16,7 @@ import java.util.List;
 import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
 import org.eclipse.jgit.annotations.NonNull;
 import org.eclipse.jgit.annotations.Nullable;
 
@@ -351,6 +352,18 @@ public interface IPullRequestClient {
 	 *             if the request fails
 	 */
 	void unapproveReview(long pullRequestId) throws IOException;
+
+	/**
+	 * Get the list of commits in the pull request.
+	 *
+	 * @param pullRequestId
+	 *            the pull request ID
+	 * @return list of commits in chronological order
+	 * @throws IOException
+	 *             if an I/O error occurs
+	 */
+	List<PullRequestCommit> getPullRequestCommits(long pullRequestId)
+			throws IOException;
 
 	/**
 	 * @return the capabilities of this provider, indicating which features are

@@ -26,6 +26,7 @@ import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderType;
 import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
 import org.eclipse.jgit.annotations.NonNull;
 import org.eclipse.jgit.annotations.Nullable;
 
@@ -314,6 +315,18 @@ public class BitbucketClient implements IPullRequestClient {
 		return BitbucketJsonParser.extractJsonString(jsonResponse, "name"); //$NON-NLS-1$
 	}
 
+	@Override
+	@NonNull
+	public List<PullRequestCommit> getPullRequestCommits(long pullRequestId)
+			throws IOException {
+		String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+				+ "/repos/" + repositorySlug //$NON-NLS-1$
+				+ "/pull-requests/" + pullRequestId //$NON-NLS-1$
+				+ "/commits?limit=1000"; //$NON-NLS-1$
+		String jsonResponse = executeGet(url);
+		return BitbucketJsonParser.parseCommits(jsonResponse);
+	}
+
 	private String executeGet(String urlString) throws IOException {
 		URL url = new URL(urlString);
 		HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -514,20 +527,15 @@ public class BitbucketClient implements IPullRequestClient {
 	@Override
 	public void submitReview(long pullRequestId, @NonNull String event,
 			@Nullable String body) throws IOException {
-		String currentUser = getCurrentUser();
 		if ("APPROVE".equals(event)) { //$NON-NLS-1$
 			// POST .../approve
-			String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
-					+ "/repos/" + repositorySlug //$NON-NLS-1$
-					+ "/pull-requests/" + pullRequestId //$NON-NLS-1$
-					+ "/approve"; //$NON-NLS-1$
+			String url = buildPullRequestUrl(pullRequestId, "/approve"); //$NON-NLS-1$
 			executePost(url, ""); //$NON-NLS-1$
 		} else if ("REQUEST_CHANGES".equals(event)) { //$NON-NLS-1$
 			// PUT participant status to NEEDS_WORK
-			String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
-					+ "/repos/" + repositorySlug //$NON-NLS-1$
-					+ "/pull-requests/" + pullRequestId //$NON-NLS-1$
-					+ "/participants/" + currentUser; //$NON-NLS-1$
+			String currentUser = getCurrentUser();
+			String url = buildPullRequestUrl(pullRequestId,
+					"/participants/" + currentUser); //$NON-NLS-1$
 			String json = "{\"user\":{\"name\":\"" //$NON-NLS-1$
 					+ escapeJson(currentUser)
 					+ "\"},\"status\":\"NEEDS_WORK\"}"; //$NON-NLS-1$
@@ -542,11 +550,23 @@ public class BitbucketClient implements IPullRequestClient {
 	@Override
 	public void unapproveReview(long pullRequestId) throws IOException {
 		// DELETE .../approve
-		String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
-				+ "/repos/" + repositorySlug //$NON-NLS-1$
-				+ "/pull-requests/" + pullRequestId //$NON-NLS-1$
-				+ "/approve"; //$NON-NLS-1$
+		String url = buildPullRequestUrl(pullRequestId, "/approve"); //$NON-NLS-1$
 		executeDelete(url);
+	}
+
+	/**
+	 * Builds the base URL for pull request API endpoints.
+	 *
+	 * @param pullRequestId
+	 *            the pull request ID
+	 * @param suffix
+	 *            additional path suffix (e.g., "/approve", "/comments")
+	 * @return the complete URL
+	 */
+	private String buildPullRequestUrl(long pullRequestId, String suffix) {
+		return serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+				+ "/repos/" + repositorySlug //$NON-NLS-1$
+				+ "/pull-requests/" + pullRequestId + suffix; //$NON-NLS-1$
 	}
 
 	/**

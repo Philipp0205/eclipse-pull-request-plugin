@@ -236,6 +236,30 @@ public class PRText extends NLS {
 	/** */
 	public static String SubmitReview_RequestChangesTooltip;
 
+	/** */
+	public static String CommitsView_Title;
+
+	/** */
+	public static String CommitsView_ColumnSHA;
+
+	/** */
+	public static String CommitsView_ColumnMessage;
+
+	/** */
+	public static String CommitsView_ColumnAuthor;
+
+	/** */
+	public static String CommitsView_ColumnDate;
+
+	/** */
+	public static String CommitsView_JobFetchingCommits;
+
+	/** */
+	public static String CommitsView_ErrorProviderNotConfigured;
+
+	/** */
+	public static String CommitsView_ErrorFetchingCommits;
+
 	static {
 		initializeMessages("org.eclipse.egit.pullrequest.internal.prtext", //$NON-NLS-1$
 				PRText.class);

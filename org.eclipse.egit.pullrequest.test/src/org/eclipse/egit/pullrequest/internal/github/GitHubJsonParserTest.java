@@ -21,6 +21,7 @@ import java.util.List;
 import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
 import org.junit.Test;
 
 /**
@@ -629,5 +630,64 @@ public class GitHubJsonParserTest {
 				equalTo("core-team")); //$NON-NLS-1$
 		assertThat(pr.getReviewers().get(1).getUser().getDisplayName(),
 				equalTo("Core Team")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseCommit() {
+		String json = "{\"sha\":\"abc123def456\",\"commit\":{\"message\":\"Fix bug in parser\",\"author\":{\"name\":\"John Doe\",\"email\":\"john@example.com\",\"date\":\"2026-01-15T10:30:00Z\"}},\"parents\":[{\"sha\":\"parent1\"},{\"sha\":\"parent2\"}]}"; //$NON-NLS-1$
+
+		PullRequestCommit commit = GitHubJsonParser.parseCommit(json);
+
+		assertThat(commit, notNullValue());
+		assertThat(commit.getId(), equalTo("abc123def456")); //$NON-NLS-1$
+		assertThat(commit.getShortId(), equalTo("abc123d")); //$NON-NLS-1$
+		assertThat(commit.getMessage(), equalTo("Fix bug in parser")); //$NON-NLS-1$
+		assertThat(commit.getFirstLine(), equalTo("Fix bug in parser")); //$NON-NLS-1$
+		assertThat(commit.getAuthorName(), equalTo("John Doe")); //$NON-NLS-1$
+		assertThat(commit.getAuthorEmail(), equalTo("john@example.com")); //$NON-NLS-1$
+		assertThat(commit.getAuthorDate(), equalTo(1736937000000L));
+		assertThat(commit.getParents(), hasSize(2));
+		assertThat(commit.getParents().get(0), equalTo("parent1")); //$NON-NLS-1$
+		assertThat(commit.getParents().get(1), equalTo("parent2")); //$NON-NLS-1$
+		assertThat(commit.isMergeCommit(), equalTo(true));
+	}
+
+	@Test
+	public void testParseCommitMultilineMessage() {
+		String json = "{\"sha\":\"xyz789\",\"commit\":{\"message\":\"First line\\n\\nDetailed description\\non multiple lines\",\"author\":{\"name\":\"Jane Smith\",\"email\":\"jane@example.com\",\"date\":\"2026-01-16T14:20:00Z\"}},\"parents\":[{\"sha\":\"single-parent\"}]}"; //$NON-NLS-1$
+
+		PullRequestCommit commit = GitHubJsonParser.parseCommit(json);
+
+		assertThat(commit, notNullValue());
+		assertThat(commit.getMessage(),
+				equalTo("First line\\n\\nDetailed description\\non multiple lines")); //$NON-NLS-1$
+		assertThat(commit.getFirstLine(), equalTo("First line")); //$NON-NLS-1$
+		assertThat(commit.getParents(), hasSize(1));
+		assertThat(commit.isMergeCommit(), equalTo(false));
+	}
+
+	@Test
+	public void testParseCommits() {
+		String json = "[{\"sha\":\"commit1\",\"commit\":{\"message\":\"First commit\",\"author\":{\"name\":\"Author1\",\"email\":\"author1@test.com\",\"date\":\"2026-01-10T09:00:00Z\"}},\"parents\":[{\"sha\":\"p1\"}]}," //$NON-NLS-1$
+				+ "{\"sha\":\"commit2\",\"commit\":{\"message\":\"Second commit\",\"author\":{\"name\":\"Author2\",\"email\":\"author2@test.com\",\"date\":\"2026-01-11T10:00:00Z\"}},\"parents\":[{\"sha\":\"p2\"}]}]"; //$NON-NLS-1$
+
+		List<PullRequestCommit> commits = GitHubJsonParser.parseCommits(json);
+
+		assertThat(commits, hasSize(2));
+		assertThat(commits.get(0).getId(), equalTo("commit1")); //$NON-NLS-1$
+		assertThat(commits.get(0).getMessage(), equalTo("First commit")); //$NON-NLS-1$
+		assertThat(commits.get(0).getAuthorName(), equalTo("Author1")); //$NON-NLS-1$
+		assertThat(commits.get(1).getId(), equalTo("commit2")); //$NON-NLS-1$
+		assertThat(commits.get(1).getMessage(), equalTo("Second commit")); //$NON-NLS-1$
+		assertThat(commits.get(1).getAuthorName(), equalTo("Author2")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseCommitsEmptyArray() {
+		String json = "[]"; //$NON-NLS-1$
+
+		List<PullRequestCommit> commits = GitHubJsonParser.parseCommits(json);
+
+		assertThat(commits, hasSize(0));
 	}
 }
