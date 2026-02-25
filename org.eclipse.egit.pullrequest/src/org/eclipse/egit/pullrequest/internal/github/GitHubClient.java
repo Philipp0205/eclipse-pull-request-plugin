@@ -850,15 +850,19 @@ public class GitHubClient implements IPullRequestClient {
 				os.write(body.getBytes(StandardCharsets.UTF_8));
 			}
 
-			int responseCode = conn.getResponseCode();
-			if (responseCode != 200 && responseCode != 201) {
-				String error = readError(conn);
-				throw new IOException(
-						"GitHub API request failed: HTTP " + responseCode //$NON-NLS-1$
-								+ " - " + error); //$NON-NLS-1$
-			}
+		int responseCode = conn.getResponseCode();
+		if (responseCode < 200 || responseCode >= 300) {
+			String error = readError(conn);
+			throw new IOException(
+					"GitHub API request failed: HTTP " + responseCode //$NON-NLS-1$
+							+ " - " + error); //$NON-NLS-1$
+		}
 
-			return readResponse(conn);
+		if (responseCode == HttpURLConnection.HTTP_NO_CONTENT) {
+			return ""; //$NON-NLS-1$
+		}
+
+		return readResponse(conn);
 
 		} finally {
 			if (conn != null) {
@@ -1161,18 +1165,15 @@ public class GitHubClient implements IPullRequestClient {
 		String path = "/repos/" + owner + "/" + repo //$NON-NLS-1$ //$NON-NLS-2$
 				+ "/pulls/" + pullRequestId + "/reviews"; //$NON-NLS-1$ //$NON-NLS-2$
 
-		StringBuilder json = new StringBuilder();
-		json.append("{\"event\":\""); //$NON-NLS-1$
-		json.append(escapeJson(event));
-		json.append("\""); //$NON-NLS-1$
+		String json;
 		if (body != null && !body.isEmpty()) {
-			json.append(",\"body\":\""); //$NON-NLS-1$
-			json.append(escapeJson(body));
-			json.append("\""); //$NON-NLS-1$
+			json = "{\"event\":\"" + escapeJson(event) //$NON-NLS-1$
+					+ "\",\"body\":\"" + escapeJson(body) + "\"}"; //$NON-NLS-1$ //$NON-NLS-2$
+		} else {
+			json = "{\"event\":\"" + escapeJson(event) + "\"}"; //$NON-NLS-1$ //$NON-NLS-2$
 		}
-		json.append("}"); //$NON-NLS-1$
 
-		doPost(path, json.toString());
+		doPost(path, json);
 	}
 
 	@Override
@@ -1180,18 +1181,27 @@ public class GitHubClient implements IPullRequestClient {
 		// GitHub: dismiss the latest APPROVED review by current user
 		// First, list reviews to find the latest approval
 		String path = "/repos/" + owner + "/" + repo //$NON-NLS-1$ //$NON-NLS-2$
-				+ "/pulls/" + pullRequestId + "/reviews"; //$NON-NLS-1$ //$NON-NLS-2$
-		String response = doGet(path);
+				+ "/pulls/" + pullRequestId + "/reviews?per_page=100"; //$NON-NLS-1$ //$NON-NLS-2$
+		List<String> pages = doGetAllPages(path);
 
 		// Find the latest review with state "APPROVED" by current user
 		String currentUser = getCurrentUser();
-		long reviewId = findLatestApprovalReviewId(response, currentUser);
+		long reviewId = -1;
+		for (String page : pages) {
+			long pageReviewId = findLatestApprovalReviewId(page, currentUser);
+			if (pageReviewId > reviewId) {
+				reviewId = pageReviewId;
+			}
+		}
+
 		if (reviewId == -1) {
 			return; // No approval to dismiss
 		}
 
 		// Dismiss the review
-		String dismissPath = path + "/" + reviewId + "/dismissals"; //$NON-NLS-1$ //$NON-NLS-2$
+		String dismissPath = "/repos/" + owner + "/" + repo //$NON-NLS-1$ //$NON-NLS-2$
+				+ "/pulls/" + pullRequestId + "/reviews/" //$NON-NLS-1$ //$NON-NLS-2$
+				+ reviewId + "/dismissals"; //$NON-NLS-1$
 		String dismissBody = "{\"message\":\"Review dismissed\"}"; //$NON-NLS-1$
 		// GitHub uses PUT to dismiss
 		doPut(dismissPath, dismissBody);

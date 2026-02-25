@@ -514,18 +514,17 @@ public class BitbucketClient implements IPullRequestClient {
 	@Override
 	public void submitReview(long pullRequestId, @NonNull String event,
 			@Nullable String body) throws IOException {
-		String currentUser = getCurrentUser();
 		if ("APPROVE".equals(event)) { //$NON-NLS-1$
 			// POST .../approve
-			String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
-					+ "/repos/" + repositorySlug //$NON-NLS-1$
-					+ "/pull-requests/" + pullRequestId //$NON-NLS-1$
-					+ "/approve"; //$NON-NLS-1$
+			String url = serverUrl + API_BASE_PATH + "/projects/" //$NON-NLS-1$
+					+ projectKey + "/repos/" + repositorySlug //$NON-NLS-1$
+					+ "/pull-requests/" + pullRequestId + "/approve"; //$NON-NLS-1$ //$NON-NLS-2$
 			executePost(url, ""); //$NON-NLS-1$
 		} else if ("REQUEST_CHANGES".equals(event)) { //$NON-NLS-1$
 			// PUT participant status to NEEDS_WORK
-			String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
-					+ "/repos/" + repositorySlug //$NON-NLS-1$
+			String currentUser = getCurrentUser();
+			String url = serverUrl + API_BASE_PATH + "/projects/" //$NON-NLS-1$
+					+ projectKey + "/repos/" + repositorySlug //$NON-NLS-1$
 					+ "/pull-requests/" + pullRequestId //$NON-NLS-1$
 					+ "/participants/" + currentUser; //$NON-NLS-1$
 			String json = "{\"user\":{\"name\":\"" //$NON-NLS-1$
@@ -542,10 +541,9 @@ public class BitbucketClient implements IPullRequestClient {
 	@Override
 	public void unapproveReview(long pullRequestId) throws IOException {
 		// DELETE .../approve
-		String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
-				+ "/repos/" + repositorySlug //$NON-NLS-1$
-				+ "/pull-requests/" + pullRequestId //$NON-NLS-1$
-				+ "/approve"; //$NON-NLS-1$
+		String url = serverUrl + API_BASE_PATH + "/projects/" //$NON-NLS-1$
+				+ projectKey + "/repos/" + repositorySlug //$NON-NLS-1$
+				+ "/pull-requests/" + pullRequestId + "/approve"; //$NON-NLS-1$ //$NON-NLS-2$
 		executeDelete(url);
 	}
 

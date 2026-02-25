@@ -457,14 +457,16 @@ public class PullRequestOverviewView extends EditorPart {
 			approveBtn.addListener(SWT.Selection,
 					e -> submitReview("APPROVE")); //$NON-NLS-1$
 
-			Button requestChangesBtn = toolkit.createButton(
-					buttonRow,
-					PRText.SubmitReview_RequestChangesAction,
-					SWT.PUSH);
-			requestChangesBtn.setToolTipText(
-					PRText.SubmitReview_RequestChangesTooltip);
-			requestChangesBtn.addListener(SWT.Selection,
-					e -> submitReview("REQUEST_CHANGES")); //$NON-NLS-1$
+			if (client.getCapabilities().supportsRequestChanges()) {
+				Button requestChangesBtn = toolkit.createButton(
+						buttonRow,
+						PRText.SubmitReview_RequestChangesAction,
+						SWT.PUSH);
+				requestChangesBtn.setToolTipText(
+						PRText.SubmitReview_RequestChangesTooltip);
+				requestChangesBtn.addListener(SWT.Selection,
+						e -> submitReview("REQUEST_CHANGES")); //$NON-NLS-1$
+			}
 		}
 	}
 
@@ -930,6 +932,11 @@ public class PullRequestOverviewView extends EditorPart {
 			return;
 		}
 
+		// Capture mutable state before creating Job to prevent race conditions
+		final IPullRequestClient capturedClient = client;
+		final PullRequest capturedPullRequest = currentPullRequest;
+		final String capturedEvent = event;
+
 		// For REQUEST_CHANGES, prompt for a body message
 		String body = null;
 		if ("REQUEST_CHANGES".equals(event)) { //$NON-NLS-1$
@@ -949,9 +956,9 @@ public class PullRequestOverviewView extends EditorPart {
 			@Override
 			protected IStatus run(IProgressMonitor monitor) {
 				try {
-					client.submitReview(
-							currentPullRequest.getId(),
-							event, reviewBody);
+					capturedClient.submitReview(
+							capturedPullRequest.getId(),
+							capturedEvent, reviewBody);
 					Display.getDefault().asyncExec(
 							() -> refreshView());
 					return Status.OK_STATUS;
