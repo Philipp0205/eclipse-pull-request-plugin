@@ -630,14 +630,14 @@ public class BitbucketClient implements IPullRequestClient {
 	}
 
 	/**
-	 * Execute a generic HTTP request
+	 * Execute an HTTP request with the specified method and optional body
 	 *
 	 * @param urlString
-	 *            the URL to request
+	 *            the full URL
 	 * @param method
-	 *            the HTTP method (GET, POST, PUT, DELETE)
+	 *            HTTP method (GET, POST, PUT, DELETE)
 	 * @param jsonBody
-	 *            the JSON body (can be null for GET/DELETE)
+	 *            the JSON body for POST/PUT requests, null for GET/DELETE
 	 * @return the response string, or empty string for DELETE
 	 * @throws IOException
 	 *             if the request fails
@@ -656,5 +656,35 @@ public class BitbucketClient implements IPullRequestClient {
 		} else {
 			throw new IOException("Unsupported HTTP method: " + method); //$NON-NLS-1$
 		}
+	}
+
+	@Override
+	public @NonNull List<ChangedFile> getCommitChanges(
+			@NonNull String commitSha) throws IOException {
+		// Bitbucket: GET /rest/api/1.0/projects/{key}/repos/{slug}/commits/{sha}/changes
+		String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+				+ "/repos/" + repositorySlug //$NON-NLS-1$
+				+ "/commits/" + commitSha + "/changes?limit=1000"; //$NON-NLS-1$ //$NON-NLS-2$
+
+		String jsonResponse = executeGet(url);
+		return BitbucketJsonParser.parseChangedFiles(jsonResponse);
+	}
+
+	@Override
+	public @NonNull List<ChangedFile> getCommitRangeChanges(
+			@NonNull String baseCommitSha, @NonNull String headCommitSha)
+			throws IOException {
+		// Bitbucket: GET /rest/api/1.0/projects/{key}/repos/{slug}/commits/{sha}/changes
+		// with sinceId parameter to get changes between commits
+		String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+				+ "/repos/" + repositorySlug //$NON-NLS-1$
+				+ "/commits/" + headCommitSha + "/changes?sinceId=" //$NON-NLS-1$ //$NON-NLS-2$
+				+ baseCommitSha + "&limit=1000"; //$NON-NLS-1$
+
+		String jsonResponse = executeGet(url);
+		return BitbucketJsonParser.parseChangedFiles(jsonResponse);
+	}
+}
+
 	}
 }

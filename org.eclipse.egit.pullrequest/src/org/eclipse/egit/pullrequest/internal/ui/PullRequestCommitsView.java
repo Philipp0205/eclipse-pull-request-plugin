@@ -31,12 +31,18 @@ import org.eclipse.jface.layout.GridLayoutFactory;
 import org.eclipse.jface.layout.TableColumnLayout;
 import org.eclipse.jface.viewers.ColumnLabelProvider;
 import org.eclipse.jface.viewers.ColumnWeightData;
+import org.eclipse.jface.viewers.DoubleClickEvent;
+import org.eclipse.jface.viewers.IDoubleClickListener;
 import org.eclipse.jface.viewers.IStructuredContentProvider;
+import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.viewers.TableViewer;
 import org.eclipse.jface.viewers.TableViewerColumn;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.ui.IWorkbenchPage;
+import org.eclipse.ui.IWorkbenchPart;
+import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.part.ViewPart;
 
 /**
@@ -88,6 +94,14 @@ public class PullRequestCommitsView extends ViewPart {
 		});
 
 		commitsViewer.setInput(commits);
+
+		// Add double-click listener to view single commit or range
+		commitsViewer.addDoubleClickListener(new IDoubleClickListener() {
+			@Override
+			public void doubleClick(DoubleClickEvent event) {
+				handleDoubleClick(event);
+			}
+		});
 
 		// Register as selection provider for view communication
 		getSite().setSelectionProvider(commitsViewer);
@@ -224,6 +238,89 @@ public class PullRequestCommitsView extends ViewPart {
 					+ selectedPullRequest.getTitle());
 		} else {
 			setContentDescription(PRText.CommitsView_Title);
+		}
+	}
+
+	/**
+	 * Handles double-click events on commits. If one commit is selected, shows
+	 * changes for that single commit. If multiple commits are selected, shows
+	 * the combined changes across the range.
+	 *
+	 * @param event
+	 *            the double-click event
+	 */
+	private void handleDoubleClick(DoubleClickEvent event) {
+		if (selectedPullRequest == null) {
+			return;
+		}
+
+		IStructuredSelection selection = (IStructuredSelection) event
+				.getSelection();
+		if (selection.isEmpty()) {
+			return;
+		}
+
+		try {
+			IWorkbenchPage page = getSite().getWorkbenchWindow()
+					.getActivePage();
+			if (page == null) {
+				return;
+			}
+
+			// Find or show the changed files view
+			IWorkbenchPart part = page
+					.showView(PullRequestChangedFilesView.VIEW_ID);
+			if (!(part instanceof PullRequestChangedFilesView)) {
+				return;
+			}
+
+			PullRequestChangedFilesView changedFilesView = (PullRequestChangedFilesView) part;
+
+			List<?> selectedItems = selection.toList();
+			if (selectedItems.size() == 1) {
+				// Single commit selected - show changes for this commit only
+				PullRequestCommit commit = (PullRequestCommit) selectedItems
+						.get(0);
+				changedFilesView.loadCommit(selectedPullRequest, commit);
+			} else if (selectedItems.size() > 1) {
+				// Multiple commits selected - show range
+				// Find the earliest and latest commits in the selection
+				List<PullRequestCommit> selectedCommits = new ArrayList<>();
+				for (Object item : selectedItems) {
+					if (item instanceof PullRequestCommit) {
+						selectedCommits.add((PullRequestCommit) item);
+					}
+				}
+
+				if (selectedCommits.size() >= 2) {
+					// Find indices in the commits list to determine range
+					int earliestIndex = Integer.MAX_VALUE;
+					int latestIndex = -1;
+					PullRequestCommit earliestCommit = null;
+					PullRequestCommit latestCommit = null;
+
+					for (PullRequestCommit selectedCommit : selectedCommits) {
+						int index = commits.indexOf(selectedCommit);
+						if (index >= 0) {
+							if (index < earliestIndex) {
+								earliestIndex = index;
+								earliestCommit = selectedCommit;
+							}
+							if (index > latestIndex) {
+								latestIndex = index;
+								latestCommit = selectedCommit;
+							}
+						}
+					}
+
+					if (earliestCommit != null && latestCommit != null) {
+						changedFilesView.loadCommitRange(selectedPullRequest,
+								earliestCommit, latestCommit);
+					}
+				}
+			}
+		} catch (PartInitException e) {
+			Activator.logError("Failed to show changed files view", e); //$NON-NLS-1$
 		}
 	}
 

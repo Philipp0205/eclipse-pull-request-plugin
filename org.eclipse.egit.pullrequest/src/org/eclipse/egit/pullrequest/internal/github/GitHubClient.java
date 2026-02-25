@@ -1358,4 +1358,36 @@ public class GitHubClient implements IPullRequestClient {
 
 		executeRequest(path, "POST", json.toString()); //$NON-NLS-1$
 	}
+
+	@Override
+	public @NonNull List<ChangedFile> getCommitChanges(
+			@NonNull String commitSha) throws IOException {
+		String path = "/repos/" + owner + "/" + repo + "/commits/" //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				+ commitSha;
+		String response = doGet(path);
+
+		// GitHub returns commit object with files array
+		String filesJson = GitHubJsonParser.extractArray(response, "files"); //$NON-NLS-1$
+		if (filesJson == null) {
+			return new ArrayList<>();
+		}
+		return GitHubJsonParser.parseChangedFiles(filesJson);
+	}
+
+	@Override
+	public @NonNull List<ChangedFile> getCommitRangeChanges(
+			@NonNull String baseCommitSha, @NonNull String headCommitSha)
+			throws IOException {
+		// GitHub compare API: GET /repos/{owner}/{repo}/compare/{base}...{head}
+		String path = "/repos/" + owner + "/" + repo + "/compare/" //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				+ baseCommitSha + "..." + headCommitSha; //$NON-NLS-1$
+		String response = doGet(path);
+
+		// Response contains files array with changed files
+		String filesJson = GitHubJsonParser.extractArray(response, "files"); //$NON-NLS-1$
+		if (filesJson == null) {
+			return new ArrayList<>();
+		}
+		return GitHubJsonParser.parseChangedFiles(filesJson);
+	}
 }

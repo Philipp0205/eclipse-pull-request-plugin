@@ -366,6 +366,35 @@ public interface IPullRequestClient {
 			throws IOException;
 
 	/**
+	 * Retrieves changed files for a specific commit.
+	 *
+	 * @param commitSha
+	 *            the commit SHA
+	 * @return list of changed files in the commit
+	 * @throws IOException
+	 *             if the request fails
+	 */
+	@NonNull
+	List<ChangedFile> getCommitChanges(@NonNull String commitSha)
+			throws IOException;
+
+	/**
+	 * Retrieves changed files for a range of commits. The range is inclusive
+	 * of both base and head commits.
+	 *
+	 * @param baseCommitSha
+	 *            the starting commit SHA (older commit)
+	 * @param headCommitSha
+	 *            the ending commit SHA (newer commit)
+	 * @return list of changed files across the commit range
+	 * @throws IOException
+	 *             if the request fails
+	 */
+	@NonNull
+	List<ChangedFile> getCommitRangeChanges(@NonNull String baseCommitSha,
+			@NonNull String headCommitSha) throws IOException;
+
+	/**
 	 * @return the capabilities of this provider, indicating which features are
 	 *         supported
 	 */
