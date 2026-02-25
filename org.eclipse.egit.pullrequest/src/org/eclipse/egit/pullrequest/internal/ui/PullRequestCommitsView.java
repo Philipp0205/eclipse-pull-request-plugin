@@ -176,9 +176,6 @@ public class PullRequestCommitsView extends ViewPart {
 		manager.add(new Separator(IWorkbenchActionConstants.MB_ADDITIONS));
 	}
 
-	@Override
-	public void setFocus() {
-
 	private void setupColumns(TableColumnLayout layout) {
 		// SHA Column
 		TableViewerColumn shaColumn = createColumn(layout,
