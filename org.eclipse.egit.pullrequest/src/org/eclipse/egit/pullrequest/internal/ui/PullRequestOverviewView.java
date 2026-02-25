@@ -924,4 +924,47 @@ public class PullRequestOverviewView extends EditorPart {
 		}
 		return sb.toString();
 	}
+
+	private void submitReview(String event) {
+		if (currentPullRequest == null || client == null) {
+			return;
+		}
+
+		// For REQUEST_CHANGES, prompt for a body message
+		String body = null;
+		if ("REQUEST_CHANGES".equals(event)) { //$NON-NLS-1$
+			MultiLineInputDialog dialog = new MultiLineInputDialog(
+					getSite().getShell(),
+					PRText.SubmitReview_DialogTitle,
+					PRText.SubmitReview_DialogMessage,
+					""); //$NON-NLS-1$
+			if (dialog.open() != org.eclipse.jface.window.Window.OK) {
+				return;
+			}
+			body = dialog.getValue();
+		}
+
+		final String reviewBody = body;
+		Job job = new Job(PRText.SubmitReview_JobName) {
+			@Override
+			protected IStatus run(IProgressMonitor monitor) {
+				try {
+					client.submitReview(
+							currentPullRequest.getId(),
+							event, reviewBody);
+					Display.getDefault().asyncExec(
+							() -> refreshView());
+					return Status.OK_STATUS;
+				} catch (IOException e) {
+					Activator.logError(
+							PRText.SubmitReview_Error, e);
+					return new Status(IStatus.ERROR,
+							Activator.PLUGIN_ID,
+							PRText.SubmitReview_Error, e);
+				}
+			}
+		};
+		job.setUser(true);
+		job.schedule();
+	}
 }
