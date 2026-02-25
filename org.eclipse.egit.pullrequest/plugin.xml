@@ -77,14 +77,17 @@
             id="org.eclipse.egit.pullrequest.PullRequestCommentsView"
             name="%PullRequestCommentsView">
       </view>
-      <view
-            allowMultiple="false"
-            category="org.eclipse.egit.pullrequest.PullRequestCategory"
+   </extension>
+
+   <!-- Editors -->
+   <extension
+         point="org.eclipse.ui.editors">
+      <editor
             class="org.eclipse.egit.pullrequest.internal.ui.PullRequestOverviewView"
             icon="icons/obj16/gitrepository.png"
-            id="org.eclipse.egit.pullrequest.PullRequestOverviewView"
+            id="org.eclipse.egit.pullrequest.PullRequestOverviewEditor"
             name="%PullRequestOverviewView">
-      </view>
+      </editor>
    </extension>
 
    <!-- Perspective -->

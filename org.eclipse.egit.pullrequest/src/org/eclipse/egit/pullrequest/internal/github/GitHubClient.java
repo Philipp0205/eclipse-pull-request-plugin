@@ -907,6 +907,45 @@ public class GitHubClient implements IPullRequestClient {
 	}
 
 	/**
+	 * Performs a PUT request to the GitHub API
+	 *
+	 * @param path
+	 *            the API path (relative to API base URL)
+	 * @param body
+	 *            the JSON body to send
+	 * @return the response body
+	 * @throws IOException
+	 *             if the request fails
+	 */
+	private String doPut(String path, String body) throws IOException {
+		HttpURLConnection conn = null;
+		try {
+			conn = createConnection(path, "PUT"); //$NON-NLS-1$
+			conn.setDoOutput(true);
+
+			// Write request body
+			try (OutputStream os = conn.getOutputStream()) {
+				os.write(body.getBytes(StandardCharsets.UTF_8));
+			}
+
+			int responseCode = conn.getResponseCode();
+			if (responseCode != 200) {
+				String error = readError(conn);
+				throw new IOException(
+						"GitHub API request failed: HTTP " + responseCode //$NON-NLS-1$
+								+ " - " + error); //$NON-NLS-1$
+			}
+
+			return readResponse(conn);
+
+		} finally {
+			if (conn != null) {
+				conn.disconnect();
+			}
+		}
+	}
+
+	/**
 	 * Performs a DELETE request to the GitHub API
 	 *
 	 * @param path

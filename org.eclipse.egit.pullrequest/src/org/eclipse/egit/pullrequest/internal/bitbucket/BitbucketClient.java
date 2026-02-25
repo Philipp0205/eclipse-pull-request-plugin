@@ -68,6 +68,7 @@ public class BitbucketClient implements IPullRequestClient {
 		this.repositorySlug = repositorySlug;
 		this.token = token;
 		this.capabilities = new PullRequestProviderCapabilities(true, true,
+				true, true,
 				"OPEN", "MERGED", "DECLINED", "ALL"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 	}
 
@@ -311,16 +312,6 @@ public class BitbucketClient implements IPullRequestClient {
 		String jsonResponse = executeGet(url);
 		// Parse username from response: {"name":"username",...}
 		return BitbucketJsonParser.extractJsonString(jsonResponse, "name"); //$NON-NLS-1$
-	}
-
-
-
-	private static String escapeJson(String text) {
-		return text.replace("\\", "\\\\") //$NON-NLS-1$ //$NON-NLS-2$
-				.replace("\"", "\\\"") //$NON-NLS-1$ //$NON-NLS-2$
-				.replace("\n", "\\n") //$NON-NLS-1$ //$NON-NLS-2$
-				.replace("\r", "\\r") //$NON-NLS-1$ //$NON-NLS-2$
-				.replace("\t", "\\t"); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
 	private String executeGet(String urlString) throws IOException {

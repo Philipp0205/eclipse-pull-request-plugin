@@ -47,14 +47,12 @@ public class PullRequestPerspectiveFactory implements IPerspectiveFactory {
 				IPageLayout.BOTTOM,
 				0.7f,
 				editorArea);
-		bottom.addView(PullRequestOverviewView.VIEW_ID);
 		bottom.addView(PullRequestCommentsView.VIEW_ID);
 		bottom.addView(IPageLayout.ID_PROP_SHEET);
 
 		// Window->Show View shortcuts
 		layout.addShowViewShortcut(PullRequestListView.VIEW_ID);
 		layout.addShowViewShortcut(PullRequestChangedFilesView.VIEW_ID);
-		layout.addShowViewShortcut(PullRequestOverviewView.VIEW_ID);
 		layout.addShowViewShortcut(PullRequestCommentsView.VIEW_ID);
 		layout.addShowViewShortcut(IPageLayout.ID_PROP_SHEET);
 

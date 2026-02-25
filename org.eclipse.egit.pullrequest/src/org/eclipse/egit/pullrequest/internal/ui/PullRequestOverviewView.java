@@ -85,6 +85,8 @@ public class PullRequestOverviewView extends EditorPart {
 
 	private StyledText descriptionWidget;
 
+	private IPullRequestClient client;
+
 	@Override
 	public void init(IEditorSite site, IEditorInput input)
 			throws PartInitException {
@@ -105,6 +107,7 @@ public class PullRequestOverviewView extends EditorPart {
 	@Override
 	public void createPartControl(Composite parent) {
 		dateFormatter = PreferenceBasedDateFormatter.create();
+		client = createClient();
 		toolkit = new FormToolkit(parent.getDisplay());
 		parent.addDisposeListener(e -> {
 			toolkit.dispose();
@@ -408,7 +411,7 @@ public class PullRequestOverviewView extends EditorPart {
 	private void renderActions(Composite parent) {
 		Composite buttonRow = toolkit.createComposite(
 				parent);
-		GridLayoutFactory.fillDefaults().numColumns(6)
+		GridLayoutFactory.fillDefaults().numColumns(8)
 				.spacing(8, 0).applyTo(buttonRow);
 		GridDataFactory.fillDefaults().grab(true, false)
 				.span(2, 1).applyTo(buttonRow);
@@ -443,6 +446,26 @@ public class PullRequestOverviewView extends EditorPart {
 				PRText.CheckoutBranch_ActionLabel, SWT.PUSH);
 		checkoutBtn.addListener(SWT.Selection,
 				e -> checkoutSourceBranch());
+
+		if (client != null
+				&& client.getCapabilities()
+						.supportsReviewSubmission()) {
+			Button approveBtn = toolkit.createButton(buttonRow,
+					PRText.SubmitReview_ApproveAction, SWT.PUSH);
+			approveBtn.setToolTipText(
+					PRText.SubmitReview_ApproveTooltip);
+			approveBtn.addListener(SWT.Selection,
+					e -> submitReview("APPROVE")); //$NON-NLS-1$
+
+			Button requestChangesBtn = toolkit.createButton(
+					buttonRow,
+					PRText.SubmitReview_RequestChangesAction,
+					SWT.PUSH);
+			requestChangesBtn.setToolTipText(
+					PRText.SubmitReview_RequestChangesTooltip);
+			requestChangesBtn.addListener(SWT.Selection,
+					e -> submitReview("REQUEST_CHANGES")); //$NON-NLS-1$
+		}
 	}
 
 	private void createMetaRow(Composite parent, String label,

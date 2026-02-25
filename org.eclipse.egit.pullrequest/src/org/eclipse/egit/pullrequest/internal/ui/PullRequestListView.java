@@ -613,7 +613,7 @@ public class PullRequestListView extends ViewPart {
 
 	/**
 	 * Loads a pull request by opening the PullRequestChangedFilesView and
-	 * triggering it to fetch and display the PR's changed files and comments.
+	 * the PR Overview editor.
 	 *
 	 * @param pr
 	 *            the pull request to load
@@ -623,13 +623,10 @@ public class PullRequestListView extends ViewPart {
 			IWorkbenchPage page = getSite().getWorkbenchWindow()
 					.getActivePage();
 
-			// Update overview view
-			IWorkbenchPart overviewPart = page
-					.showView(PullRequestOverviewView.VIEW_ID);
-			if (overviewPart instanceof PullRequestOverviewView) {
-				((PullRequestOverviewView) overviewPart)
-						.loadPullRequest(pr);
-			}
+			// Open overview editor
+			PullRequestOverviewEditorInput input =
+					new PullRequestOverviewEditorInput(pr);
+			page.openEditor(input, PullRequestOverviewView.EDITOR_ID);
 
 			// Update changed files view
 			IWorkbenchPart part = page
