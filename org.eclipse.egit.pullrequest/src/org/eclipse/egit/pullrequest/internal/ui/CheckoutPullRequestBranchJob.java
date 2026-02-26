@@ -11,6 +11,7 @@
 package org.eclipse.egit.pullrequest.internal.ui;
 
 import java.net.URISyntaxException;
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -66,31 +67,31 @@ public class CheckoutPullRequestBranchJob extends Job {
 			Repository repo = RepositoryResolver.resolve(pullRequest);
 			if (repo == null) {
 				showError(PRText.CheckoutBranch_ErrorNoRepository);
-				return Status.CANCEL_STATUS;
-			}
-			monitor.worked(1);
+			return Status.CANCEL_STATUS;
+		}
+		monitor.worked(1);
 
-			// 2. Determine remote and fetch
-			monitor.subTask("Fetching branch..."); //$NON-NLS-1$
-			String remoteName = determineRemote(repo);
-			if (remoteName == null) {
-				showError("Could not determine remote for pull request"); //$NON-NLS-1$
-				return Status.CANCEL_STATUS;
-			}
+		// 2. Determine remote and fetch
+		monitor.subTask("Fetching branch..."); //$NON-NLS-1$
+		String remoteName = determineRemote(repo);
+		if (remoteName == null) {
+			showError("Could not determine remote for pull request"); //$NON-NLS-1$
+			return Status.CANCEL_STATUS;
+		}
 
-			String branchName = pullRequest.getFromRef().getDisplayId();
-			if (!fetchBranch(repo, remoteName, branchName, monitor)) {
-				showError(String.format(
-						PRText.CheckoutBranch_ErrorFetchFailed, branchName));
-				return Status.CANCEL_STATUS;
-			}
-			monitor.worked(1);
+		String branchName = pullRequest.getFromRef().getDisplayId();
+		if (!fetchBranch(repo, remoteName, branchName, monitor)) {
+			showError(MessageFormat.format(
+					PRText.CheckoutBranch_ErrorFetchFailed, branchName));
+			return Status.CANCEL_STATUS;
+		}
+		monitor.worked(1);
 
-			// 3. Show confirmation dialog
-			monitor.subTask("Confirming checkout..."); //$NON-NLS-1$
-			if (!confirmCheckout(branchName, remoteName)) {
-				return Status.CANCEL_STATUS;
-			}
+		// 3. Show confirmation dialog
+		monitor.subTask("Confirming checkout..."); //$NON-NLS-1$
+		if (!confirmCheckout(branchName, remoteName)) {
+			return Status.CANCEL_STATUS;
+		}
 			monitor.worked(1);
 
 			// 4. Checkout branch
@@ -239,7 +240,7 @@ public class CheckoutPullRequestBranchJob extends Job {
 					? commitSha.substring(0, 7)
 					: commitSha;
 
-			String message = String.format(
+			String message = MessageFormat.format(
 					PRText.CheckoutBranch_ConfirmMessage, branchName, repoName,
 					shortSha != null ? shortSha : "unknown"); //$NON-NLS-1$
 
