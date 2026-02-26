@@ -180,8 +180,10 @@ class GitHubJsonParser {
 			pr.setAuthor(author);
 		}
 
-		// Parse comment count
-		pr.setCommentCount(extractInt(json, "comments")); //$NON-NLS-1$
+		// Parse comment count (sum of issue comments + review comments)
+		int issueComments = extractInt(json, "comments"); //$NON-NLS-1$
+		int reviewComments = extractInt(json, "review_comments"); //$NON-NLS-1$
+		pr.setCommentCount(issueComments + reviewComments);
 
 		// Parse reviewers (requested_reviewers)
 		String requestedReviewersJson = extractArray(json,
@@ -403,6 +405,64 @@ class GitHubJsonParser {
 		}
 
 		return result;
+	}
+
+	/**
+	 * Counts the number of elements in a JSON array
+	 *
+	 * @param json
+	 *            the JSON array string
+	 * @return the count of array elements, or 0 if not a valid array
+	 */
+	static int countArrayElements(String json) {
+		if (json == null || json.trim().isEmpty()
+				|| json.trim().equals("[]")) { //$NON-NLS-1$
+			return 0;
+		}
+
+		json = json.trim();
+		if (!json.startsWith("[")) { //$NON-NLS-1$
+			return 0;
+		}
+
+		int count = 0;
+		int depth = 0;
+		boolean inString = false;
+		boolean escaped = false;
+
+		for (int i = 1; i < json.length(); i++) {
+			char c = json.charAt(i);
+
+			// Handle escape sequences
+			if (escaped) {
+				escaped = false;
+				continue;
+			}
+			if (c == '\\') {
+				escaped = true;
+				continue;
+			}
+
+			// Track string boundaries
+			if (c == '"') {
+				inString = !inString;
+				continue;
+			}
+
+			// Only process structural characters when NOT inside a string
+			if (!inString) {
+				if (c == '{') {
+					depth++;
+				} else if (c == '}') {
+					depth--;
+					if (depth == 0) {
+						count++;
+					}
+				}
+			}
+		}
+
+		return count;
 	}
 
 	/**

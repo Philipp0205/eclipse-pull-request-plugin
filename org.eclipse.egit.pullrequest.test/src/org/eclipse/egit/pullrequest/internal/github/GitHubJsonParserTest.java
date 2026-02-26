@@ -459,6 +459,7 @@ public class GitHubJsonParserTest {
 		// Test that comment count is correctly extracted even when
 		// comments_url, review_comments_url appear before comments field
 		// (regression test for substring matching bug)
+		// Also verifies that both issue comments and review comments are summed
 		String json = "{\"number\":42,\"title\":\"Test PR\"," //$NON-NLS-1$
 				+ "\"state\":\"open\",\"body\":\"desc\"," //$NON-NLS-1$
 				+ "\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
@@ -483,8 +484,8 @@ public class GitHubJsonParserTest {
 		PullRequest pr = GitHubJsonParser.parseSinglePullRequest(json);
 
 		assertThat(pr, notNullValue());
-		// The comment count should be 7, not 0 or 3
-		assertThat(pr.getCommentCount(), equalTo(7));
+		// The comment count should be 7 + 3 = 10 (issue comments + review comments)
+		assertThat(pr.getCommentCount(), equalTo(10));
 	}
 
 	@Test
@@ -720,5 +721,63 @@ public class GitHubJsonParserTest {
 		assertThat(comment, notNullValue());
 		assertThat(comment.getAuthorName(), equalTo("noavatar")); //$NON-NLS-1$
 		assertThat(comment.getAuthorAvatarUrl(), nullValue());
+	}
+
+	@Test
+	public void testParseCommentCountOnlyIssueComments() {
+		// Test that only issue comments are counted when review_comments is
+		// missing (e.g., from list endpoint)
+		String json = "{\"number\":42,\"title\":\"Test PR\"," //$NON-NLS-1$
+				+ "\"state\":\"open\",\"body\":\"desc\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\"," //$NON-NLS-1$
+				+ "\"comments\":5," //$NON-NLS-1$
+				+ "\"head\":{\"ref\":\"feature\"," //$NON-NLS-1$
+				+ "\"sha\":\"abc123\"," //$NON-NLS-1$
+				+ "\"repo\":{\"name\":\"repo\"," //$NON-NLS-1$
+				+ "\"full_name\":\"owner/repo\"," //$NON-NLS-1$
+				+ "\"owner\":{\"login\":\"owner\"}}}," //$NON-NLS-1$
+				+ "\"base\":{\"ref\":\"main\"," //$NON-NLS-1$
+				+ "\"sha\":\"xyz789\"," //$NON-NLS-1$
+				+ "\"repo\":{\"name\":\"repo\"," //$NON-NLS-1$
+				+ "\"full_name\":\"owner/repo\"," //$NON-NLS-1$
+				+ "\"owner\":{\"login\":\"owner\"}}}," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"author\"}," //$NON-NLS-1$
+				+ "\"html_url\":\"https://github.com/owner/repo/pull/42\"}"; //$NON-NLS-1$
+
+		PullRequest pr = GitHubJsonParser.parseSinglePullRequest(json);
+
+		assertThat(pr, notNullValue());
+		// When review_comments is missing, only issue comments are counted
+		assertThat(pr.getCommentCount(), equalTo(5));
+	}
+
+	@Test
+	public void testParseCommentCountOnlyReviewComments() {
+		// Test that review comments are counted even when issue comments are 0
+		String json = "{\"number\":42,\"title\":\"Test PR\"," //$NON-NLS-1$
+				+ "\"state\":\"open\",\"body\":\"desc\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\"," //$NON-NLS-1$
+				+ "\"comments\":0," //$NON-NLS-1$
+				+ "\"review_comments\":8," //$NON-NLS-1$
+				+ "\"head\":{\"ref\":\"feature\"," //$NON-NLS-1$
+				+ "\"sha\":\"abc123\"," //$NON-NLS-1$
+				+ "\"repo\":{\"name\":\"repo\"," //$NON-NLS-1$
+				+ "\"full_name\":\"owner/repo\"," //$NON-NLS-1$
+				+ "\"owner\":{\"login\":\"owner\"}}}," //$NON-NLS-1$
+				+ "\"base\":{\"ref\":\"main\"," //$NON-NLS-1$
+				+ "\"sha\":\"xyz789\"," //$NON-NLS-1$
+				+ "\"repo\":{\"name\":\"repo\"," //$NON-NLS-1$
+				+ "\"full_name\":\"owner/repo\"," //$NON-NLS-1$
+				+ "\"owner\":{\"login\":\"owner\"}}}," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"author\"}," //$NON-NLS-1$
+				+ "\"html_url\":\"https://github.com/owner/repo/pull/42\"}"; //$NON-NLS-1$
+
+		PullRequest pr = GitHubJsonParser.parseSinglePullRequest(json);
+
+		assertThat(pr, notNullValue());
+		// Only review comments should be counted
+		assertThat(pr.getCommentCount(), equalTo(8));
 	}
 }

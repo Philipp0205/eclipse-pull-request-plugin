@@ -122,6 +122,40 @@ public class GitHubClient implements IPullRequestClient {
 		String json = doGet(urlBuilder.toString());
 		List<PullRequest> pulls = GitHubJsonParser.parsePullRequests(json);
 
+		// Enrich with comment counts by fetching actual comments
+		// GitHub API doesn't include numeric comment counts in PR responses
+		for (PullRequest pr : pulls) {
+			try {
+				// Fetch review comments (inline, on code)
+				String reviewCommentsPath = "/repos/" + owner + "/" + repo //$NON-NLS-1$ //$NON-NLS-2$
+						+ "/pulls/" + pr.getId() + "/comments?per_page=100"; //$NON-NLS-1$ //$NON-NLS-2$
+				List<String> reviewPages = doGetAllPages(reviewCommentsPath);
+				int reviewCommentCount = 0;
+				for (String page : reviewPages) {
+					reviewCommentCount += GitHubJsonParser
+							.countArrayElements(page);
+				}
+
+				// Fetch issue comments (general PR comments)
+				String issueCommentsPath = "/repos/" + owner + "/" + repo //$NON-NLS-1$ //$NON-NLS-2$
+						+ "/issues/" + pr.getId() + "/comments?per_page=100"; //$NON-NLS-1$ //$NON-NLS-2$
+				List<String> issuePages = doGetAllPages(issueCommentsPath);
+				int issueCommentCount = 0;
+				for (String page : issuePages) {
+					issueCommentCount += GitHubJsonParser
+							.countArrayElements(page);
+				}
+
+				pr.setCommentCount(reviewCommentCount + issueCommentCount);
+			} catch (IOException e) {
+				// If fetching comments fails, keep comment count as 0
+				// and continue with other PRs
+				Activator.logError(
+						"Failed to fetch comment count for PR " + pr.getId(), //$NON-NLS-1$
+						e);
+			}
+		}
+
 		// Filter by author if specified
 		if (authorUsername != null && !authorUsername.isEmpty()) {
 			pulls.removeIf(pr -> pr.getAuthor() == null
