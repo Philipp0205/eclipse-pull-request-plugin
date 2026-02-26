@@ -174,6 +174,7 @@ class GitHubJsonParser {
 			user.setName(extractString(userJson, "login")); //$NON-NLS-1$
 			user.setDisplayName(extractString(userJson, "name", //$NON-NLS-1$
 					extractString(userJson, "login"))); //$NON-NLS-1$
+			user.setAvatarUrl(extractString(userJson, "avatar_url")); //$NON-NLS-1$
 			author.setUser(user);
 			author.setRole("AUTHOR"); //$NON-NLS-1$
 			pr.setAuthor(author);
@@ -525,6 +526,7 @@ class GitHubJsonParser {
 		if (userJson != null) {
 			comment.setAuthorName(extractString(userJson, "login")); //$NON-NLS-1$
 			comment.setAuthorDisplayName(extractString(userJson, "login")); //$NON-NLS-1$
+			comment.setAuthorAvatarUrl(extractString(userJson, "avatar_url")); //$NON-NLS-1$
 		}
 
 		// GitHub doesn't have comment state or severity
@@ -1063,6 +1065,7 @@ class GitHubJsonParser {
 
 		user.setDisplayName(extractString(json, "name", //$NON-NLS-1$
 				extractString(json, "login"))); //$NON-NLS-1$
+		user.setAvatarUrl(extractString(json, "avatar_url")); //$NON-NLS-1$
 		reviewer.setUser(user);
 		reviewer.setRole("REVIEWER"); //$NON-NLS-1$
 

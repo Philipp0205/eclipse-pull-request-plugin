@@ -24,6 +24,7 @@ import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.FontData;
 import org.eclipse.swt.graphics.GC;
+import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.GridData;
@@ -141,7 +142,7 @@ public class ExpandedCommentComposite extends Composite {
 
 	private static final RGB RESOLVED_BADGE_FG_RGB = new RGB(255, 255, 255);
 
-	private static final int AVATAR_SIZE = 28;
+	private static final int AVATAR_SIZE = 30;
 
 	private static final int BORDER_RADIUS = 8;
 
@@ -319,7 +320,7 @@ public class ExpandedCommentComposite extends Composite {
 	GridDataFactory.fillDefaults().grab(true, false)
 			.applyTo(headerRow);
 
-	// Avatar with initials
+	// Avatar with initials (or real avatar if loaded)
 	String author = comment.getAuthorDisplayName();
 	if (author == null || author.isEmpty()) {
 		author = comment.getAuthorName();
@@ -328,7 +329,8 @@ public class ExpandedCommentComposite extends Composite {
 		author = "Unknown"; //$NON-NLS-1$
 	}
 
-	Canvas avatarCanvas = createAvatarCanvas(headerRow, author);
+	Canvas avatarCanvas = createAvatarCanvas(headerRow, author,
+			comment.getAuthorAvatarUrl());
 	GridDataFactory.fillDefaults()
 			.hint(AVATAR_SIZE, AVATAR_SIZE)
 			.applyTo(avatarCanvas);
@@ -460,64 +462,23 @@ public class ExpandedCommentComposite extends Composite {
 	}
 
 	/**
-	 * Creates an avatar canvas showing the user's initials.
+	 * Creates an avatar canvas showing the user's initials, and asynchronously
+	 * loads the real avatar image if available.
 	 *
 	 * @param parent
 	 *            the parent composite
 	 * @param authorName
 	 *            the author's display name
+	 * @param avatarUrl
+	 *            the avatar image URL, or null if not available
 	 * @return the canvas widget
 	 */
-	private Canvas createAvatarCanvas(Composite parent, String authorName) {
-		Canvas canvas = new Canvas(parent, SWT.DOUBLE_BUFFERED);
-		canvas.setBackground(parent.getBackground());
-
-		String initials = getInitials(authorName);
-
-		canvas.addPaintListener(e -> {
-			GC gc = e.gc;
-			gc.setAntialias(SWT.ON);
-
-			// Draw circular background
-			gc.setBackground(avatarBgColor);
-			gc.fillOval(0, 0, AVATAR_SIZE - 1, AVATAR_SIZE - 1);
-
-			// Draw initials
-			gc.setForeground(
-					getDisplay().getSystemColor(SWT.COLOR_WHITE));
-			Font avatarFont = smallFont;
-			gc.setFont(avatarFont);
-
-			org.eclipse.swt.graphics.Point textExtent = gc
-					.textExtent(initials);
-			int x = (AVATAR_SIZE - textExtent.x) / 2;
-			int y = (AVATAR_SIZE - textExtent.y) / 2;
-			gc.drawText(initials, x, y, true);
-		});
-
+	private Canvas createAvatarCanvas(Composite parent, String authorName,
+			String avatarUrl) {
+		AvatarCanvas canvas = new AvatarCanvas(parent, AVATAR_SIZE, authorName,
+				avatarBgColor, avatarUrl);
+		canvas.setInitialsFont(smallFont);
 		return canvas;
-	}
-
-	/**
-	 * Extracts initials from a name (up to 2 characters).
-	 *
-	 * @param name
-	 *            the full name
-	 * @return the initials (1-2 uppercase letters)
-	 */
-	private String getInitials(String name) {
-		if (name == null || name.isEmpty()) {
-			return "?"; //$NON-NLS-1$
-		}
-
-		String[] parts = name.trim().split("\\s+"); //$NON-NLS-1$
-		if (parts.length >= 2) {
-			return (String.valueOf(parts[0].charAt(0))
-					+ parts[parts.length - 1].charAt(0)).toUpperCase();
-		} else if (parts.length == 1 && parts[0].length() >= 1) {
-			return String.valueOf(parts[0].charAt(0)).toUpperCase();
-		}
-		return "?"; //$NON-NLS-1$
 	}
 
 	/**

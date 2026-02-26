@@ -14,7 +14,10 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
 
+import java.util.List;
+
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
+import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
 import org.junit.Test;
 
 /**
@@ -119,7 +122,7 @@ public class BitbucketClientTest {
 				+ "\"emailAddress\":\"jdoe@example.com\"}}}"; //$NON-NLS-1$
 
 		PullRequest pr = BitbucketJsonParser
-				.parseSinglePullRequest(json);
+				.parseSinglePullRequest(json, null);
 
 		assertThat(pr, notNullValue());
 
@@ -132,5 +135,70 @@ public class BitbucketClientTest {
 		assertThat(pr.getToRef().getRepository(), notNullValue());
 		assertThat(pr.getToRef().getRepository().getCloneUrl(), equalTo(
 				"https://bitbucket.example.com/scm/proj/test-repo.git")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseCommentWithAvatarUrl() {
+		String baseUrl = "https://bitbucket.example.com"; //$NON-NLS-1$
+		String json = "{\"id\":1,\"version\":1,\"text\":\"Test comment\"," //$NON-NLS-1$
+				+ "\"author\":{\"name\":\"jdoe\",\"emailAddress\":\"jdoe@example.com\"," //$NON-NLS-1$
+				+ "\"displayName\":\"John Doe\",\"slug\":\"jdoe\"}," //$NON-NLS-1$
+				+ "\"createdDate\":1705318800000,\"updatedDate\":1705319100000}"; //$NON-NLS-1$
+
+		PullRequestComment comment = BitbucketJsonParser.parseComment(json,
+				baseUrl);
+
+		assertThat(comment, notNullValue());
+		assertThat(comment.getAuthorName(), equalTo("John Doe")); //$NON-NLS-1$
+		assertThat(comment.getAuthorAvatarUrl(), equalTo(
+				"https://bitbucket.example.com/users/jdoe/avatar.png")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseCommentWithoutSlug() {
+		String baseUrl = "https://bitbucket.example.com"; //$NON-NLS-1$
+		String json = "{\"id\":1,\"version\":1,\"text\":\"Test comment\"," //$NON-NLS-1$
+				+ "\"author\":{\"name\":\"jdoe\",\"emailAddress\":\"jdoe@example.com\"," //$NON-NLS-1$
+				+ "\"displayName\":\"John Doe\"}," //$NON-NLS-1$
+				+ "\"createdDate\":1705318800000,\"updatedDate\":1705319100000}"; //$NON-NLS-1$
+
+		PullRequestComment comment = BitbucketJsonParser.parseComment(json,
+				baseUrl);
+
+		assertThat(comment, notNullValue());
+		assertThat(comment.getAuthorName(), equalTo("John Doe")); //$NON-NLS-1$
+		// When slug is missing, avatar URL should fall back to using name
+		assertThat(comment.getAuthorAvatarUrl(), equalTo(
+				"https://bitbucket.example.com/users/jdoe/avatar.png")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseCommentsArray() {
+		String baseUrl = "https://bitbucket.example.com"; //$NON-NLS-1$
+		String json = "{\"size\":2,\"limit\":25,\"isLastPage\":true," //$NON-NLS-1$
+				+ "\"values\":[" //$NON-NLS-1$
+				+ "{\"id\":1,\"version\":1,\"text\":\"First comment\"," //$NON-NLS-1$
+				+ "\"author\":{\"name\":\"jdoe\",\"displayName\":\"John Doe\",\"slug\":\"jdoe\"}," //$NON-NLS-1$
+				+ "\"createdDate\":1705318800000}," //$NON-NLS-1$
+				+ "{\"id\":2,\"version\":1,\"text\":\"Second comment\"," //$NON-NLS-1$
+				+ "\"author\":{\"name\":\"asmith\",\"displayName\":\"Alice Smith\",\"slug\":\"asmith\"}," //$NON-NLS-1$
+				+ "\"createdDate\":1705319100000}" //$NON-NLS-1$
+				+ "]}"; //$NON-NLS-1$
+
+		List<PullRequestComment> comments = BitbucketJsonParser
+				.parseCommentArray(json, baseUrl);
+
+		assertThat(comments, notNullValue());
+		assertThat(comments.size(), equalTo(2));
+
+		PullRequestComment first = comments.get(0);
+		assertThat(first.getAuthorName(), equalTo("John Doe")); //$NON-NLS-1$
+		assertThat(first.getAuthorAvatarUrl(), equalTo(
+				"https://bitbucket.example.com/users/jdoe/avatar.png")); //$NON-NLS-1$
+
+		PullRequestComment second = comments.get(1);
+		assertThat(second.getAuthorName(), equalTo("Alice Smith")); //$NON-NLS-1$
+		assertThat(second.getAuthorAvatarUrl(), equalTo(
+				"https://bitbucket.example.com/users/asmith/avatar.png")); //$NON-NLS-1$
 	}
 }

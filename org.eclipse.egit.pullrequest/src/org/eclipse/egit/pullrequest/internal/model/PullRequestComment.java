@@ -31,6 +31,8 @@ public class PullRequestComment {
 
 	private String authorEmail;
 
+	private String authorAvatarUrl;
+
 	private Date createdDate;
 
 	private Date updatedDate;
@@ -161,6 +163,21 @@ public class PullRequestComment {
 	 */
 	public void setAuthorEmail(String authorEmail) {
 		this.authorEmail = authorEmail;
+	}
+
+	/**
+	 * @return the author avatar URL
+	 */
+	public String getAuthorAvatarUrl() {
+		return authorAvatarUrl;
+	}
+
+	/**
+	 * @param authorAvatarUrl
+	 *            the author avatar URL
+	 */
+	public void setAuthorAvatarUrl(String authorAvatarUrl) {
+		this.authorAvatarUrl = authorAvatarUrl;
 	}
 
 	/**

@@ -32,9 +32,11 @@ class BitbucketJsonParser {
 	 *
 	 * @param json
 	 *            the JSON response from /pull-requests endpoint
+	 * @param baseUrl
+	 *            the Bitbucket server base URL for constructing avatar URLs
 	 * @return list of pull requests
 	 */
-	public static List<PullRequest> parsePullRequests(String json) {
+	public static List<PullRequest> parsePullRequests(String json, String baseUrl) {
 		List<PullRequest> result = new ArrayList<>();
 
 		// Find the "values" array in the response
@@ -70,7 +72,7 @@ class BitbucketJsonParser {
 				}
 
 				String prJson = json.substring(pos, objEnd + 1);
-				PullRequest pr = parseSinglePullRequest(prJson);
+				PullRequest pr = parseSinglePullRequest(prJson, baseUrl);
 				if (pr != null) {
 					result.add(pr);
 				}
@@ -94,9 +96,11 @@ class BitbucketJsonParser {
 	 *
 	 * @param json
 	 *            the JSON object
+	 * @param baseUrl
+	 *            the Bitbucket server base URL for constructing avatar URLs
 	 * @return pull request or null
 	 */
-	public static PullRequest parseSinglePullRequest(String json) {
+	public static PullRequest parseSinglePullRequest(String json, String baseUrl) {
 		PullRequest pr = new PullRequest();
 
 		// Parse id
@@ -168,7 +172,7 @@ class BitbucketJsonParser {
 		// Parse author
 		String authorJson = extractObjectValue(json, "\"author\":"); //$NON-NLS-1$
 		if (authorJson != null) {
-			pr.setAuthor(parseParticipant(authorJson));
+			pr.setAuthor(parseParticipant(authorJson, baseUrl));
 		}
 
 		// Parse comment count from properties
@@ -185,7 +189,7 @@ class BitbucketJsonParser {
 		String reviewersJson = extractArrayValue(json, "\"reviewers\":"); //$NON-NLS-1$
 		if (reviewersJson != null) {
 			List<PullRequest.PullRequestParticipant> reviewers = parseReviewers(
-					reviewersJson);
+					reviewersJson, baseUrl);
 			if (!reviewers.isEmpty()) {
 				pr.setReviewers(reviewers);
 			}
@@ -292,9 +296,12 @@ class BitbucketJsonParser {
 	 *
 	 * @param json
 	 *            the JSON response from /activities endpoint
+	 * @param baseUrl
+	 *            the Bitbucket server base URL for constructing avatar URLs
 	 * @return list of PullRequestComment objects
 	 */
-	public static List<PullRequestComment> parseActivities(String json) {
+	public static List<PullRequestComment> parseActivities(String json,
+			String baseUrl) {
 		List<PullRequestComment> result = new ArrayList<>();
 
 		// Find the "values" array
@@ -332,7 +339,7 @@ class BitbucketJsonParser {
 				String action = extractStringValue(activityJson, "\"action\":"); //$NON-NLS-1$
 				if ("COMMENTED".equals(action)) { //$NON-NLS-1$
 					PullRequestComment comment = parseCommentActivity(
-							activityJson);
+							activityJson, baseUrl);
 					if (comment != null) {
 						result.add(comment);
 					}
@@ -490,21 +497,23 @@ class BitbucketJsonParser {
 	}
 
 	/**
-	 * Parse a single comment activity
+	 * Parse a comment activity JSON object into a PullRequestComment
 	 *
 	 * @param activityJson
-	 *            the activity JSON object
+	 *            the activity JSON object containing a comment
+	 * @param baseUrl
+	 *            the Bitbucket server base URL for constructing avatar URLs
 	 * @return PullRequestComment or null
 	 */
 	private static PullRequestComment parseCommentActivity(
-			String activityJson) {
+			String activityJson, String baseUrl) {
 		// Extract the "comment" object
 		String commentJson = extractObjectValue(activityJson, "\"comment\":"); //$NON-NLS-1$
 		if (commentJson == null) {
 			return null;
 		}
 
-		PullRequestComment comment = parseComment(commentJson);
+		PullRequestComment comment = parseComment(commentJson, baseUrl);
 		if (comment == null) {
 			return null;
 		}
@@ -524,9 +533,12 @@ class BitbucketJsonParser {
 	 *
 	 * @param commentJson
 	 *            the comment JSON object
+	 * @param baseUrl
+	 *            the Bitbucket server base URL for constructing avatar URLs
 	 * @return PullRequestComment or null
 	 */
-	private static PullRequestComment parseComment(String commentJson) {
+	static PullRequestComment parseComment(String commentJson,
+			String baseUrl) {
 		PullRequestComment comment = new PullRequestComment();
 
 		// Parse id
@@ -555,9 +567,21 @@ class BitbucketJsonParser {
 					"\"displayName\":"); //$NON-NLS-1$
 			String email = extractStringValue(authorJson,
 					"\"emailAddress\":"); //$NON-NLS-1$
+			String slug = extractStringValue(authorJson, "\"slug\":"); //$NON-NLS-1$
 			comment.setAuthorName(name);
 			comment.setAuthorDisplayName(displayName);
 			comment.setAuthorEmail(email);
+			// Construct avatar URL from slug or name
+			if (baseUrl != null && slug != null && !slug.isEmpty()) {
+				String avatarUrl = baseUrl + "/users/" + slug //$NON-NLS-1$
+						+ "/avatar.png"; //$NON-NLS-1$
+				comment.setAuthorAvatarUrl(avatarUrl);
+			} else if (baseUrl != null && name != null && !name.isEmpty()) {
+				// Fallback to using name if slug not available
+				String avatarUrl = baseUrl + "/users/" + name //$NON-NLS-1$
+						+ "/avatar.png"; //$NON-NLS-1$
+				comment.setAuthorAvatarUrl(avatarUrl);
+			}
 		}
 
 		// Parse createdDate
@@ -587,7 +611,8 @@ class BitbucketJsonParser {
 		// Parse replies (nested comments)
 		String repliesJson = extractObjectValue(commentJson, "\"comments\":"); //$NON-NLS-1$
 		if (repliesJson != null && repliesJson.startsWith("[")) { //$NON-NLS-1$
-			List<PullRequestComment> replies = parseCommentArray(repliesJson);
+			List<PullRequestComment> replies = parseCommentArray(repliesJson,
+					baseUrl);
 			comment.setReplies(replies);
 		}
 
@@ -626,46 +651,51 @@ class BitbucketJsonParser {
 	}
 
 	/**
-	 * Parse an array of comments
+	 * Parse an array of comments from JSON
 	 *
-	 * @param arrayJson
-	 *            the JSON array string
+	 * @param json
+	 *            the JSON array string starting with '['
+	 * @param baseUrl
+	 *            the Bitbucket server base URL for constructing avatar URLs
 	 * @return list of comments
 	 */
-	private static List<PullRequestComment> parseCommentArray(
-			String arrayJson) {
-		List<PullRequestComment> result = new ArrayList<>();
+	static List<PullRequestComment> parseCommentArray(String json,
+			String baseUrl) {
+		List<PullRequestComment> comments = new ArrayList<>();
 
-		if (!arrayJson.startsWith("[")) { //$NON-NLS-1$
-			return result;
+		if (!json.startsWith("[")) { //$NON-NLS-1$
+			return comments;
 		}
 
 		int pos = 1; // Skip opening bracket
-		while (pos < arrayJson.length()) {
-			while (pos < arrayJson.length()
-					&& Character.isWhitespace(arrayJson.charAt(pos))) {
+		while (pos < json.length()) {
+			// Skip whitespace
+			while (pos < json.length()
+					&& Character.isWhitespace(json.charAt(pos))) {
 				pos++;
 			}
 
-			if (pos >= arrayJson.length() || arrayJson.charAt(pos) == ']') {
+			if (pos >= json.length() || json.charAt(pos) == ']') {
 				break;
 			}
 
-			if (arrayJson.charAt(pos) == '{') {
-				int objEnd = findMatchingBrace(arrayJson, pos);
+			// Find the opening brace of the comment object
+			if (json.charAt(pos) == '{') {
+				int objEnd = findMatchingBrace(json, pos);
 				if (objEnd == -1) {
 					break;
 				}
 
-				String commentJson = arrayJson.substring(pos, objEnd + 1);
-				PullRequestComment comment = parseComment(commentJson);
+				String commentJson = json.substring(pos, objEnd + 1);
+				PullRequestComment comment = parseComment(commentJson, baseUrl);
 				if (comment != null) {
-					result.add(comment);
+					comments.add(comment);
 				}
 
 				pos = objEnd + 1;
-				while (pos < arrayJson.length() && (Character.isWhitespace(
-						arrayJson.charAt(pos)) || arrayJson.charAt(pos) == ',')) {
+				// Skip comma if present
+				while (pos < json.length() && (Character.isWhitespace(
+						json.charAt(pos)) || json.charAt(pos) == ',')) {
 					pos++;
 				}
 			} else {
@@ -673,107 +703,7 @@ class BitbucketJsonParser {
 			}
 		}
 
-		return result;
-	}
-
-	// Helper parsing methods
-
-	private static PullRequest.PullRequestRef parseRef(String json) {
-		PullRequest.PullRequestRef ref = new PullRequest.PullRequestRef();
-
-		String id = extractStringValue(json, "\"id\":"); //$NON-NLS-1$
-		if (id != null) {
-			ref.setId(id);
-		}
-
-		String displayId = extractStringValue(json, "\"displayId\":"); //$NON-NLS-1$
-		if (displayId != null) {
-			ref.setDisplayId(displayId);
-		}
-
-		String latestCommit = extractStringValue(json, "\"latestCommit\":"); //$NON-NLS-1$
-		if (latestCommit != null) {
-			ref.setLatestCommit(latestCommit);
-		}
-
-		String repoJson = extractObjectValue(json, "\"repository\":"); //$NON-NLS-1$
-		if (repoJson != null) {
-			ref.setRepository(parseRepository(repoJson));
-		}
-
-		return ref;
-	}
-
-	private static PullRequest.Repository parseRepository(String json) {
-		PullRequest.Repository repo = new PullRequest.Repository();
-
-		String slug = extractStringValue(json, "\"slug\":"); //$NON-NLS-1$
-		if (slug != null) {
-			repo.setSlug(slug);
-		}
-
-		String name = extractStringValue(json, "\"name\":"); //$NON-NLS-1$
-		if (name != null) {
-			repo.setName(name);
-		}
-
-		String projectJson = extractObjectValue(json, "\"project\":"); //$NON-NLS-1$
-		if (projectJson != null) {
-			repo.setProject(parseProject(projectJson));
-		}
-
-		// Extract clone URL from links.clone array
-		String linksJson = extractObjectValue(json, "\"links\":"); //$NON-NLS-1$
-		if (linksJson != null) {
-			String cloneArrayJson = extractArrayValue(linksJson,
-					"\"clone\":"); //$NON-NLS-1$
-			if (cloneArrayJson != null) {
-				String cloneUrl = extractHttpCloneUrl(cloneArrayJson);
-				if (cloneUrl != null) {
-					repo.setCloneUrl(cloneUrl);
-				}
-			}
-		}
-
-		return repo;
-	}
-
-	private static PullRequest.Project parseProject(String json) {
-		PullRequest.Project project = new PullRequest.Project();
-
-		String key = extractStringValue(json, "\"key\":"); //$NON-NLS-1$
-		if (key != null) {
-			project.setKey(key);
-		}
-
-		String name = extractStringValue(json, "\"name\":"); //$NON-NLS-1$
-		if (name != null) {
-			project.setName(name);
-		}
-
-		return project;
-	}
-
-	private static PullRequest.PullRequestParticipant parseParticipant(
-			String json) {
-		PullRequest.PullRequestParticipant participant = new PullRequest.PullRequestParticipant();
-
-		String userJson = extractObjectValue(json, "\"user\":"); //$NON-NLS-1$
-		if (userJson != null) {
-			participant.setUser(parseUser(userJson));
-		}
-
-		String role = extractStringValue(json, "\"role\":"); //$NON-NLS-1$
-		if (role != null) {
-			participant.setRole(role);
-		}
-
-		Boolean approved = extractBooleanValue(json, "\"approved\":"); //$NON-NLS-1$
-		if (approved != null) {
-			participant.setApproved(approved.booleanValue());
-		}
-
-		return participant;
+		return comments;
 	}
 
 	/**
@@ -781,10 +711,12 @@ class BitbucketJsonParser {
 	 *
 	 * @param arrayJson
 	 *            the JSON array string containing reviewers
+	 * @param baseUrl
+	 *            the Bitbucket server base URL for constructing avatar URLs
 	 * @return list of reviewer participants
 	 */
 	private static List<PullRequest.PullRequestParticipant> parseReviewers(
-			String arrayJson) {
+			String arrayJson, String baseUrl) {
 		List<PullRequest.PullRequestParticipant> reviewers = new ArrayList<>();
 
 		if (!arrayJson.startsWith("[")) { //$NON-NLS-1$
@@ -812,7 +744,7 @@ class BitbucketJsonParser {
 
 				String reviewerJson = arrayJson.substring(pos, objEnd + 1);
 				PullRequest.PullRequestParticipant reviewer = parseParticipant(
-						reviewerJson);
+						reviewerJson, baseUrl);
 				if (reviewer != null) {
 					reviewers.add(reviewer);
 				}
@@ -831,7 +763,7 @@ class BitbucketJsonParser {
 		return reviewers;
 	}
 
-	private static PullRequest.User parseUser(String json) {
+	private static PullRequest.User parseUser(String json, String baseUrl) {
 		PullRequest.User user = new PullRequest.User();
 
 		String name = extractStringValue(json, "\"name\":"); //$NON-NLS-1$
@@ -849,7 +781,113 @@ class BitbucketJsonParser {
 			user.setDisplayName(displayName);
 		}
 
+		// Construct avatar URL from slug or name
+		String slug = extractStringValue(json, "\"slug\":"); //$NON-NLS-1$
+		if (baseUrl != null && slug != null && !slug.isEmpty()) {
+			String avatarUrl = baseUrl + "/users/" + slug //$NON-NLS-1$
+					+ "/avatar.png"; //$NON-NLS-1$
+			user.setAvatarUrl(avatarUrl);
+		} else if (baseUrl != null && name != null && !name.isEmpty()) {
+			// Fallback to using name if slug not available
+			String avatarUrl = baseUrl + "/users/" + name //$NON-NLS-1$
+					+ "/avatar.png"; //$NON-NLS-1$
+			user.setAvatarUrl(avatarUrl);
+		}
+
 		return user;
+	}
+
+	private static PullRequest.PullRequestRef parseRef(String json) {
+		PullRequest.PullRequestRef ref = new PullRequest.PullRequestRef();
+
+		// Parse id (branch name)
+		String id = extractStringValue(json, "\"id\":"); //$NON-NLS-1$
+		if (id != null) {
+			ref.setId(id);
+		}
+
+		// Parse displayId (short branch name)
+		String displayId = extractStringValue(json, "\"displayId\":"); //$NON-NLS-1$
+		if (displayId != null) {
+			ref.setDisplayId(displayId);
+		}
+
+		// Parse latestCommit
+		String latestCommit = extractStringValue(json, "\"latestCommit\":"); //$NON-NLS-1$
+		if (latestCommit != null) {
+			ref.setLatestCommit(latestCommit);
+		}
+
+		// Parse repository
+		String repositoryJson = extractObjectValue(json, "\"repository\":"); //$NON-NLS-1$
+		if (repositoryJson != null) {
+			PullRequest.Repository repository = new PullRequest.Repository();
+
+			String slug = extractStringValue(repositoryJson, "\"slug\":"); //$NON-NLS-1$
+			if (slug != null) {
+				repository.setSlug(slug);
+			}
+
+			String name = extractStringValue(repositoryJson, "\"name\":"); //$NON-NLS-1$
+			if (name != null) {
+				repository.setName(name);
+			}
+
+			// Parse project
+			String projectJson = extractObjectValue(repositoryJson, "\"project\":"); //$NON-NLS-1$
+			if (projectJson != null) {
+				PullRequest.Project project = new PullRequest.Project();
+
+				String projectKey = extractStringValue(projectJson, "\"key\":"); //$NON-NLS-1$
+				if (projectKey != null) {
+					project.setKey(projectKey);
+				}
+
+				String projectName = extractStringValue(projectJson, "\"name\":"); //$NON-NLS-1$
+				if (projectName != null) {
+					project.setName(projectName);
+				}
+
+				repository.setProject(project);
+			}
+
+			// Parse clone URLs
+			String linksJson = extractObjectValue(repositoryJson, "\"links\":"); //$NON-NLS-1$
+			if (linksJson != null) {
+				String cloneArrayJson = extractArrayValue(linksJson, "\"clone\":"); //$NON-NLS-1$
+				if (cloneArrayJson != null) {
+					String cloneUrl = extractHttpCloneUrl(cloneArrayJson);
+					if (cloneUrl != null) {
+						repository.setCloneUrl(cloneUrl);
+					}
+				}
+			}
+
+			ref.setRepository(repository);
+		}
+
+		return ref;
+	}
+
+	private static PullRequest.PullRequestParticipant parseParticipant(String json, String baseUrl) {
+		PullRequest.PullRequestParticipant participant = new PullRequest.PullRequestParticipant();
+
+		String userJson = extractObjectValue(json, "\"user\":"); //$NON-NLS-1$
+		if (userJson != null) {
+			participant.setUser(parseUser(userJson, baseUrl));
+		}
+
+		String role = extractStringValue(json, "\"role\":"); //$NON-NLS-1$
+		if (role != null) {
+			participant.setRole(role);
+		}
+
+		Boolean approved = extractBooleanValue(json, "\"approved\":"); //$NON-NLS-1$
+		if (approved != null) {
+			participant.setApproved(approved.booleanValue());
+		}
+
+		return participant;
 	}
 
 	private static ChangedFile.Path parsePath(String json) {
