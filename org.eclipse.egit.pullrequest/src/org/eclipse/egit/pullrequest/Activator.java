@@ -11,10 +11,12 @@
 package org.eclipse.egit.pullrequest;
 
 import org.eclipse.core.runtime.ILog;
+import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.egit.pullrequest.internal.PRPreferences;
+import org.eclipse.egit.pullrequest.internal.ui.AvatarCache;
 import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.jface.resource.ImageDescriptor;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
@@ -40,6 +42,7 @@ public class Activator extends AbstractUIPlugin {
 
 	@Override
 	public void stop(BundleContext context) throws Exception {
+		AvatarCache.getInstance().dispose();
 		plugin = null;
 		super.stop(context);
 	}
@@ -56,7 +59,7 @@ public class Activator extends AbstractUIPlugin {
 	 * relative path
 	 *
 	 * @param path
-	 *            the path
+	 *            the pathcontinue
 	 * @return the image descriptor
 	 */
 	public static ImageDescriptor getImageDescriptor(String path) {

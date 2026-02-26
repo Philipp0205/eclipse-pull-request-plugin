@@ -539,6 +539,7 @@ public class PullRequest {
 		private String name;
 		private String emailAddress;
 		private String displayName;
+		private String avatarUrl;
 		
 		/**
 		 * @return the user name
@@ -580,6 +581,20 @@ public class PullRequest {
 		 */
 		public void setDisplayName(String displayName) {
 			this.displayName = displayName;
+		}
+		
+		/**
+		 * @return the avatar URL
+		 */
+		public String getAvatarUrl() {
+			return avatarUrl;
+		}
+		
+		/**
+		 * @param avatarUrl the avatar URL
+		 */
+		public void setAvatarUrl(String avatarUrl) {
+			this.avatarUrl = avatarUrl;
 		}
 	}
 	

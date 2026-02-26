@@ -31,15 +31,13 @@ import org.eclipse.jface.resource.JFaceResources;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.ScrolledComposite;
 import org.eclipse.swt.custom.StyledText;
-import org.eclipse.swt.events.PaintEvent;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.FontData;
 import org.eclipse.swt.graphics.GC;
-import org.eclipse.swt.graphics.Point;
+import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.widgets.Button;
-import org.eclipse.swt.widgets.Canvas;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Label;
@@ -790,24 +788,25 @@ public class PullRequestOverviewView extends EditorPart {
 		GridDataFactory.fillDefaults().align(SWT.CENTER, SWT.CENTER)
 				.applyTo(avatarContainer);
 
-		// Avatar canvas
-		Canvas canvas = new Canvas(avatarContainer, SWT.NONE);
-		int avatarSize = 40;
-		GridDataFactory.fillDefaults()
-				.hint(avatarSize, avatarSize)
-				.applyTo(canvas);
-
 		String displayName = reviewer.getUser().getDisplayName();
 		if (displayName == null) {
 			displayName = reviewer.getUser().getName();
 		}
-		String initials = getInitials(displayName);
-		Color bgColor = getAvatarColor(displayName);
-		boolean approved = reviewer.isApproved();
+		int avatarSize = 40;
+		
+		Color bgColor = AvatarCanvas.colorForName(displayName);
+		String avatarUrl = reviewer.getUser().getAvatarUrl();
 
-		canvas.addPaintListener(
-				(PaintEvent e) -> paintAvatar(e, initials, bgColor,
-						approved, avatarSize));
+		// Avatar canvas
+		AvatarCanvas canvas = new AvatarCanvas(avatarContainer, avatarSize,
+				displayName, bgColor, avatarUrl);
+		canvas.setApproved(reviewer.isApproved());
+		GridDataFactory.fillDefaults()
+				.hint(avatarSize, avatarSize)
+				.applyTo(canvas);
+		
+		// Dispose the color when the canvas is disposed
+		canvas.addDisposeListener(e -> bgColor.dispose());
 
 		// Name label below avatar
 		Label nameLabel = toolkit.createLabel(avatarContainer,
@@ -816,77 +815,6 @@ public class PullRequestOverviewView extends EditorPart {
 				.align(SWT.CENTER, SWT.CENTER)
 				.hint(avatarSize + 20, SWT.DEFAULT)
 				.applyTo(nameLabel);
-	}
-
-	private void paintAvatar(PaintEvent e, String initials,
-			Color bgColor, boolean approved, int size) {
-		GC gc = e.gc;
-		gc.setAntialias(SWT.ON);
-
-		// Draw background circle
-		gc.setBackground(bgColor);
-		gc.fillOval(0, 0, size, size);
-
-		// Draw approved indicator (green border)
-		if (approved) {
-			gc.setForeground(
-					Display.getCurrent().getSystemColor(
-							SWT.COLOR_DARK_GREEN));
-			gc.setLineWidth(3);
-			gc.drawOval(1, 1, size - 2, size - 2);
-		}
-
-		// Draw initials
-		gc.setForeground(
-				Display.getCurrent().getSystemColor(
-						SWT.COLOR_WHITE));
-		Point textExtent = gc.textExtent(initials);
-		int x = (size - textExtent.x) / 2;
-		int y = (size - textExtent.y) / 2;
-		gc.drawText(initials, x, y, true);
-	}
-
-	private String getInitials(String name) {
-		if (name == null || name.isEmpty()) {
-			return "?"; //$NON-NLS-1$
-		}
-
-		String[] parts = name.trim().split("\\s+"); //$NON-NLS-1$
-		if (parts.length == 0) {
-			return "?"; //$NON-NLS-1$
-		}
-
-		if (parts.length == 1) {
-			// Single name - take first 2 chars
-			return parts[0].substring(0,
-					Math.min(2, parts[0].length()))
-					.toUpperCase();
-		}
-
-		// Multiple parts - take first char of first two parts
-		return (parts[0].substring(0, 1)
-				+ parts[1].substring(0, 1)).toUpperCase();
-	}
-
-	private Color getAvatarColor(String name) {
-		// Color palette for avatars (avoiding green which is for
-		// approved)
-		RGB[] palette = new RGB[] {
-				new RGB(52, 152, 219), // Blue
-				new RGB(155, 89, 182), // Purple
-				new RGB(230, 126, 34), // Orange
-				new RGB(231, 76, 60), // Red
-				new RGB(241, 196, 15), // Yellow
-				new RGB(26, 188, 156), // Teal
-				new RGB(149, 165, 166), // Gray
-				new RGB(192, 57, 43) // Dark red
-		};
-
-		int hash = Math.abs(name.hashCode());
-		int index = hash % palette.length;
-		RGB rgb = palette[index];
-
-		return new Color(Display.getCurrent(), rgb);
 	}
 
 	private void addMyselfAsReviewer() {

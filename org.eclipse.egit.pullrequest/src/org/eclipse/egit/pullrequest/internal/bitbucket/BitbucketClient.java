@@ -115,7 +115,7 @@ public class BitbucketClient implements IPullRequestClient {
 
 		String url = urlBuilder.toString();
 		String jsonResponse = executeGet(url);
-		return BitbucketJsonParser.parsePullRequests(jsonResponse);
+		return BitbucketJsonParser.parsePullRequests(jsonResponse, serverUrl);
 	}
 
 	@Override
@@ -126,7 +126,7 @@ public class BitbucketClient implements IPullRequestClient {
 				+ "/pull-requests/" + pullRequestId; //$NON-NLS-1$
 
 		String jsonResponse = executeGet(url);
-		return BitbucketJsonParser.parseSinglePullRequest(jsonResponse);
+		return BitbucketJsonParser.parseSinglePullRequest(jsonResponse, serverUrl);
 	}
 
 	@Override
@@ -150,7 +150,7 @@ public class BitbucketClient implements IPullRequestClient {
 				+ "/pull-requests/" + pullRequestId + "/activities"; //$NON-NLS-1$ //$NON-NLS-2$
 
 		String jsonResponse = executeGet(url);
-		return BitbucketJsonParser.parseActivities(jsonResponse);
+		return BitbucketJsonParser.parseActivities(jsonResponse, serverUrl);
 	}
 
 	@Override
@@ -292,7 +292,7 @@ public class BitbucketClient implements IPullRequestClient {
 				+ "\", \"version\": " + version + "}"; //$NON-NLS-1$ //$NON-NLS-2$
 
 		String jsonResponse = executePut(url, json);
-		return BitbucketJsonParser.parseSinglePullRequest(jsonResponse);
+		return BitbucketJsonParser.parseSinglePullRequest(jsonResponse, serverUrl);
 	}
 
 	@Override

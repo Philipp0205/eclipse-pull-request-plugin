@@ -690,4 +690,35 @@ public class GitHubJsonParserTest {
 
 		assertThat(commits, hasSize(0));
 	}
+
+	@Test
+	public void testParseCommentWithAvatarUrl() {
+		// Test that avatar_url is extracted from user object
+		String json = "{\"id\":888,\"body\":\"Test comment\",\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\",\"path\":\"src/Test.java\"," //$NON-NLS-1$
+				+ "\"line\":10,\"side\":\"RIGHT\"," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"testuser\"," //$NON-NLS-1$
+				+ "\"avatar_url\":\"https://avatars.githubusercontent.com/u/123?v=4\"}}"; //$NON-NLS-1$
+
+		PullRequestComment comment = GitHubJsonParser.parseSingleComment(json);
+
+		assertThat(comment, notNullValue());
+		assertThat(comment.getAuthorName(), equalTo("testuser")); //$NON-NLS-1$
+		assertThat(comment.getAuthorAvatarUrl(),
+				equalTo("https://avatars.githubusercontent.com/u/123?v=4")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseCommentWithoutAvatarUrl() {
+		// Test that missing avatar_url doesn't break parsing
+		String json = "{\"id\":999,\"body\":\"No avatar\",\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-15T10:05:00Z\"," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"noavatar\"}}"; //$NON-NLS-1$
+
+		PullRequestComment comment = GitHubJsonParser.parseSingleComment(json);
+
+		assertThat(comment, notNullValue());
+		assertThat(comment.getAuthorName(), equalTo("noavatar")); //$NON-NLS-1$
+		assertThat(comment.getAuthorAvatarUrl(), nullValue());
+	}
 }

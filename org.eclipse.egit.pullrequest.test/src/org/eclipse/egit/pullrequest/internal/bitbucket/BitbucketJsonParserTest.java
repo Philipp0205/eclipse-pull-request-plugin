@@ -37,7 +37,7 @@ public class BitbucketJsonParserTest {
 				+ "\"author\":{\"user\":{\"name\":\"author\"}}," //$NON-NLS-1$
 				+ "\"reviewers\":[]}"; //$NON-NLS-1$
 
-		PullRequest pr = BitbucketJsonParser.parseSinglePullRequest(json);
+		PullRequest pr = BitbucketJsonParser.parseSinglePullRequest(json, null);
 
 		assertThat(pr, notNullValue());
 		assertThat(pr.getReviewers(), notNullValue());
@@ -64,7 +64,7 @@ public class BitbucketJsonParserTest {
 				+ "\"approved\":false," //$NON-NLS-1$
 				+ "\"status\":\"UNAPPROVED\"}]}"; //$NON-NLS-1$
 
-		PullRequest pr = BitbucketJsonParser.parseSinglePullRequest(json);
+		PullRequest pr = BitbucketJsonParser.parseSinglePullRequest(json, null);
 
 		assertThat(pr, notNullValue());
 		assertThat(pr.getReviewers(), notNullValue());
@@ -100,7 +100,7 @@ public class BitbucketJsonParserTest {
 				+ "\"approved\":true," //$NON-NLS-1$
 				+ "\"status\":\"APPROVED\"}]}"; //$NON-NLS-1$
 
-		PullRequest pr = BitbucketJsonParser.parseSinglePullRequest(json);
+		PullRequest pr = BitbucketJsonParser.parseSinglePullRequest(json, null);
 
 		assertThat(pr, notNullValue());
 		assertThat(pr.getReviewers(), hasSize(1));
@@ -128,7 +128,7 @@ public class BitbucketJsonParserTest {
 				+ "{\"user\":{\"name\":\"charlie\"}," //$NON-NLS-1$
 				+ "\"role\":\"REVIEWER\",\"approved\":false}]}"; //$NON-NLS-1$
 
-		PullRequest pr = BitbucketJsonParser.parseSinglePullRequest(json);
+		PullRequest pr = BitbucketJsonParser.parseSinglePullRequest(json, null);
 
 		assertThat(pr, notNullValue());
 		assertThat(pr.getReviewers(), hasSize(3));
@@ -161,7 +161,7 @@ public class BitbucketJsonParserTest {
 				+ "{\"user\":{\"name\":\"reviewer1\"}," //$NON-NLS-1$
 				+ "\"role\":\"REVIEWER\",\"approved\":true}]}"; //$NON-NLS-1$
 
-		PullRequest pr = BitbucketJsonParser.parseSinglePullRequest(json);
+		PullRequest pr = BitbucketJsonParser.parseSinglePullRequest(json, null);
 
 		assertThat(pr, notNullValue());
 		assertThat(pr.getReviewers(), hasSize(1));
