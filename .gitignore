@@ -39,3 +39,13 @@ buildNumber.properties
 # OS
 .DS_Store
 Thumbs.db
+
+# Eclipse project
+.project
+.classpath
+
+# Tool configurations
+.agents/
+.ralph/
+.opencode/
+~/
