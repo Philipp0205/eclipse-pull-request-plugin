@@ -12,8 +12,13 @@ package org.eclipse.egit.pullrequest.internal.ui;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.compare.contentmergeviewer.TextMergeViewer;
@@ -36,13 +41,14 @@ import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.StyledText;
 import org.eclipse.swt.graphics.Point;
+import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.ui.IViewPart;
 import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.PlatformUI;
 
 /**
- * Installs pull request comment overlays (ruler columns and expandable
+ * Installs pull request comment overlays (ruler columns and inline
  * comment composites) on any {@link TextMergeViewer} instance. This
  * allows the Eclipse compare framework to select the appropriate
  * language-specific viewer (e.g. Java Source Compare, XML Compare)
@@ -52,41 +58,28 @@ import org.eclipse.ui.PlatformUI;
  * The installer uses reflection to access the left and right
  * {@link SourceViewer} instances from the {@link TextMergeViewer},
  * then installs {@link CommentRulerColumn} instances on each side.
+ * Comments are always visible (no expand/collapse functionality).
  * </p>
  */
-class CommentOverlayInstaller {
+public class CommentOverlayInstaller {
 
 	private SourceViewer leftSourceViewer;
-
 	private SourceViewer rightSourceViewer;
-
 	private CommentRulerColumn leftRulerColumn;
-
 	private CommentRulerColumn rightRulerColumn;
 
-	private ExpandedCommentComposite leftExpandedComposite;
-
-	private ExpandedCommentComposite rightExpandedComposite;
-
-	private boolean leftAnimating;
-
-	private boolean rightAnimating;
-
+	private List<ExpandedCommentComposite> leftComposites;
+	private List<ExpandedCommentComposite> rightComposites;
 	private List<PullRequestComment> currentComments;
 
+	private boolean leftResizeListenerRegistered;
+	private boolean rightResizeListenerRegistered;
+
 	private String currentFilePath;
-
 	private DiffHunkParser.DiffLines diffLines;
-
 	private final Viewer viewer;
-
 	private String currentUsername;
-
 	private PullRequestProviderType providerType;
-
-	private static final int ANIMATION_DURATION_MS = 180;
-
-	private static final int ANIMATION_STEP_MS = 16;
 
 	/**
 	 * Creates a new installer for the given viewer.
@@ -94,8 +87,10 @@ class CommentOverlayInstaller {
 	 * @param viewer
 	 *            the merge viewer returned by the compare framework
 	 */
-	CommentOverlayInstaller(Viewer viewer) {
+	public CommentOverlayInstaller(Viewer viewer) {
 		this.viewer = viewer;
+		this.leftComposites = new ArrayList<>();
+		this.rightComposites = new ArrayList<>();
 	}
 
 	/**
@@ -137,24 +132,26 @@ class CommentOverlayInstaller {
 		TextMergeViewer tmv = (TextMergeViewer) viewer;
 		extractSourceViewers(tmv);
 
-		if (leftSourceViewer == null && rightSourceViewer == null) {
-			// Source viewers not yet available; retry after a delay
-			scheduleRetry(comments, 0);
-			return;
-		}
+//		if (leftSourceViewer == null && rightSourceViewer == null) {
+//			// Source viewers not yet available; retry after a delay
+//			scheduleRetry(comments, 0);
+//			return;
+//		}
 
 		applyComments(comments);
 	}
 
 	/**
 	 * Extracts the left and right {@link SourceViewer} from a
-	 * {@link TextMergeViewer} using reflection. The field names are
-	 * {@code fLeft} and {@code fRight} in
-	 * {@link TextMergeViewer}, each of which is a
+	 * {@link TextMergeViewer} using reflection. The field names are {@code fLeft}
+	 * and {@code fRight} in {@link TextMergeViewer}, each of which is a
 	 * {@code MergeSourceViewer} wrapping a {@link SourceViewer}.
 	 *
-	 * @param tmv
-	 *            the text merge viewer
+	 * TODO: Consider consider filing an enhancement request with the Eclipse
+	 * Platform project to expose a public API in future releases, but for now,
+	 * reflection is justified and necessary.
+	 *
+	 * @param tmv the text merge viewer
 	 */
 	private void extractSourceViewers(TextMergeViewer tmv) {
 		if (leftSourceViewer != null && rightSourceViewer != null) {
@@ -164,14 +161,11 @@ class CommentOverlayInstaller {
 		try {
 			// TextMergeViewer has fLeft and fRight fields of type
 			// MergeSourceViewer which wraps a SourceViewer
-			leftSourceViewer = extractSourceViewer(tmv,
-					"fLeft"); //$NON-NLS-1$
-			rightSourceViewer = extractSourceViewer(tmv,
-					"fRight"); //$NON-NLS-1$
+			leftSourceViewer = extractSourceViewer(tmv, "fLeft"); //$NON-NLS-1$
+			rightSourceViewer = extractSourceViewer(tmv, "fRight"); //$NON-NLS-1$
 		} catch (Exception e) {
-			Activator.logError(
-					"Failed to extract source viewers " //$NON-NLS-1$
-							+ "from TextMergeViewer", //$NON-NLS-1$
+			Activator.logError("Failed to extract source viewers " //$NON-NLS-1$
+					+ "from TextMergeViewer", //$NON-NLS-1$
 					e);
 		}
 	}
@@ -190,8 +184,7 @@ class CommentOverlayInstaller {
 	 *             if reflection fails
 	 */
 	@SuppressWarnings("restriction")
-	private SourceViewer extractSourceViewer(TextMergeViewer tmv,
-			String fieldName) throws Exception {
+	private SourceViewer extractSourceViewer(TextMergeViewer tmv, String fieldName) throws Exception {
 		// Access the MergeSourceViewer field from TextMergeViewer
 		Field field = findField(tmv.getClass(), fieldName);
 		if (field == null) {
@@ -207,9 +200,7 @@ class CommentOverlayInstaller {
 		// via the getSourceViewer() method first, then fall back
 		// to the fSourceViewer field.
 		try {
-			java.lang.reflect.Method getSourceViewer =
-					mergeSourceViewer.getClass()
-							.getMethod("getSourceViewer"); //$NON-NLS-1$
+			Method getSourceViewer = mergeSourceViewer.getClass().getMethod("getSourceViewer"); //$NON-NLS-1$
 			Object sv = getSourceViewer.invoke(mergeSourceViewer);
 			if (sv instanceof SourceViewer) {
 				return (SourceViewer) sv;
@@ -218,16 +209,16 @@ class CommentOverlayInstaller {
 			// Try field access instead
 		}
 
-		// Fallback: try fSourceViewer field
-		Field svField = findField(mergeSourceViewer.getClass(),
-				"fSourceViewer"); //$NON-NLS-1$
-		if (svField != null) {
-			svField.setAccessible(true);
-			Object sv = svField.get(mergeSourceViewer);
-			if (sv instanceof SourceViewer) {
-				return (SourceViewer) sv;
-			}
-		}
+//		// Fallback: try fSourceViewer field
+//		Field svField = findField(mergeSourceViewer.getClass(),
+//				"fSourceViewer"); //$NON-NLS-1$
+//		if (svField != null) {
+//			svField.setAccessible(true);
+//			Object sv = svField.get(mergeSourceViewer);
+//			if (sv instanceof SourceViewer) {
+//				return (SourceViewer) sv;
+//			}
+//		}
 
 		return null;
 	}
@@ -254,47 +245,6 @@ class CommentOverlayInstaller {
 	}
 
 	/**
-	 * Schedules a retry to install comments after a short delay.
-	 *
-	 * @param comments
-	 *            the comments to install
-	 * @param retryCount
-	 *            the current retry count
-	 */
-	private void scheduleRetry(List<PullRequestComment> comments,
-			int retryCount) {
-		if (retryCount >= 10) {
-			Activator.logWarning(
-					"Could not install comment overlays: " //$NON-NLS-1$
-							+ "source viewers not available" //$NON-NLS-1$
-							+ " after retries"); //$NON-NLS-1$
-			return;
-		}
-
-		if (viewer.getControl() == null
-				|| viewer.getControl().isDisposed()) {
-			return;
-		}
-
-		viewer.getControl().getDisplay().timerExec(100, () -> {
-			if (viewer.getControl() != null
-					&& !viewer.getControl().isDisposed()) {
-				if (viewer instanceof TextMergeViewer) {
-					extractSourceViewers(
-							(TextMergeViewer) viewer);
-				}
-
-				if (leftSourceViewer != null
-						|| rightSourceViewer != null) {
-					applyComments(comments);
-				} else {
-					scheduleRetry(comments, retryCount + 1);
-				}
-			}
-		});
-	}
-
-	/**
 	 * Applies comments to the left and right source viewers by
 	 * installing {@link CommentRulerColumn} instances.
 	 *
@@ -302,23 +252,6 @@ class CommentOverlayInstaller {
 	 *            the list of comments for the current file
 	 */
 	private void applyComments(List<PullRequestComment> comments) {
-		// Save the currently expanded line and side before collapsing
-		int expandedLine = -1;
-		boolean expandedOnLeft = false;
-		if (leftRulerColumn != null
-				&& leftRulerColumn.getExpandedLine() != -1) {
-			expandedLine = leftRulerColumn.getExpandedLine();
-			expandedOnLeft = true;
-		} else if (rightRulerColumn != null
-				&& rightRulerColumn.getExpandedLine() != -1) {
-			expandedLine = rightRulerColumn.getExpandedLine();
-			expandedOnLeft = false;
-		}
-
-		// Collapse any expanded comment
-		collapseExpanded(leftSourceViewer, true, false);
-		collapseExpanded(rightSourceViewer, false, false);
-
 		// Always install ruler columns so the "+" add-comment icon
 		// is available even when there are no existing comments
 		installRulerColumn(leftSourceViewer, true);
@@ -354,8 +287,7 @@ class CommentOverlayInstaller {
 			if (!comment.isInlineComment()) {
 				continue;
 			}
-			if (comment.getLine() == null
-					|| comment.getLine().intValue() < 1) {
+			if (comment.getLine() == null || comment.getLine().intValue() < 1) {
 				continue;
 			}
 
@@ -378,42 +310,170 @@ class CommentOverlayInstaller {
 			rightRulerColumn.setComments(rightComments);
 		}
 
-		// Re-expand the previously expanded comment if it still exists
-		if (expandedLine != -1) {
-			List<PullRequestComment> commentsToExpand = expandedOnLeft
-					? leftComments : rightComments;
-			SourceViewer viewerToExpand = expandedOnLeft
-					? leftSourceViewer : rightSourceViewer;
-
-			// Find comments for the expanded line
-			List<PullRequestComment> lineComments = new ArrayList<>();
-			for (PullRequestComment comment : commentsToExpand) {
-				if (comment.getLine() != null
-						&& comment.getLine().intValue() == expandedLine) {
-					lineComments.add(comment);
-				}
-			}
-
-			// Re-expand if comments still exist for that line
-			if (!lineComments.isEmpty()
-					&& viewerToExpand != null) {
-				expandComment(viewerToExpand, expandedOnLeft,
-						expandedLine, lineComments);
-			}
-		}
+		// Automatically show all comments by default
+		// The StyledText widget may not have its content loaded yet at this point
+		// (compare framework loads content asynchronously). Defer showing until
+		// the widget actually has enough lines for the comments.
+		scheduleShowAllWhenReady(leftSourceViewer, leftComments, true, 0);
+		scheduleShowAllWhenReady(rightSourceViewer, rightComments, false, 0);
 	}
 
 	/**
-	 * Expands and scrolls to a comment by line number and file type. This
+	 * Schedules showing of all comments once the {@link StyledText}
+	 * widget has its content loaded. The compare framework populates
+	 * the text asynchronously, so at the time {@code applyComments}
+	 * runs the widget may still be empty (line count of 1). This
+	 * method retries with a short delay until either the content
+	 * appears or the maximum number of retries is reached.
+	 *
+	 * @param sv
+	 *            the source viewer
+	 * @param comments
+	 *            the comments to show
+	 * @param isLeft
+	 *            {@code true} for left side, {@code false} for right
+	 * @param retryCount
+	 *            the current retry attempt (starts at 0)
+	 */
+	private void scheduleShowAllWhenReady(SourceViewer sv,
+			List<PullRequestComment> comments, boolean isLeft,
+			int retryCount) {
+		if (sv == null || comments == null || comments.isEmpty()) {
+			return;
+		}
+
+		StyledText styledText = sv.getTextWidget();
+		if (styledText == null || styledText.isDisposed()) {
+			return;
+		}
+
+		// Determine the maximum line number referenced by the
+		// comments so we know how many lines we need.
+		int maxLine = 0;
+		for (PullRequestComment comment : comments) {
+			if (comment.getLine() != null
+					&& comment.getLine().intValue() > maxLine) {
+				maxLine = comment.getLine().intValue();
+			}
+		}
+
+		// StyledText.getLineCount() returns the number of lines;
+		// we need at least maxLine lines to be present.
+		if (styledText.getLineCount() > maxLine) {
+			showAllComments(sv, comments, isLeft);
+			return;
+		}
+
+		if (retryCount >= 20) {
+			Activator.logWarning(
+					"[CommentOverlayInstaller] Gave up waiting" //$NON-NLS-1$
+							+ " for StyledText content to" //$NON-NLS-1$
+							+ " show all comments (side=" //$NON-NLS-1$
+							+ (isLeft
+									? "LEFT" //$NON-NLS-1$
+									: "RIGHT") //$NON-NLS-1$
+							+ ", needed " + maxLine //$NON-NLS-1$
+							+ " lines, have " //$NON-NLS-1$
+							+ styledText.getLineCount()
+							+ ")"); //$NON-NLS-1$
+			return;
+		}
+
+		Activator.logInfo(String.format(
+				"[CommentOverlayInstaller] StyledText not" //$NON-NLS-1$
+						+ " ready (lineCount=%d, need>%d)," //$NON-NLS-1$
+						+ " retrying show-all" //$NON-NLS-1$
+						+ " (attempt %d)", //$NON-NLS-1$
+				styledText.getLineCount(), maxLine,
+				retryCount + 1));
+
+		styledText.getDisplay().timerExec(100, () -> {
+			if (!styledText.isDisposed()) {
+				scheduleShowAllWhenReady(sv, comments,
+						isLeft, retryCount + 1);
+			}
+		});
+	}
+
+	/**
+	 * Shows all comment threads on the given side. This is called
+	 * automatically when comments are loaded.
+	 *
+	 * @param sv
+	 *            the source viewer
+	 * @param comments
+	 *            the comments to show
+	 * @param isLeft
+	 *            {@code true} for left side, {@code false} for right side
+	 */
+	private void showAllComments(SourceViewer sv,
+			List<PullRequestComment> comments, boolean isLeft) {
+		if (sv == null || comments == null || comments.isEmpty()) {
+			return;
+		}
+
+		Activator.logInfo(String.format(
+				"[CommentOverlayInstaller] showAllComments: side=%s, commentCount=%d", //$NON-NLS-1$
+				isLeft ? "LEFT" : "RIGHT", comments.size())); //$NON-NLS-1$ //$NON-NLS-2$
+
+		// Group comments by line number - only root comments
+		// are shown as separate composites (replies are shown
+		// within the parent comment's composite)
+		Map<Integer, List<PullRequestComment>> commentsByLine = new HashMap<>();
+		for (PullRequestComment comment : comments) {
+			if (comment.getLine() != null && comment.getLine().intValue() >= 1) {
+				int line = comment.getLine().intValue();
+				// Only add root comments - replies are included via getReplies()
+				if (comment.getInReplyToId() == -1) {
+					commentsByLine.computeIfAbsent(line,
+							k -> new ArrayList<>()).add(comment);
+				}
+			}
+		}
+
+		Activator.logInfo(String.format(
+				"[CommentOverlayInstaller] Showing %d comment threads", //$NON-NLS-1$
+				commentsByLine.size()));
+
+		// Sort by line number ascending so comments are shown
+		// in a predictable top-to-bottom order
+		List<Integer> sortedLines = new ArrayList<>(
+				commentsByLine.keySet());
+		Collections.sort(sortedLines);
+
+		// Show each comment thread
+		for (Integer lineNum : sortedLines) {
+			List<PullRequestComment> lineComments =
+					commentsByLine.get(lineNum);
+			Activator.logInfo(String.format(
+					"[CommentOverlayInstaller] Showing line" //$NON-NLS-1$
+							+ " %d with %d root comments", //$NON-NLS-1$
+					lineNum, lineComments.size()));
+			showComment(sv, isLeft, lineNum.intValue(),
+					lineComments);
+		}
+
+		// Reposition all composites after all indents have been
+		// set. Each setLineVerticalIndent call shifts lines below
+		// it, so composites positioned earlier may be stale.
+		repositionAllComposites(sv, isLeft);
+
+		// Register the resize listener once per side to handle
+		// future resizes
+		ensureResizeListener(sv, isLeft);
+	}
+
+	/**
+	 * Scrolls to a comment by line number and file type. This
 	 * method is called when a comment is selected in the Comments View to
 	 * navigate to the inline comment in the compare editor.
 	 *
 	 * @param line
-	 *            the line number (1-based) to expand
+	 *            the line number (1-based) to scroll to
 	 * @param fileType
 	 *            the file type: "FROM" for left side, "TO" for right side
 	 */
-	public void expandAndScrollToComment(int line, String fileType) {
+	public void scrollToComment(int line, String fileType) {
 		boolean isLeft = "FROM".equals(fileType); //$NON-NLS-1$
 		SourceViewer sv = isLeft ? leftSourceViewer : rightSourceViewer;
 
@@ -438,26 +498,11 @@ class CommentOverlayInstaller {
 			return;
 		}
 
-		// Collapse any existing expanded comment first
-		collapseExpanded(sv, isLeft, false);
-
-		// Expand the comment
-		expandComment(sv, isLeft, line, lineComments);
-
-		// Check if animation is enabled
-		boolean animationEnabled = Activator.getDefault()
-				.getPreferenceStore()
-				.getBoolean(
-						PRPreferences.PULLREQUEST_ANIMATE_INLINE_COMMENTS);
-
-		// Schedule scrolling after expansion (with delay if animated)
+		// Comments are always visible, so just scroll to the line
 		StyledText styledText = sv.getTextWidget();
 		int lineIndex = line - 1; // Convert to 0-based
-		
-		// If animation is enabled, wait for it to complete before scrolling
-		int delay = animationEnabled ? ANIMATION_DURATION_MS + 50 : 50;
-		
-		Display.getDefault().timerExec(delay, () -> {
+
+		Display.getDefault().timerExec(50, () -> {
 			if (styledText != null && !styledText.isDisposed()) {
 				try {
 					int offset = styledText.getOffsetAtLine(lineIndex);
@@ -523,40 +568,46 @@ class CommentOverlayInstaller {
 		}
 	}
 
-	// ---- Expand / Collapse -----------------------------------------------
+	// ---- Comment Display -----------------------------------------------
 
 	private void handleCommentClick(SourceViewer sv,
 			boolean isLeft, int line,
 			List<PullRequestComment> comments) {
-		boolean animating = isLeft ? leftAnimating
-				: rightAnimating;
-		if (animating) {
+		// Comments are always visible, so just scroll to the line
+		if (sv == null || sv.getTextWidget() == null
+				|| sv.getTextWidget().isDisposed()) {
 			return;
 		}
 
-		CommentRulerColumn column = isLeft ? leftRulerColumn
-				: rightRulerColumn;
+		StyledText styledText = sv.getTextWidget();
+		int lineIndex = line - 1; // Convert to 0-based
 
-		if (column != null && column.getExpandedLine() == line) {
-			collapseExpanded(sv, isLeft, true);
-			return;
+		try {
+			int offset = styledText.getOffsetAtLine(lineIndex);
+			styledText.setSelection(offset);
+			styledText.showSelection();
+			styledText.setTopIndex(Math.max(0, lineIndex - 5)); // Show context
+		} catch (IllegalArgumentException e) {
+			// Line doesn't exist, ignore
 		}
-
-		collapseExpanded(sv, isLeft, false);
-		expandComment(sv, isLeft, line, comments);
 	}
 
-	private void expandComment(SourceViewer sv, boolean isLeft,
-			int line,
-			List<PullRequestComment> comments) {
+	private void showComment(SourceViewer sv, boolean isLeft,
+			int line, List<PullRequestComment> comments) {
 		StyledText styledText = sv.getTextWidget();
 		if (styledText == null || styledText.isDisposed()) {
+			Activator.logInfo(String.format(
+					"[CommentOverlayInstaller] showComment: styledText null or disposed for line %d", //$NON-NLS-1$
+					line));
 			return;
 		}
 
 		int lineIndex = line;
 		if (lineIndex < 0
 				|| lineIndex >= styledText.getLineCount()) {
+			Activator.logInfo(String.format(
+					"[CommentOverlayInstaller] showComment: line %d out of range (lineCount=%d)", //$NON-NLS-1$
+					line, styledText.getLineCount()));
 			return;
 		}
 
@@ -591,11 +642,6 @@ class CommentOverlayInstaller {
 					handleEdit(comment);
 				}
 
-				@Override
-				public void onCollapse(int collapseLine) {
-						collapseExpanded(sv, isLeft);
-					}
-
 					@Override
 					public void onSelect(
 							PullRequestComment comment) {
@@ -622,51 +668,32 @@ class CommentOverlayInstaller {
 		Point preferredSize = composite.computeSize(
 				styledText.getClientArea().width - 20,
 				SWT.DEFAULT);
-		int indentHeight = preferredSize.y + 8;
+		int indentHeight = preferredSize.y;
 
 		CommentRulerColumn column = isLeft ? leftRulerColumn
 				: rightRulerColumn;
 		if (column != null) {
-			column.setExpandedLine(line);
+			column.addLineWithComments(line);
 		}
 
-		if (isLeft) {
-			leftExpandedComposite = composite;
-		} else {
-			rightExpandedComposite = composite;
-		}
+		// Add to the list of composites
+		List<ExpandedCommentComposite> composites = isLeft
+				? leftComposites : rightComposites;
+		composites.add(composite);
 
-		boolean animationEnabled = Activator.getDefault()
-				.getPreferenceStore()
-				.getBoolean(
-						PRPreferences.PULLREQUEST_ANIMATE_INLINE_COMMENTS);
+		// Always show comments immediately
+		styledText.setLineVerticalIndent(lineIndex,
+				indentHeight);
+		positionComposite(styledText, composite,
+				lineIndex, indentHeight);
+		composite.setVisible(true);
 
-		if (animationEnabled) {
-			if (isLeft) {
-				leftAnimating = true;
-			} else {
-				rightAnimating = true;
-			}
-			animateExpand(styledText, composite, lineIndex,
-					indentHeight, isLeft);
-		} else {
-			styledText.setLineVerticalIndent(lineIndex,
-					indentHeight);
-			positionExpandedComposite(styledText, composite,
-					lineIndex, indentHeight);
-			composite.setVisible(true);
-
-			styledText.addListener(SWT.Resize, e -> {
-				if (!composite.isDisposed()
-						&& !styledText.isDisposed()) {
-					positionExpandedComposite(styledText,
-							composite, lineIndex, indentHeight);
-				}
-			});
-		}
+		Activator.logInfo(String.format(
+				"[CommentOverlayInstaller] showComment: line %d shown successfully (indentHeight=%d)", //$NON-NLS-1$
+				line, indentHeight));
 	}
 
-	private void positionExpandedComposite(StyledText styledText,
+	private void positionComposite(StyledText styledText,
 			ExpandedCommentComposite composite, int lineIndex,
 			int indentHeight) {
 		if (styledText.isDisposed() || composite.isDisposed()) {
@@ -685,81 +712,213 @@ class CommentOverlayInstaller {
 			int y = location.y - verticalIndent + 4;
 			int width = styledText.getClientArea().width - 20;
 
+			// Use the composite's preferred content height, not the
+			// full indent height. The indent may be larger than the
+			// content (e.g. increased to prevent overlaps with the
+			// composite above), so sizing to the indent would create
+			// excessive whitespace below the comment thread.
+			Point preferredSize = composite.computeSize(
+					Math.max(width, 100), SWT.DEFAULT);
+			int contentHeight = preferredSize.y;
+
 			composite.setBounds(x, y, Math.max(width, 100),
-					indentHeight - 8);
+					contentHeight);
 		} catch (IllegalArgumentException e) {
 			composite.setVisible(false);
 		}
 	}
 
-	private void collapseExpanded(SourceViewer sv,
-			boolean isLeft) {
-		collapseExpanded(sv, isLeft, true);
+	/**
+	 * Ensures that a resize listener is registered for the given source
+	 * viewer, registering it exactly once per side. The listener will
+	 * reposition all comment composites when the StyledText widget is
+	 * resized.
+	 *
+	 * @param sv
+	 *            the source viewer
+	 * @param isLeft
+	 *            {@code true} for left side, {@code false} for right side
+	 */
+	private void ensureResizeListener(SourceViewer sv, boolean isLeft) {
+		// Check if we've already registered the listener for this side
+		if (isLeft && leftResizeListenerRegistered) {
+			return;
+		}
+		if (!isLeft && rightResizeListenerRegistered) {
+			return;
+		}
+
+		StyledText styledText = sv.getTextWidget();
+		if (styledText == null || styledText.isDisposed()) {
+			return;
+		}
+
+		styledText.addListener(SWT.Resize, e -> {
+			if (!styledText.isDisposed()) {
+				repositionAllComposites(sv, isLeft);
+			}
+		});
+
+		// Mark as registered
+		if (isLeft) {
+			leftResizeListenerRegistered = true;
+		} else {
+			rightResizeListenerRegistered = true;
+		}
 	}
 
-	private void collapseExpanded(SourceViewer sv,
-			boolean isLeft, boolean animate) {
-		boolean animationEnabled = Activator.getDefault()
-				.getPreferenceStore()
-				.getBoolean(
-						PRPreferences.PULLREQUEST_ANIMATE_INLINE_COMMENTS);
+	/**
+	 * Disposes all comment composites on the specified side.
+	 *
+	 * @param sv
+	 *            the source viewer
+	 * @param isLeft
+	 *            {@code true} for left side, {@code false} for right side
+	 */
+	private void disposeAllComments(SourceViewer sv,
+			boolean isLeft) {
+		List<ExpandedCommentComposite> composites = isLeft
+				? leftComposites : rightComposites;
 
-		ExpandedCommentComposite composite = isLeft
-				? leftExpandedComposite
-				: rightExpandedComposite;
-		CommentRulerColumn column = isLeft ? leftRulerColumn
-				: rightRulerColumn;
+		// Make a copy to avoid concurrent modification
+		List<ExpandedCommentComposite> toDispose =
+				new ArrayList<>(composites);
 
-		if (composite != null && !composite.isDisposed()) {
-			int line = composite.getLine();
+		for (ExpandedCommentComposite composite : toDispose) {
+			if (composite != null && !composite.isDisposed()) {
+				composite.dispose();
+			}
+		}
 
-			if (sv != null && animate && animationEnabled) {
-				StyledText styledText = sv.getTextWidget();
-				if (styledText != null
-						&& !styledText.isDisposed()) {
-					int lineIndex = line;
-					if (lineIndex >= 0 && lineIndex
-							< styledText.getLineCount()) {
-						int currentHeight = styledText
-								.getLineVerticalIndent(
-										lineIndex);
-						if (isLeft) {
-							leftAnimating = true;
-						} else {
-							rightAnimating = true;
+		composites.clear();
+	}
+
+	/**
+	 * Repositions all comment composites on the given side.
+	 * This must be called after showing multiple comments
+	 * because each {@code setLineVerticalIndent} call shifts the
+	 * pixel positions of all lines below it, invalidating the
+	 * positions of composites that were placed earlier.
+	 *
+	 * <p>
+	 * This method also detects and resolves overlaps between adjacent
+	 * comment composites. When a composite would overlap with the one
+	 * above it, the vertical indent is increased to push the composite
+	 * down and create adequate spacing.
+	 * </p>
+	 *
+	 * @param sv
+	 *            the source viewer
+	 * @param isLeft
+	 *            {@code true} for left side, {@code false} for
+	 *            right side
+	 */
+	private void repositionAllComposites(SourceViewer sv,
+			boolean isLeft) {
+		if (sv == null) {
+			return;
+		}
+		StyledText styledText = sv.getTextWidget();
+		if (styledText == null || styledText.isDisposed()) {
+			return;
+		}
+
+		List<ExpandedCommentComposite> composites = isLeft
+				? leftComposites
+				: rightComposites;
+
+		if (composites.isEmpty()) {
+			return;
+		}
+
+		// Sort composites by line number for top-to-bottom processing
+		List<ExpandedCommentComposite> sortedComposites = new ArrayList<>(composites);
+		sortedComposites.sort((a, b) -> Integer.compare(a.getLine(), b.getLine()));
+
+		// First pass: position all composites and update their indents
+		// to match the current preferred size (handles width changes since initial expand)
+		int width = styledText.getClientArea().width - 20;
+		for (ExpandedCommentComposite composite : sortedComposites) {
+			if (composite.isDisposed()) {
+				continue;
+			}
+			int lineIndex = composite.getLine();
+			if (lineIndex < 0 || lineIndex >= styledText.getLineCount()) {
+				continue;
+			}
+
+			// Recalculate preferred height with current width
+			Point preferredSize = composite.computeSize(
+					Math.max(width, 100), SWT.DEFAULT);
+			int newIndent = preferredSize.y;
+
+			// Update the line vertical indent to match current size
+			int currentIndent = styledText.getLineVerticalIndent(lineIndex);
+			if (currentIndent != newIndent) {
+				styledText.setLineVerticalIndent(lineIndex, newIndent);
+			}
+
+			positionComposite(styledText, composite, lineIndex, newIndent);
+		}
+
+		// Second pass: detect and fix overlaps from top to bottom
+		final int MIN_GAP = 8; // Minimum pixel gap between adjacent composites
+		Rectangle prevBounds = null;
+		int prevLineIndex = -1;
+
+		for (int i = 0; i < sortedComposites.size(); i++) {
+			ExpandedCommentComposite composite = sortedComposites.get(i);
+			if (composite.isDisposed()) {
+				continue;
+			}
+
+			int lineIndex = composite.getLine();
+			if (lineIndex < 0 || lineIndex >= styledText.getLineCount()) {
+				continue;
+			}
+
+			Rectangle bounds = composite.getBounds();
+
+			if (prevBounds != null && prevLineIndex >= 0) {
+				// Calculate where this composite's top edge is
+				int compositeTop = bounds.y;
+				int prevBottom = prevBounds.y + prevBounds.height;
+
+				// Check if there's an overlap or insufficient gap
+				if (compositeTop < prevBottom + MIN_GAP) {
+					// Calculate how much we need to push this composite down
+					int requiredShift = (prevBottom + MIN_GAP) - compositeTop;
+
+					Activator.logInfo(String.format(
+							"[CommentOverlayInstaller] Overlap detected at line %d " +
+							"(compositeTop=%d, prevBottom=%d, requiredShift=%d)",
+							lineIndex, compositeTop, prevBottom, requiredShift));
+
+					// Increase the vertical indent for this line
+					int currentIndent = styledText.getLineVerticalIndent(lineIndex);
+					int newIndent = currentIndent + requiredShift;
+					styledText.setLineVerticalIndent(lineIndex, newIndent);
+
+					// Reposition this composite and all subsequent ones
+					// (because changing indent shifts lines below)
+					for (int j = i; j < sortedComposites.size(); j++) {
+						ExpandedCommentComposite c = sortedComposites.get(j);
+						if (!c.isDisposed()) {
+							int idx = c.getLine();
+							if (idx >= 0 && idx < styledText.getLineCount()) {
+								int indent = styledText.getLineVerticalIndent(idx);
+								positionComposite(styledText, c, idx, indent);
+							}
 						}
-						animateCollapse(styledText, composite,
-								lineIndex, currentHeight,
-								isLeft);
-						return;
 					}
+
+					// Update bounds after repositioning
+					bounds = composite.getBounds();
 				}
 			}
 
-			composite.dispose();
-
-			if (sv != null) {
-				StyledText styledText = sv.getTextWidget();
-				if (styledText != null
-						&& !styledText.isDisposed()) {
-					int lineIndex = line;
-					if (lineIndex >= 0 && lineIndex
-							< styledText.getLineCount()) {
-						styledText.setLineVerticalIndent(
-								lineIndex, 0);
-					}
-				}
-			}
-		}
-
-		if (column != null) {
-			column.setExpandedLine(-1);
-		}
-
-		if (isLeft) {
-			leftExpandedComposite = null;
-		} else {
-			rightExpandedComposite = null;
+			prevBounds = bounds;
+			prevLineIndex = lineIndex;
 		}
 	}
 
@@ -1135,7 +1294,7 @@ class CommentOverlayInstaller {
 			return allComments;
 		}
 
-		java.util.Set<String> paths = new java.util.HashSet<>();
+		Set<String> paths = new HashSet<>();
 		for (PullRequestComment c : currentComments) {
 			if (c.getPath() != null) {
 				paths.add(c.getPath());
@@ -1222,211 +1381,12 @@ class CommentOverlayInstaller {
 	// ---- Animation helpers -----------------------------------------------
 
 	/**
-	 * Easing function for smooth animation deceleration.
-	 *
-	 * @param t
-	 *            time progress from 0.0 to 1.0
-	 * @return eased value (ease-out quadratic)
-	 */
-	private float easeOutQuad(float t) {
-		return t * (2 - t);
-	}
-
-	/**
-	 * Animates expansion of a comment composite by gradually
-	 * increasing the line vertical indent.
-	 *
-	 * @param styledText
-	 *            the text widget
-	 * @param composite
-	 *            the expanded comment composite
-	 * @param lineIndex
-	 *            the line index
-	 * @param targetHeight
-	 *            the target indent height
-	 * @param isLeft
-	 *            whether this is the left side
-	 */
-	private void animateExpand(StyledText styledText,
-			ExpandedCommentComposite composite, int lineIndex,
-			int targetHeight, boolean isLeft) {
-		final long startTime = System.currentTimeMillis();
-		final int steps = ANIMATION_DURATION_MS / ANIMATION_STEP_MS;
-
-		composite.setVisible(false);
-
-		Runnable[] animation = new Runnable[1];
-		animation[0] = new Runnable() {
-			int step = 0;
-
-			@Override
-			public void run() {
-				if (styledText.isDisposed()
-						|| composite.isDisposed()) {
-					if (isLeft) {
-						leftAnimating = false;
-					} else {
-						rightAnimating = false;
-					}
-					return;
-				}
-
-				step++;
-				float progress = Math.min(1.0f,
-						(float) step / steps);
-				float easedProgress = easeOutQuad(progress);
-				int currentHeight =
-						(int) (targetHeight * easedProgress);
-
-				styledText.setLineVerticalIndent(lineIndex,
-						currentHeight);
-				positionExpandedComposite(styledText, composite,
-						lineIndex, currentHeight);
-
-				if (progress >= 0.5f && !composite.isVisible()) {
-					composite.setVisible(true);
-				}
-
-				if (step < steps) {
-					Display.getCurrent().timerExec(
-							ANIMATION_STEP_MS, animation[0]);
-				} else {
-					styledText.setLineVerticalIndent(lineIndex,
-							targetHeight);
-					positionExpandedComposite(styledText,
-							composite, lineIndex, targetHeight);
-					composite.setVisible(true);
-
-					styledText.addListener(SWT.Resize, e -> {
-						if (!composite.isDisposed()
-								&& !styledText.isDisposed()) {
-							positionExpandedComposite(
-									styledText, composite,
-									lineIndex, targetHeight);
-						}
-					});
-
-					if (isLeft) {
-						leftAnimating = false;
-					} else {
-						rightAnimating = false;
-					}
-				}
-			}
-		};
-
-		Display.getCurrent().timerExec(ANIMATION_STEP_MS,
-				animation[0]);
-	}
-
-	/**
-	 * Animates collapse of a comment composite by gradually
-	 * reducing the line vertical indent.
-	 *
-	 * @param styledText
-	 *            the text widget
-	 * @param composite
-	 *            the expanded comment composite
-	 * @param lineIndex
-	 *            the line index
-	 * @param startHeight
-	 *            the starting indent height
-	 * @param isLeft
-	 *            whether this is the left side
-	 */
-	private void animateCollapse(StyledText styledText,
-			ExpandedCommentComposite composite, int lineIndex,
-			int startHeight, boolean isLeft) {
-		final long startTime = System.currentTimeMillis();
-		final int steps = ANIMATION_DURATION_MS / ANIMATION_STEP_MS;
-
-		Runnable[] animation = new Runnable[1];
-		animation[0] = new Runnable() {
-			int step = 0;
-
-			@Override
-			public void run() {
-				if (styledText.isDisposed()) {
-					if (composite != null
-							&& !composite.isDisposed()) {
-						composite.dispose();
-					}
-					if (isLeft) {
-						leftAnimating = false;
-						leftExpandedComposite = null;
-					} else {
-						rightAnimating = false;
-						rightExpandedComposite = null;
-					}
-					return;
-				}
-
-				step++;
-				float progress = Math.min(1.0f,
-						(float) step / steps);
-				float easedProgress = easeOutQuad(progress);
-				int currentHeight = (int) (startHeight
-						* (1.0f - easedProgress));
-
-				if (lineIndex >= 0 && lineIndex
-						< styledText.getLineCount()) {
-					styledText.setLineVerticalIndent(lineIndex,
-							currentHeight);
-				}
-
-				if (!composite.isDisposed()) {
-					positionExpandedComposite(styledText,
-							composite, lineIndex, currentHeight);
-
-					if (progress >= 0.5f
-							&& composite.isVisible()) {
-						composite.setVisible(false);
-					}
-				}
-
-				if (step < steps) {
-					Display.getCurrent().timerExec(
-							ANIMATION_STEP_MS, animation[0]);
-				} else {
-					if (!composite.isDisposed()) {
-						composite.dispose();
-					}
-
-					if (lineIndex >= 0 && lineIndex
-							< styledText.getLineCount()) {
-						styledText.setLineVerticalIndent(
-								lineIndex, 0);
-					}
-
-					CommentRulerColumn column = isLeft
-							? leftRulerColumn
-							: rightRulerColumn;
-					if (column != null) {
-						column.setExpandedLine(-1);
-					}
-
-					if (isLeft) {
-						leftAnimating = false;
-						leftExpandedComposite = null;
-					} else {
-						rightAnimating = false;
-						rightExpandedComposite = null;
-					}
-				}
-			}
-		};
-
-		Display.getCurrent().timerExec(ANIMATION_STEP_MS,
-				animation[0]);
-	}
-
-	/**
 	 * Disposes all resources managed by this installer. Should be
 	 * called when the compare editor is closed.
 	 */
 	void dispose() {
-		collapseExpanded(leftSourceViewer, true, false);
-		collapseExpanded(rightSourceViewer, false, false);
+		disposeAllComments(leftSourceViewer, true);
+		disposeAllComments(rightSourceViewer, false);
 		leftRulerColumn = null;
 		rightRulerColumn = null;
 		leftSourceViewer = null;

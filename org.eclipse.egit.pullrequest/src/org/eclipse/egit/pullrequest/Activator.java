@@ -27,11 +27,7 @@ import org.osgi.framework.BundleContext;
  */
 public class Activator extends AbstractUIPlugin {
 
-	/**
-	 * The plug-in ID
-	 */
 	public static final String PLUGIN_ID = "org.eclipse.egit.pullrequest"; //$NON-NLS-1$
-
 	private static Activator plugin;
 
 	@Override
@@ -106,6 +102,9 @@ public class Activator extends AbstractUIPlugin {
 		IPreferenceStore store = super.getPreferenceStore();
 		store.setDefault(
 				PRPreferences.PULLREQUEST_ANIMATE_INLINE_COMMENTS,
+				true);
+		store.setDefault(
+				PRPreferences.PULLREQUEST_EXPAND_COMMENTS_BY_DEFAULT,
 				true);
 		return store;
 	}

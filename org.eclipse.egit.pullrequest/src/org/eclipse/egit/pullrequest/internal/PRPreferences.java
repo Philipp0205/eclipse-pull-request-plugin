@@ -51,6 +51,9 @@ public class PRPreferences {
 	/** Animate inline comments preference */
 	public static final String PULLREQUEST_ANIMATE_INLINE_COMMENTS = "pullrequest_animate_inline_comments"; //$NON-NLS-1$
 
+	/** Expand all comments by default preference */
+	public static final String PULLREQUEST_EXPAND_COMMENTS_BY_DEFAULT = "pullrequest_expand_comments_by_default"; //$NON-NLS-1$
+
 	private PRPreferences() {
 		// No instantiation
 	}

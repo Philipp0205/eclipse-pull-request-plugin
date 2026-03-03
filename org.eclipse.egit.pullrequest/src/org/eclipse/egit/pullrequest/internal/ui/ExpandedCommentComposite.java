@@ -93,14 +93,6 @@ public class ExpandedCommentComposite extends Composite {
 	void onEdit(PullRequestComment comment);
 
 	/**
-	 * Called when the user clicks the Collapse link.
-	 *
-	 * @param line
-	 *            the line number to collapse
-	 */
-	void onCollapse(int line);
-
-	/**
 	 * Called when the user selects a comment (clicks on its
 	 * header).
 	 *
@@ -595,8 +587,7 @@ public class ExpandedCommentComposite extends Composite {
 	}
 
 	/**
-	 * Adds the action bar with Reply, Resolve (Bitbucket only), and
-	 * Collapse links.
+	 * Adds the action bar with Reply and Resolve (Bitbucket only) links.
 	 *
 	 * @param parent
 	 *            the parent composite
@@ -615,8 +606,8 @@ public class ExpandedCommentComposite extends Composite {
 				.hint(SWT.DEFAULT, 1)
 				.indent(0, 6).applyTo(sep);
 
-	// Dynamically determine column count: 2 for GitHub, 3 for Bitbucket
-	int columnCount = showResolve ? 3 : 2;
+	// Dynamically determine column count: 1 for GitHub, 2 for Bitbucket
+	int columnCount = showResolve ? 2 : 1;
 	Composite actionBar = new Composite(parent, SWT.NONE);
 	actionBar.setBackground(parent.getBackground());
 	GridLayoutFactory.fillDefaults().numColumns(columnCount).spacing(16, 0)
@@ -651,13 +642,6 @@ public class ExpandedCommentComposite extends Composite {
 				resolveLink.addListener(SWT.Selection,
 						e -> handler.onResolve(rootComment));
 			}
-		}
-
-		// Collapse link
-		Link collapseLink = createStyledLink(actionBar, "Collapse"); //$NON-NLS-1$
-		if (handler != null) {
-			collapseLink.addListener(SWT.Selection,
-					e -> handler.onCollapse(line));
 		}
 	}
 

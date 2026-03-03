@@ -125,8 +125,7 @@ public class PullRequestCompareEditorInput extends CompareEditorInput {
 			commentOverlay = new CommentOverlayInstaller(
 					contentViewer);
 			commentOverlay.setFilePath(changedFile.getPath());
-			commentOverlay.setDiffLines(
-					changedFile.getDiffLines());
+			commentOverlay.setDiffLines(changedFile.getDiffLines());
 			commentOverlay.installComments(comments);
 		}
 

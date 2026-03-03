@@ -67,6 +67,8 @@ public class PullRequestPreferencePage extends PreferencePage
 
 	private Button animateInlineCommentsCheckbox;
 
+	private Button expandCommentsByDefaultCheckbox;
+
 	/**
 	 * Creates a new {@link PullRequestPreferencePage}
 	 */
@@ -286,6 +288,13 @@ public class PullRequestPreferencePage extends PreferencePage
 		GridDataFactory.fillDefaults().grab(true, false)
 				.indent(20, 0)
 				.applyTo(animateInlineCommentsCheckbox);
+
+		expandCommentsByDefaultCheckbox = new Button(group, SWT.CHECK);
+		expandCommentsByDefaultCheckbox
+				.setText(org.eclipse.egit.pullrequest.internal.PRText.PreferencePage_ExpandCommentsByDefault);
+		GridDataFactory.fillDefaults().grab(true, false)
+				.indent(20, 0)
+				.applyTo(expandCommentsByDefaultCheckbox);
 	}
 
 	private void updateProviderVisibility() {
@@ -336,6 +345,8 @@ public class PullRequestPreferencePage extends PreferencePage
 				.getBoolean(PRPreferences.PULLREQUEST_SHOW_INLINE_COMMENTS));
 		animateInlineCommentsCheckbox.setSelection(store
 				.getBoolean(PRPreferences.PULLREQUEST_ANIMATE_INLINE_COMMENTS));
+		expandCommentsByDefaultCheckbox.setSelection(store
+				.getBoolean(PRPreferences.PULLREQUEST_EXPAND_COMMENTS_BY_DEFAULT));
 	}
 
 	@Override
@@ -354,6 +365,7 @@ public class PullRequestPreferencePage extends PreferencePage
 
 		showInlineCommentsCheckbox.setSelection(true);
 		animateInlineCommentsCheckbox.setSelection(true);
+		expandCommentsByDefaultCheckbox.setSelection(false);
 
 		updateProviderVisibility();
 
@@ -394,6 +406,8 @@ public class PullRequestPreferencePage extends PreferencePage
 				showInlineCommentsCheckbox.getSelection());
 		store.setValue(PRPreferences.PULLREQUEST_ANIMATE_INLINE_COMMENTS,
 				animateInlineCommentsCheckbox.getSelection());
+		store.setValue(PRPreferences.PULLREQUEST_EXPAND_COMMENTS_BY_DEFAULT,
+				expandCommentsByDefaultCheckbox.getSelection());
 
 		return super.performOk();
 	}

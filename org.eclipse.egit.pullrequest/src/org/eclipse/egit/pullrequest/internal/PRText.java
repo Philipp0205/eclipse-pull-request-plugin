@@ -260,6 +260,9 @@ public class PRText extends NLS {
 	/** */
 	public static String CommitsView_ErrorFetchingCommits;
 
+	/** */
+	public static String PreferencePage_ExpandCommentsByDefault;
+
 	static {
 		initializeMessages("org.eclipse.egit.pullrequest.internal.prtext", //$NON-NLS-1$
 				PRText.class);
