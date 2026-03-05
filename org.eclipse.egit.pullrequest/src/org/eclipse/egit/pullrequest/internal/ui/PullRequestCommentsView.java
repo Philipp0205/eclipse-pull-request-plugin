@@ -1492,13 +1492,16 @@ public class PullRequestCommentsView extends ViewPart {
 								// Highlight the line
 								highlightCommentInCompareEditor(comment);
 
-								// Expand the inline comment
+								// Expand the inline comment and highlight it
 								CommentOverlayInstaller overlay = compareInput
 										.getCommentOverlay();
 								if (overlay != null && comment.getLine() != null
 										&& comment.getFileType() != null) {
-									overlay.expandAndScrollToComment(
+									overlay.scrollToComment(
 											comment.getLine(),
+											comment.getFileType());
+									// Highlight the specific comment bubble
+									overlay.highlightComment(comment, 
 											comment.getFileType());
 								}
 
@@ -1561,8 +1564,11 @@ public class PullRequestCommentsView extends ViewPart {
 								if (overlay != null
 										&& finalComment.getLine() != null
 										&& finalComment.getFileType() != null) {
-									overlay.expandAndScrollToComment(
+									overlay.scrollToComment(
 											finalComment.getLine(),
+											finalComment.getFileType());
+									// Highlight the specific comment bubble
+									overlay.highlightComment(finalComment, 
 											finalComment.getFileType());
 								}
 							}
@@ -1647,7 +1653,7 @@ public class PullRequestCommentsView extends ViewPart {
 								// Expand the inline comment if available
 								// This will also handle scrolling
 								if (willExpand) {
-									overlay.expandAndScrollToComment(
+									overlay.scrollToComment(
 											comment.getLine(),
 											comment.getFileType());
 								}
@@ -2042,6 +2048,27 @@ public class PullRequestCommentsView extends ViewPart {
 	 */
 	public void onCommentsLoaded(List<PullRequestComment> comments) {
 		allComments = comments;
+
+		// Check if comments should be collapsed by default
+		boolean expandByDefault = org.eclipse.egit.pullrequest.Activator
+				.getDefault()
+				.getPreferenceStore()
+				.getBoolean(org.eclipse.egit.pullrequest.internal
+						.PRPreferences.PULLREQUEST_EXPAND_COMMENTS_BY_DEFAULT);
+
+		if (!expandByDefault) {
+			// Collapse all root comments by default
+			collapsedCommentIds.clear();
+			if (comments != null) {
+				for (PullRequestComment comment : comments) {
+					// Only add root comments (those without parent)
+					if (comment.getInReplyToId() == -1) {
+						collapsedCommentIds.add(comment.getId());
+					}
+				}
+			}
+		}
+
 		refreshComments();
 	}
 

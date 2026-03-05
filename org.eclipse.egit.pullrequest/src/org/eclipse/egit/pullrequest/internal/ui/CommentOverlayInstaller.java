@@ -1,92 +1,75 @@
-/*******************************************************************************
- * Copyright (C) 2026, Eclipse EGit contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License 2.0
- * which accompanies this distribution, and is available at
- * https://www.eclipse.org/legal/epl-2.0/
- *
- * SPDX-License-Identifier: EPL-2.0
- *******************************************************************************/
 package org.eclipse.egit.pullrequest.internal.ui;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.compare.contentmergeviewer.TextMergeViewer;
-import org.eclipse.core.runtime.IProgressMonitor;
-import org.eclipse.core.runtime.IStatus;
-import org.eclipse.core.runtime.Status;
-import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.egit.pullrequest.Activator;
-import org.eclipse.egit.pullrequest.internal.PRPreferences;
 import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
 import org.eclipse.egit.pullrequest.internal.client.PullRequestClientFactory;
 import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderType;
 import org.eclipse.egit.pullrequest.internal.model.DiffHunkParser;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
-import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.text.source.SourceViewer;
 import org.eclipse.jface.viewers.Viewer;
-import org.eclipse.jface.window.Window;
-import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.StyledText;
-import org.eclipse.swt.graphics.Point;
+import org.eclipse.swt.events.ControlAdapter;
+import org.eclipse.swt.events.ControlEvent;
+import org.eclipse.swt.events.ControlListener;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.ui.IViewPart;
 import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.PlatformUI;
 
 /**
- * Installs pull request comment overlays (ruler columns and expandable
- * comment composites) on any {@link TextMergeViewer} instance. This
+ * Installs pull request comment overlays (ruler columns and inline
+ * painted comments) on any {@link TextMergeViewer} instance. This
  * allows the Eclipse compare framework to select the appropriate
  * language-specific viewer (e.g. Java Source Compare, XML Compare)
- * while still providing inline comment support.
+ * while still providing inline comment support.e Comm
  *
  * <p>
  * The installer uses reflection to access the left and right
  * {@link SourceViewer} instances from the {@link TextMergeViewer},
  * then installs {@link CommentRulerColumn} instances on each side.
+ * Inline comments are painted directly into the
+ * {@code StyledText} vertical-indent space by a
+ * {@link CommentPaintRenderer}, avoiding the need for manual
+ * composite positioning and overlap detection.
  * </p>
  */
-class CommentOverlayInstaller {
+public class CommentOverlayInstaller {
 
 	private SourceViewer leftSourceViewer;
-
 	private SourceViewer rightSourceViewer;
-
 	private CommentRulerColumn leftRulerColumn;
-
 	private CommentRulerColumn rightRulerColumn;
 
-	private ExpandedCommentComposite leftExpandedComposite;
-
-	private ExpandedCommentComposite rightExpandedComposite;
-
-	private boolean leftAnimating;
-
-	private boolean rightAnimating;
-
+	private CommentPaintRenderer leftRenderer;
+	private CommentPaintRenderer rightRenderer;
+	private ControlListener leftResizeListener;
+	private ControlListener rightResizeListener;
+	private Runnable leftResizePending;
+	private Runnable rightResizePending;
 	private List<PullRequestComment> currentComments;
 
 	private String currentFilePath;
-
 	private DiffHunkParser.DiffLines diffLines;
-
 	private final Viewer viewer;
-
 	private String currentUsername;
-
 	private PullRequestProviderType providerType;
 
-	private static final int ANIMATION_DURATION_MS = 180;
-
-	private static final int ANIMATION_STEP_MS = 16;
+	private CommentActionExecutor actionExecutor;
+	private CommentViewSynchronizer viewSynchronizer;
 
 	/**
 	 * Creates a new installer for the given viewer.
@@ -94,7 +77,7 @@ class CommentOverlayInstaller {
 	 * @param viewer
 	 *            the merge viewer returned by the compare framework
 	 */
-	CommentOverlayInstaller(Viewer viewer) {
+	public CommentOverlayInstaller(Viewer viewer) {
 		this.viewer = viewer;
 	}
 
@@ -137,24 +120,20 @@ class CommentOverlayInstaller {
 		TextMergeViewer tmv = (TextMergeViewer) viewer;
 		extractSourceViewers(tmv);
 
-		if (leftSourceViewer == null && rightSourceViewer == null) {
-			// Source viewers not yet available; retry after a delay
-			scheduleRetry(comments, 0);
-			return;
-		}
-
 		applyComments(comments);
 	}
 
 	/**
 	 * Extracts the left and right {@link SourceViewer} from a
-	 * {@link TextMergeViewer} using reflection. The field names are
-	 * {@code fLeft} and {@code fRight} in
-	 * {@link TextMergeViewer}, each of which is a
+	 * {@link TextMergeViewer} using reflection. The field names are {@code fLeft}
+	 * and {@code fRight} in {@link TextMergeViewer}, each of which is a
 	 * {@code MergeSourceViewer} wrapping a {@link SourceViewer}.
 	 *
-	 * @param tmv
-	 *            the text merge viewer
+	 * TODO: Consider consider filing an enhancement request with the Eclipse
+	 * Platform project to expose a public API in future releases, but for now,
+	 * reflection is justified and necessary.
+	 *
+	 * @param tmv the text merge viewer
 	 */
 	private void extractSourceViewers(TextMergeViewer tmv) {
 		if (leftSourceViewer != null && rightSourceViewer != null) {
@@ -164,14 +143,11 @@ class CommentOverlayInstaller {
 		try {
 			// TextMergeViewer has fLeft and fRight fields of type
 			// MergeSourceViewer which wraps a SourceViewer
-			leftSourceViewer = extractSourceViewer(tmv,
-					"fLeft"); //$NON-NLS-1$
-			rightSourceViewer = extractSourceViewer(tmv,
-					"fRight"); //$NON-NLS-1$
+			leftSourceViewer = extractSourceViewer(tmv, "fLeft"); //$NON-NLS-1$
+			rightSourceViewer = extractSourceViewer(tmv, "fRight"); //$NON-NLS-1$
 		} catch (Exception e) {
-			Activator.logError(
-					"Failed to extract source viewers " //$NON-NLS-1$
-							+ "from TextMergeViewer", //$NON-NLS-1$
+			Activator.logError("Failed to extract source viewers " //$NON-NLS-1$
+					+ "from TextMergeViewer", //$NON-NLS-1$
 					e);
 		}
 	}
@@ -190,8 +166,7 @@ class CommentOverlayInstaller {
 	 *             if reflection fails
 	 */
 	@SuppressWarnings("restriction")
-	private SourceViewer extractSourceViewer(TextMergeViewer tmv,
-			String fieldName) throws Exception {
+	private SourceViewer extractSourceViewer(TextMergeViewer tmv, String fieldName) throws Exception {
 		// Access the MergeSourceViewer field from TextMergeViewer
 		Field field = findField(tmv.getClass(), fieldName);
 		if (field == null) {
@@ -207,26 +182,13 @@ class CommentOverlayInstaller {
 		// via the getSourceViewer() method first, then fall back
 		// to the fSourceViewer field.
 		try {
-			java.lang.reflect.Method getSourceViewer =
-					mergeSourceViewer.getClass()
-							.getMethod("getSourceViewer"); //$NON-NLS-1$
+			Method getSourceViewer = mergeSourceViewer.getClass().getMethod("getSourceViewer"); //$NON-NLS-1$
 			Object sv = getSourceViewer.invoke(mergeSourceViewer);
 			if (sv instanceof SourceViewer) {
 				return (SourceViewer) sv;
 			}
 		} catch (NoSuchMethodException e) {
 			// Try field access instead
-		}
-
-		// Fallback: try fSourceViewer field
-		Field svField = findField(mergeSourceViewer.getClass(),
-				"fSourceViewer"); //$NON-NLS-1$
-		if (svField != null) {
-			svField.setAccessible(true);
-			Object sv = svField.get(mergeSourceViewer);
-			if (sv instanceof SourceViewer) {
-				return (SourceViewer) sv;
-			}
 		}
 
 		return null;
@@ -254,44 +216,23 @@ class CommentOverlayInstaller {
 	}
 
 	/**
-	 * Schedules a retry to install comments after a short delay.
-	 *
-	 * @param comments
-	 *            the comments to install
-	 * @param retryCount
-	 *            the current retry count
+	 * Ensures the action executor and view synchronizer are
+	 * initialized. Called lazily when first needed.
 	 */
-	private void scheduleRetry(List<PullRequestComment> comments,
-			int retryCount) {
-		if (retryCount >= 10) {
-			Activator.logWarning(
-					"Could not install comment overlays: " //$NON-NLS-1$
-							+ "source viewers not available" //$NON-NLS-1$
-							+ " after retries"); //$NON-NLS-1$
+	private void ensureActionExecutorAndSynchronizer() {
+		if (actionExecutor != null && viewSynchronizer != null) {
 			return;
 		}
 
-		if (viewer.getControl() == null
-				|| viewer.getControl().isDisposed()) {
-			return;
-		}
+		// Create view synchronizer that refreshes the compare editor
+		viewSynchronizer = new CommentViewSynchronizer(
+				this::applyComments);
 
-		viewer.getControl().getDisplay().timerExec(100, () -> {
-			if (viewer.getControl() != null
-					&& !viewer.getControl().isDisposed()) {
-				if (viewer instanceof TextMergeViewer) {
-					extractSourceViewers(
-							(TextMergeViewer) viewer);
-				}
-
-				if (leftSourceViewer != null
-						|| rightSourceViewer != null) {
-					applyComments(comments);
-				} else {
-					scheduleRetry(comments, retryCount + 1);
-				}
-			}
-		});
+		// Create action executor with PR provider and refresh callback
+		actionExecutor = new CommentActionExecutor(
+				viewer.getControl().getShell(),
+				this::getSelectedPullRequest,
+				viewSynchronizer::refreshAfterAction);
 	}
 
 	/**
@@ -302,22 +243,13 @@ class CommentOverlayInstaller {
 	 *            the list of comments for the current file
 	 */
 	private void applyComments(List<PullRequestComment> comments) {
-		// Save the currently expanded line and side before collapsing
-		int expandedLine = -1;
-		boolean expandedOnLeft = false;
-		if (leftRulerColumn != null
-				&& leftRulerColumn.getExpandedLine() != -1) {
-			expandedLine = leftRulerColumn.getExpandedLine();
-			expandedOnLeft = true;
-		} else if (rightRulerColumn != null
-				&& rightRulerColumn.getExpandedLine() != -1) {
-			expandedLine = rightRulerColumn.getExpandedLine();
-			expandedOnLeft = false;
-		}
+		// Initialize executor and synchronizer if needed
+		ensureActionExecutorAndSynchronizer();
 
-		// Collapse any expanded comment
-		collapseExpanded(leftSourceViewer, true, false);
-		collapseExpanded(rightSourceViewer, false, false);
+		// Track current comments for synchronization
+		if (viewSynchronizer != null) {
+			viewSynchronizer.setCurrentComments(comments);
+		}
 
 		// Always install ruler columns so the "+" add-comment icon
 		// is available even when there are no existing comments
@@ -354,8 +286,7 @@ class CommentOverlayInstaller {
 			if (!comment.isInlineComment()) {
 				continue;
 			}
-			if (comment.getLine() == null
-					|| comment.getLine().intValue() < 1) {
+			if (comment.getLine() == null || comment.getLine().intValue() < 1) {
 				continue;
 			}
 
@@ -378,42 +309,199 @@ class CommentOverlayInstaller {
 			rightRulerColumn.setComments(rightComments);
 		}
 
-		// Re-expand the previously expanded comment if it still exists
-		if (expandedLine != -1) {
-			List<PullRequestComment> commentsToExpand = expandedOnLeft
-					? leftComments : rightComments;
-			SourceViewer viewerToExpand = expandedOnLeft
-					? leftSourceViewer : rightSourceViewer;
-
-			// Find comments for the expanded line
-			List<PullRequestComment> lineComments = new ArrayList<>();
-			for (PullRequestComment comment : commentsToExpand) {
-				if (comment.getLine() != null
-						&& comment.getLine().intValue() == expandedLine) {
-					lineComments.add(comment);
-				}
-			}
-
-			// Re-expand if comments still exist for that line
-			if (!lineComments.isEmpty()
-					&& viewerToExpand != null) {
-				expandComment(viewerToExpand, expandedOnLeft,
-						expandedLine, lineComments);
-			}
-		}
+		// Automatically show all comments by default
+		// The StyledText widget may not have its content loaded yet at this point
+		// (compare framework loads content asynchronously). Defer showing until
+		// the widget actually has enough lines for the comments.
+		scheduleShowAllCommentsWhenReady(leftSourceViewer, leftComments, true, 0);
+		scheduleShowAllCommentsWhenReady(rightSourceViewer, rightComments, false, 0);
 	}
 
 	/**
-	 * Expands and scrolls to a comment by line number and file type. This
+	 * Schedules showing of all comments once the {@link StyledText}
+	 * widget has its content loaded. The compare framework populates
+	 * the text asynchronously, so at the time {@code applyComments}
+	 * runs the widget may still be empty (line count of 1). This
+	 * method retries with a short delay until either the content
+	 * appears or the maximum number of retries is reached.
+	 *
+	 * @param sv
+	 *            the source viewer
+	 * @param comments
+	 *            the comments to show
+	 * @param isLeft
+	 *            {@code true} for left side, {@code false} for right
+	 * @param retryCount
+	 *            the current retry attempt (starts at 0)
+	 */
+	private void scheduleShowAllCommentsWhenReady(SourceViewer sv,
+			List<PullRequestComment> comments, boolean isLeft,
+			int retryCount) {
+		if (sv == null || comments == null || comments.isEmpty()) {
+			return;
+		}
+
+		StyledText styledText = sv.getTextWidget();
+		if (styledText == null || styledText.isDisposed()) {
+			return;
+		}
+
+		// Determine the maximum line number referenced by the
+		// comments so we know how many lines we need.
+		int maxLine = 0;
+		for (PullRequestComment comment : comments) {
+			if (comment.getLine() != null
+					&& comment.getLine().intValue() > maxLine) {
+				maxLine = comment.getLine().intValue();
+			}
+		}
+
+		// StyledText.getLineCount() returns the number of lines;
+		// we need at least maxLine lines to be present.
+		if (styledText.getLineCount() > maxLine) {
+			showAllComments(sv, comments, isLeft);
+			return;
+		}
+
+		if (retryCount >= 20) {
+			Activator.logWarning(
+					"[CommentOverlayInstaller] Gave up waiting" //$NON-NLS-1$
+							+ " for StyledText content to" //$NON-NLS-1$
+							+ " show all comments (side=" //$NON-NLS-1$
+							+ (isLeft
+									? "LEFT" //$NON-NLS-1$
+									: "RIGHT") //$NON-NLS-1$
+							+ ", needed " + maxLine //$NON-NLS-1$
+							+ " lines, have " //$NON-NLS-1$
+							+ styledText.getLineCount()
+							+ ")"); //$NON-NLS-1$
+			return;
+		}
+
+		Activator.logInfo(String.format(
+				"[CommentOverlayInstaller] StyledText not" //$NON-NLS-1$
+						+ " ready (lineCount=%d, need>%d)," //$NON-NLS-1$
+						+ " retrying show-all" //$NON-NLS-1$
+						+ " (attempt %d)", //$NON-NLS-1$
+				styledText.getLineCount(), maxLine,
+				retryCount + 1));
+
+		styledText.getDisplay().timerExec(100, () -> {
+			if (!styledText.isDisposed()) {
+				scheduleShowAllCommentsWhenReady(sv, comments,
+						isLeft, retryCount + 1);
+			}
+		});
+	}
+
+	/**
+	 * Shows all comment threads on the given side. This is called
+	 * automatically when comments are loaded.
+	 *
+	 * @param sv
+	 *            the source viewer
+	 * @param comments
+	 *            the comments to show
+	 * @param isLeft
+	 *            {@code true} for left side, {@code false} for right side
+	 */
+	private void showAllComments(SourceViewer sv,
+			List<PullRequestComment> comments, boolean isLeft) {
+		if (sv == null || comments == null || comments.isEmpty()) {
+			return;
+		}
+
+		StyledText styledText = sv.getTextWidget();
+		if (styledText == null || styledText.isDisposed()) {
+			return;
+		}
+
+		Activator.logInfo(String.format(
+				"[CommentOverlayInstaller] showAllComments: side=%s, commentCount=%d", //$NON-NLS-1$
+				isLeft ? "LEFT" : "RIGHT", comments.size())); //$NON-NLS-1$ //$NON-NLS-2$
+
+		// Group comments by line number — only root comments
+		// (replies are included via getReplies())
+		Map<Integer, List<PullRequestComment>> commentsByLine = new HashMap<>();
+		for (PullRequestComment comment : comments) {
+			if (comment.getLine() != null && comment.getLine().intValue() >= 1) {
+				int line = comment.getLine().intValue();
+				if (comment.getInReplyToId() == -1) {
+					commentsByLine.computeIfAbsent(line,
+							k -> new ArrayList<>())
+							.add(comment);
+				}
+			}
+		}
+
+		Activator.logInfo(String.format(
+				"[CommentOverlayInstaller] Showing %d comment threads", //$NON-NLS-1$
+				commentsByLine.size()));
+
+		// Get or create the renderer for this side
+		ensureCurrentUsername();
+		CommentPaintRenderer renderer = ensureRenderer(sv, isLeft);
+
+		// Register each thread with the renderer
+		String fileType = isLeft
+				? "FROM" : "TO"; //$NON-NLS-1$ //$NON-NLS-2$
+		renderer.setActionHandler(createActionHandler(fileType));
+		renderer.setCurrentUsername(currentUsername);
+		renderer.setProviderType(providerType);
+		renderer.clearThreads();
+
+		List<Integer> sortedLines = new ArrayList<>(commentsByLine.keySet());
+		Collections.sort(sortedLines);
+
+		for (Integer lineNum : sortedLines) {
+			List<PullRequestComment> lineComments =commentsByLine.get(lineNum);
+			int lineIndex = lineNum.intValue();
+			if (lineIndex < 0
+					|| lineIndex >= styledText.getLineCount()) {
+				continue;
+			}
+
+			renderer.addThread(lineIndex, lineComments);
+
+			CommentRulerColumn column = isLeft ? leftRulerColumn : rightRulerColumn;
+			if (column != null) {
+				column.addLineWithComments(lineNum.intValue());
+			}
+
+			Activator.logInfo(String.format(
+					"[CommentOverlayInstaller] Registered" //$NON-NLS-1$
+							+ " thread at line %d with" //$NON-NLS-1$
+							+ " %d root comments", //$NON-NLS-1$
+					lineNum, lineComments.size()));
+		}
+
+		// Compute heights and set vertical indents
+		for (Integer lineNum : sortedLines) {
+			int lineIndex = lineNum.intValue();
+			if (lineIndex >= 0
+					&& lineIndex < styledText.getLineCount()) {
+				int height = renderer.computeThreadHeight(
+						styledText, lineIndex);
+				styledText.setLineVerticalIndent(lineIndex,
+						height);
+			}
+		}
+
+		// Trigger repaint — the PaintListener handles rendering
+		styledText.redraw();
+	}
+
+	/**
+	 * Scrolls to a comment by line number and file type. This
 	 * method is called when a comment is selected in the Comments View to
 	 * navigate to the inline comment in the compare editor.
 	 *
 	 * @param line
-	 *            the line number (1-based) to expand
+	 *            the line number (1-based) to scroll to
 	 * @param fileType
 	 *            the file type: "FROM" for left side, "TO" for right side
 	 */
-	public void expandAndScrollToComment(int line, String fileType) {
+	public void scrollToComment(int line, String fileType) {
 		boolean isLeft = "FROM".equals(fileType); //$NON-NLS-1$
 		SourceViewer sv = isLeft ? leftSourceViewer : rightSourceViewer;
 
@@ -438,26 +526,11 @@ class CommentOverlayInstaller {
 			return;
 		}
 
-		// Collapse any existing expanded comment first
-		collapseExpanded(sv, isLeft, false);
-
-		// Expand the comment
-		expandComment(sv, isLeft, line, lineComments);
-
-		// Check if animation is enabled
-		boolean animationEnabled = Activator.getDefault()
-				.getPreferenceStore()
-				.getBoolean(
-						PRPreferences.PULLREQUEST_ANIMATE_INLINE_COMMENTS);
-
-		// Schedule scrolling after expansion (with delay if animated)
+		// Comments are always visible, so just scroll to the line
 		StyledText styledText = sv.getTextWidget();
 		int lineIndex = line - 1; // Convert to 0-based
-		
-		// If animation is enabled, wait for it to complete before scrolling
-		int delay = animationEnabled ? ANIMATION_DURATION_MS + 50 : 50;
-		
-		Display.getDefault().timerExec(delay, () -> {
+
+		Display.getDefault().timerExec(50, () -> {
 			if (styledText != null && !styledText.isDisposed()) {
 				try {
 					int offset = styledText.getOffsetAtLine(lineIndex);
@@ -467,6 +540,44 @@ class CommentOverlayInstaller {
 				} catch (IllegalArgumentException e) {
 					// Line doesn't exist, ignore
 				}
+			}
+		});
+	}
+
+	/**
+	 * Highlights a specific comment in the inline view. This is called
+	 * when navigating from the Comments View to provide visual feedback.
+	 *
+	 * @param comment
+	 *            the comment to highlight
+	 * @param fileType
+	 *            the file type: "FROM" for left side, "TO" for right side
+	 */
+	public void highlightComment(PullRequestComment comment, String fileType) {
+		if (comment == null) {
+			return;
+		}
+
+		boolean isLeft = "FROM".equals(fileType); //$NON-NLS-1$
+		CommentPaintRenderer renderer = isLeft ? leftRenderer : rightRenderer;
+		SourceViewer sv = isLeft ? leftSourceViewer : rightSourceViewer;
+
+		if (renderer == null || sv == null || sv.getTextWidget() == null
+				|| sv.getTextWidget().isDisposed()) {
+			return;
+		}
+
+		// Set the highlighted comment and trigger redraw
+		renderer.setHighlightedComment(comment);
+		sv.getTextWidget().redraw();
+
+		// Auto-clear highlight after 3 seconds
+		Display.getDefault().timerExec(3000, () -> {
+			if (renderer != null && sv != null
+					&& sv.getTextWidget() != null
+					&& !sv.getTextWidget().isDisposed()) {
+				renderer.clearHighlight();
+				sv.getTextWidget().redraw();
 			}
 		});
 	}
@@ -511,7 +622,9 @@ class CommentOverlayInstaller {
 		});
 
 		column.setNewCommentClickHandler(line -> {
-			handleNewComment(line, fileType);
+			ensureActionExecutorAndSynchronizer();
+			actionExecutor.handleNewComment(line, fileType,
+					currentFilePath);
 		});
 
 		sv.addVerticalRulerColumn(column);
@@ -523,562 +636,179 @@ class CommentOverlayInstaller {
 		}
 	}
 
-	// ---- Expand / Collapse -----------------------------------------------
+	// ---- Comment Display -----------------------------------------------
 
 	private void handleCommentClick(SourceViewer sv,
 			boolean isLeft, int line,
 			List<PullRequestComment> comments) {
-		boolean animating = isLeft ? leftAnimating
-				: rightAnimating;
-		if (animating) {
+		// Comments are always visible, so just scroll to the line
+		if (sv == null || sv.getTextWidget() == null
+				|| sv.getTextWidget().isDisposed()) {
 			return;
 		}
 
-		CommentRulerColumn column = isLeft ? leftRulerColumn
-				: rightRulerColumn;
-
-		if (column != null && column.getExpandedLine() == line) {
-			collapseExpanded(sv, isLeft, true);
-			return;
-		}
-
-		collapseExpanded(sv, isLeft, false);
-		expandComment(sv, isLeft, line, comments);
-	}
-
-	private void expandComment(SourceViewer sv, boolean isLeft,
-			int line,
-			List<PullRequestComment> comments) {
 		StyledText styledText = sv.getTextWidget();
-		if (styledText == null || styledText.isDisposed()) {
-			return;
-		}
-
-		int lineIndex = line;
-		if (lineIndex < 0
-				|| lineIndex >= styledText.getLineCount()) {
-			return;
-		}
-
-		String fileType = isLeft
-				? "FROM" : "TO"; //$NON-NLS-1$ //$NON-NLS-2$
-
-		ExpandedCommentComposite.CommentActionHandler handler =
-				new ExpandedCommentComposite
-						.CommentActionHandler() {
-
-					@Override
-					public void onReply(
-							PullRequestComment comment) {
-						handleReply(comment, fileType);
-					}
-
-				@Override
-				public void onResolve(
-						PullRequestComment comment) {
-					handleResolve(comment);
-				}
-
-				@Override
-				public void onDelete(
-						PullRequestComment comment) {
-					handleDelete(comment);
-				}
-
-				@Override
-				public void onEdit(
-						PullRequestComment comment) {
-					handleEdit(comment);
-				}
-
-				@Override
-				public void onCollapse(int collapseLine) {
-						collapseExpanded(sv, isLeft);
-					}
-
-					@Override
-					public void onSelect(
-							PullRequestComment comment) {
-						selectCommentInView(comment);
-			}
-		};
-
-		ensureCurrentUsername();
-
-		Activator.logInfo(String.format(
-				"[CommentOverlayInstaller] Creating overlay for line %d with currentUsername='%s', provider=%s, %d comments", //$NON-NLS-1$
-				line, currentUsername, providerType, comments.size()));
-		if (!comments.isEmpty()) {
-			Activator.logInfo(String.format(
-					"[CommentOverlayInstaller] First comment author='%s'", //$NON-NLS-1$
-					comments.get(0).getAuthorName()));
-		}
-
-		ExpandedCommentComposite composite =
-				new ExpandedCommentComposite(styledText,
-						SWT.NONE, line, comments, handler,
-						currentUsername, providerType);
-
-		Point preferredSize = composite.computeSize(
-				styledText.getClientArea().width - 20,
-				SWT.DEFAULT);
-		int indentHeight = preferredSize.y + 8;
-
-		CommentRulerColumn column = isLeft ? leftRulerColumn
-				: rightRulerColumn;
-		if (column != null) {
-			column.setExpandedLine(line);
-		}
-
-		if (isLeft) {
-			leftExpandedComposite = composite;
-		} else {
-			rightExpandedComposite = composite;
-		}
-
-		boolean animationEnabled = Activator.getDefault()
-				.getPreferenceStore()
-				.getBoolean(
-						PRPreferences.PULLREQUEST_ANIMATE_INLINE_COMMENTS);
-
-		if (animationEnabled) {
-			if (isLeft) {
-				leftAnimating = true;
-			} else {
-				rightAnimating = true;
-			}
-			animateExpand(styledText, composite, lineIndex,
-					indentHeight, isLeft);
-		} else {
-			styledText.setLineVerticalIndent(lineIndex,
-					indentHeight);
-			positionExpandedComposite(styledText, composite,
-					lineIndex, indentHeight);
-			composite.setVisible(true);
-
-			styledText.addListener(SWT.Resize, e -> {
-				if (!composite.isDisposed()
-						&& !styledText.isDisposed()) {
-					positionExpandedComposite(styledText,
-							composite, lineIndex, indentHeight);
-				}
-			});
-		}
-	}
-
-	private void positionExpandedComposite(StyledText styledText,
-			ExpandedCommentComposite composite, int lineIndex,
-			int indentHeight) {
-		if (styledText.isDisposed() || composite.isDisposed()) {
-			return;
-		}
+		int lineIndex = line - 1; // Convert to 0-based
 
 		try {
-			int lineOffset = styledText
-					.getOffsetAtLine(lineIndex);
-			Point location = styledText
-					.getLocationAtOffset(lineOffset);
-			int verticalIndent = styledText
-					.getLineVerticalIndent(lineIndex);
-
-			int x = 10;
-			int y = location.y - verticalIndent + 4;
-			int width = styledText.getClientArea().width - 20;
-
-			composite.setBounds(x, y, Math.max(width, 100),
-					indentHeight - 8);
+			int offset = styledText.getOffsetAtLine(lineIndex);
+			styledText.setSelection(offset);
+			styledText.showSelection();
+			styledText.setTopIndex(Math.max(0, lineIndex - 5)); // Show context
 		} catch (IllegalArgumentException e) {
-			composite.setVisible(false);
+			// Line doesn't exist, ignore
 		}
 	}
 
-	private void collapseExpanded(SourceViewer sv,
+	// ---- Renderer management ---------------------------------------------
+
+	/**
+	 * Creates or returns the {@link CommentPaintRenderer} for the
+	 * given side, installing it as a {@code PaintListener} and
+	 * {@code MouseListener} on the {@link StyledText}.
+	 */
+	private CommentPaintRenderer ensureRenderer(SourceViewer sv,
 			boolean isLeft) {
-		collapseExpanded(sv, isLeft, true);
-	}
+		CommentPaintRenderer renderer = isLeft
+				? leftRenderer : rightRenderer;
+		if (renderer != null) {
+			return renderer;
+		}
 
-	private void collapseExpanded(SourceViewer sv,
-			boolean isLeft, boolean animate) {
-		boolean animationEnabled = Activator.getDefault()
-				.getPreferenceStore()
-				.getBoolean(
-						PRPreferences.PULLREQUEST_ANIMATE_INLINE_COMMENTS);
+		renderer = new CommentPaintRenderer();
+		StyledText st = sv.getTextWidget();
+		st.addPaintListener(renderer);
+		st.addMouseListener(renderer);
+		st.addMouseMoveListener(renderer);
 
-		ExpandedCommentComposite composite = isLeft
-				? leftExpandedComposite
-				: rightExpandedComposite;
-		CommentRulerColumn column = isLeft ? leftRulerColumn
-				: rightRulerColumn;
-
-		if (composite != null && !composite.isDisposed()) {
-			int line = composite.getLine();
-
-			if (sv != null && animate && animationEnabled) {
-				StyledText styledText = sv.getTextWidget();
-				if (styledText != null
-						&& !styledText.isDisposed()) {
-					int lineIndex = line;
-					if (lineIndex >= 0 && lineIndex
-							< styledText.getLineCount()) {
-						int currentHeight = styledText
-								.getLineVerticalIndent(
-										lineIndex);
-						if (isLeft) {
-							leftAnimating = true;
-						} else {
-							rightAnimating = true;
-						}
-						animateCollapse(styledText, composite,
-								lineIndex, currentHeight,
-								isLeft);
+		// Install a resize listener that recomputes thread heights
+		// when the widget width changes (body text reflows).
+		// Debounce with a 100 ms delay to avoid excessive
+		// recomputation during interactive resize.
+		final CommentPaintRenderer r = renderer;
+		ControlListener resizeListener = new ControlAdapter() {
+			@Override
+			public void controlResized(ControlEvent e) {
+				Runnable pending = isLeft
+						? leftResizePending
+						: rightResizePending;
+				if (pending != null) {
+					st.getDisplay().timerExec(-1, pending);
+				}
+				Runnable task = () -> {
+					if (st.isDisposed()) {
 						return;
 					}
-				}
-			}
-
-			composite.dispose();
-
-			if (sv != null) {
-				StyledText styledText = sv.getTextWidget();
-				if (styledText != null
-						&& !styledText.isDisposed()) {
-					int lineIndex = line;
-					if (lineIndex >= 0 && lineIndex
-							< styledText.getLineCount()) {
-						styledText.setLineVerticalIndent(
-								lineIndex, 0);
+					for (Map.Entry<Integer, CommentPaintRenderer.ThreadData> entry : r
+							.getThreads().entrySet()) {
+						int idx = entry.getKey().intValue();
+						if (idx >= 0
+								&& idx < st.getLineCount()) {
+							int h = r.computeThreadHeight(
+									st, idx);
+							st.setLineVerticalIndent(idx, h);
+						}
 					}
+					st.redraw();
+				};
+				if (isLeft) {
+					leftResizePending = task;
+				} else {
+					rightResizePending = task;
 				}
+				st.getDisplay().timerExec(100, task);
 			}
-		}
-
-		if (column != null) {
-			column.setExpandedLine(-1);
-		}
+		};
+		st.addControlListener(resizeListener);
 
 		if (isLeft) {
-			leftExpandedComposite = null;
+			leftRenderer = renderer;
+			leftResizeListener = resizeListener;
 		} else {
-			rightExpandedComposite = null;
+			rightRenderer = renderer;
+			rightResizeListener = resizeListener;
 		}
+		return renderer;
 	}
 
-	// ---- Comment actions -------------------------------------------------
-
-	private void handleReply(PullRequestComment comment,
+	/**
+	 * Creates a {@link CommentActionHandler} that delegates to the
+	 * {@link CommentActionExecutor} and {@link CommentViewSynchronizer}.
+	 */
+	private CommentActionHandler createActionHandler(
 			String fileType) {
-		MultiLineInputDialog dialog = new MultiLineInputDialog(
-				viewer.getControl().getShell(),
-				"Reply", //$NON-NLS-1$
-				"Enter your reply:", //$NON-NLS-1$
-				""); //$NON-NLS-1$
-		if (dialog.open() != Window.OK) {
-			return;
-		}
-
-		String replyText = dialog.getValue();
-		if (replyText == null || replyText.trim().isEmpty()) {
-			return;
-		}
-
-		PullRequest pr = getSelectedPullRequest();
-		if (pr == null) {
-			return;
-		}
-
-		Job job = new Job("Posting reply") { //$NON-NLS-1$
+		ensureActionExecutorAndSynchronizer();
+		return new CommentActionHandler() {
 			@Override
-			protected IStatus run(IProgressMonitor monitor) {
-				try {
-					IPullRequestClient client =
-							PullRequestClientFactory
-									.createClient();
-					if (client == null) {
-						return new Status(IStatus.ERROR,
-								Activator.PLUGIN_ID,
-								"Pull request provider" //$NON-NLS-1$
-										+ " not configured"); //$NON-NLS-1$
-					}
+			public void onReply(PullRequestComment comment) {
+				actionExecutor.handleReply(comment, fileType);
+			}
 
-					client.addComment(pr.getId(), replyText,
-							comment.getId());
+			@Override
+			public void onResolve(PullRequestComment comment) {
+				actionExecutor.handleResolve(comment);
+			}
 
-					refreshAfterReply(pr, client);
-					return Status.OK_STATUS;
-				} catch (IOException e) {
-					Activator.logError(
-							"Failed to post reply", //$NON-NLS-1$
-							e);
-					return new Status(IStatus.ERROR,
-							Activator.PLUGIN_ID,
-							"Failed to post reply: " //$NON-NLS-1$
-									+ e.getMessage(),
-							e);
-				}
+			@Override
+			public void onDelete(PullRequestComment comment) {
+				actionExecutor.handleDelete(comment);
+			}
+
+			@Override
+			public void onEdit(PullRequestComment comment) {
+				actionExecutor.handleEdit(comment);
+			}
+
+			@Override
+			public void onSelect(PullRequestComment comment) {
+				viewSynchronizer.selectCommentInView(comment);
 			}
 		};
-		job.setUser(true);
-		job.schedule();
 	}
 
-	private void handleResolve(PullRequestComment comment) {
-		PullRequest pr = getSelectedPullRequest();
-		if (pr == null) {
+	/**
+	 * Clears all painted comments on the specified side by
+	 * resetting vertical indents and disposing the renderer data.
+	 *
+	 * @param sv
+	 *            the source viewer
+	 * @param isLeft
+	 *            {@code true} for left side, {@code false} for right side
+	 */
+	private void clearRenderedComments(SourceViewer sv, boolean isLeft) {
+		CommentPaintRenderer renderer = isLeft
+				? leftRenderer : rightRenderer;
+		if (renderer == null) {
 			return;
 		}
 
-		boolean isResolved = "RESOLVED" //$NON-NLS-1$
-				.equals(comment.getState());
-		String action = isResolved
-				? "Reopening" : "Resolving"; //$NON-NLS-1$ //$NON-NLS-2$
-
-		Job job = new Job(action + " comment") { //$NON-NLS-1$
-			@Override
-			protected IStatus run(IProgressMonitor monitor) {
-				try {
-					IPullRequestClient client =
-							PullRequestClientFactory
-									.createClient();
-					if (client == null) {
-						return new Status(IStatus.ERROR,
-								Activator.PLUGIN_ID,
-								"Pull request provider" //$NON-NLS-1$
-										+ " not configured"); //$NON-NLS-1$
-					}
-
-					String newState = isResolved
-							? "OPEN" //$NON-NLS-1$
-							: "RESOLVED"; //$NON-NLS-1$
-					client.updateCommentState(pr.getId(),
-							comment.getId(),
-							comment.getVersion(),
-							newState);
-
-					refreshAfterReply(pr, client);
-					return Status.OK_STATUS;
-				} catch (IOException e) {
-					Activator.logError(
-							"Failed to update comment" //$NON-NLS-1$
-									+ " state", //$NON-NLS-1$
-							e);
-					return new Status(IStatus.ERROR,
-							Activator.PLUGIN_ID,
-							"Failed to update comment:" //$NON-NLS-1$
-									+ " " //$NON-NLS-1$
-									+ e.getMessage(),
-							e);
+		StyledText st = sv != null ? sv.getTextWidget() : null;
+		if (st != null && !st.isDisposed()) {
+			// Reset all vertical indents for lines that had threads
+			for (Integer lineIndex : renderer.getThreads()
+					.keySet()) {
+				int idx = lineIndex.intValue();
+				if (idx >= 0 && idx < st.getLineCount()) {
+					st.setLineVerticalIndent(idx, 0);
 				}
 			}
-		};
-		job.setUser(true);
-		job.schedule();
-	}
-
-	private void handleDelete(PullRequestComment comment) {
-		boolean confirmed = MessageDialog.openConfirm(
-				viewer.getControl().getShell(),
-				"Delete Comment", //$NON-NLS-1$
-				"Are you sure you want to delete this comment?"); //$NON-NLS-1$
-		if (!confirmed) {
-			return;
 		}
 
-		PullRequest pr = getSelectedPullRequest();
-		if (pr == null) {
-			return;
+		renderer.clearThreads();
+
+		if (st != null && !st.isDisposed()) {
+			st.redraw();
 		}
-
-		Job job = new Job("Deleting comment") { //$NON-NLS-1$
-			@Override
-			protected IStatus run(IProgressMonitor monitor) {
-				try {
-					IPullRequestClient client =
-							PullRequestClientFactory
-									.createClient();
-					if (client == null) {
-						return new Status(IStatus.ERROR,
-								Activator.PLUGIN_ID,
-								"Pull request provider" //$NON-NLS-1$
-										+ " not configured"); //$NON-NLS-1$
-					}
-
-					client.deleteComment(pr.getId(),
-							comment.getId(),
-							comment.getVersion(),
-							comment.isReviewComment());
-
-					refreshAfterReply(pr, client);
-					return Status.OK_STATUS;
-				} catch (IOException e) {
-					Activator.logError(
-							"Failed to delete comment", //$NON-NLS-1$
-							e);
-					return new Status(IStatus.ERROR,
-							Activator.PLUGIN_ID,
-							"Failed to delete comment:" //$NON-NLS-1$
-									+ " " //$NON-NLS-1$
-									+ e.getMessage(),
-							e);
-				}
-			}
-		};
-		job.setUser(true);
-		job.schedule();
-	}
-
-	private void handleEdit(PullRequestComment comment) {
-		MultiLineInputDialog dialog = new MultiLineInputDialog(
-				viewer.getControl().getShell(),
-				"Edit Comment", //$NON-NLS-1$
-				"Edit your comment:", //$NON-NLS-1$
-				comment.getText());
-		if (dialog.open() != Window.OK) {
-			return;
-		}
-
-		String newText = dialog.getValue();
-		if (newText == null || newText.trim().isEmpty()) {
-			return;
-		}
-
-		PullRequest pr = getSelectedPullRequest();
-		if (pr == null) {
-			return;
-		}
-
-		Job job = new Job("Editing comment") { //$NON-NLS-1$
-			@Override
-			protected IStatus run(IProgressMonitor monitor) {
-				try {
-					IPullRequestClient client =
-							PullRequestClientFactory
-									.createClient();
-					if (client == null) {
-						return new Status(IStatus.ERROR,
-								Activator.PLUGIN_ID,
-								"Pull request provider" //$NON-NLS-1$
-										+ " not configured"); //$NON-NLS-1$
-					}
-
-					client.editComment(pr.getId(),
-							comment.getId(),
-							comment.getVersion(), newText,
-							comment.isReviewComment());
-
-					refreshAfterReply(pr, client);
-					return Status.OK_STATUS;
-				} catch (IOException e) {
-					Activator.logError(
-							"Failed to edit comment", //$NON-NLS-1$
-							e);
-					return new Status(IStatus.ERROR,
-							Activator.PLUGIN_ID,
-							"Failed to edit comment:" //$NON-NLS-1$
-									+ " " //$NON-NLS-1$
-									+ e.getMessage(),
-							e);
-				}
-			}
-		};
-		job.setUser(true);
-		job.schedule();
-	}
-
-	private void handleNewComment(int line, String fileType) {
-		MultiLineInputDialog dialog = new MultiLineInputDialog(
-				viewer.getControl().getShell(),
-				"Add Comment", //$NON-NLS-1$
-				"Enter your comment:", //$NON-NLS-1$
-				""); //$NON-NLS-1$
-		if (dialog.open() != Window.OK) {
-			return;
-		}
-
-		String commentText = dialog.getValue();
-		if (commentText == null
-				|| commentText.trim().isEmpty()) {
-			return;
-		}
-
-		PullRequest pr = getSelectedPullRequest();
-		if (pr == null) {
-			return;
-		}
-
-		if (currentFilePath == null) {
-			Activator.logError(
-					"Cannot create comment:" //$NON-NLS-1$
-							+ " file path unknown", //$NON-NLS-1$
-					null);
-			return;
-		}
-
-		final String finalFilePath = currentFilePath;
-
-		Job job = new Job("Posting comment") { //$NON-NLS-1$
-			@Override
-			protected IStatus run(IProgressMonitor monitor) {
-				try {
-					IPullRequestClient client =
-							PullRequestClientFactory
-									.createClient();
-					if (client == null) {
-						return new Status(IStatus.ERROR,
-								Activator.PLUGIN_ID,
-								"Pull request provider" //$NON-NLS-1$
-										+ " not configured"); //$NON-NLS-1$
-					}
-
-					String commitId = pr.getFromRef()
-							.getLatestCommit();
-					String lineType = "ADDED"; //$NON-NLS-1$
-
-					client.addInlineComment(pr.getId(),
-							commentText, finalFilePath,
-							line, lineType, fileType,
-							commitId);
-
-					refreshAfterReply(pr, client);
-					return Status.OK_STATUS;
-				} catch (IOException e) {
-					Activator.logError(
-							"Failed to post comment", //$NON-NLS-1$
-							e);
-					return new Status(IStatus.ERROR,
-							Activator.PLUGIN_ID,
-							"Failed to post comment:" //$NON-NLS-1$
-									+ " " //$NON-NLS-1$
-									+ e.getMessage(),
-							e);
-				}
-			}
-		};
-		job.setUser(true);
-		job.schedule();
 	}
 
 	// ---- Helper methods --------------------------------------------------
 
-	private void selectCommentInView(PullRequestComment comment) {
-		try {
-			IWorkbenchPage page = PlatformUI.getWorkbench()
-					.getActiveWorkbenchWindow().getActivePage();
-			if (page == null) {
-				return;
-			}
-
-			IViewPart part = page.showView(
-					PullRequestCommentsView.VIEW_ID);
-			if (part instanceof PullRequestCommentsView) {
-				((PullRequestCommentsView) part)
-						.selectAndRevealComment(comment);
-			}
-		} catch (Exception e) {
-			Activator.logError(
-					"Failed to open comments view", e); //$NON-NLS-1$
-		}
-	}
-
+	/**
+	 * Returns the currently selected pull request from the Changed
+	 * Files view.
+	 *
+	 * @return the selected pull request, or {@code null}
+	 */
 	private PullRequest getSelectedPullRequest() {
 		try {
 			IWorkbenchPage page = PlatformUI.getWorkbench()
@@ -1099,103 +829,6 @@ class CommentOverlayInstaller {
 					e);
 		}
 		return null;
-	}
-
-	// ---- Refresh ---------------------------------------------------------
-
-	private void refreshAfterReply(PullRequest pr,
-			IPullRequestClient client) {
-		try {
-			List<PullRequestComment> freshComments =
-					client.getPullRequestComments(pr.getId());
-
-			Display.getDefault().asyncExec(() -> {
-				if (viewer.getControl() != null
-						&& !viewer.getControl().isDisposed()) {
-					List<PullRequestComment> fileComments =
-							filterCommentsForCurrentFile(
-									freshComments);
-					applyComments(fileComments);
-				}
-
-				refreshCommentsView(freshComments);
-				refreshChangedFilesView(freshComments);
-			});
-		} catch (IOException e) {
-			Activator.logError(
-					"Failed to refresh comments", e); //$NON-NLS-1$
-		}
-	}
-
-	private List<PullRequestComment>
-			filterCommentsForCurrentFile(
-					List<PullRequestComment> allComments) {
-		if (currentComments == null
-				|| currentComments.isEmpty()) {
-			return allComments;
-		}
-
-		java.util.Set<String> paths = new java.util.HashSet<>();
-		for (PullRequestComment c : currentComments) {
-			if (c.getPath() != null) {
-				paths.add(c.getPath());
-			}
-		}
-
-		if (paths.isEmpty()) {
-			return allComments;
-		}
-
-		List<PullRequestComment> filtered = new ArrayList<>();
-		for (PullRequestComment c : allComments) {
-			if (c.getPath() != null
-					&& paths.contains(c.getPath())) {
-				filtered.add(c);
-			}
-		}
-		return filtered;
-	}
-
-	private void refreshCommentsView(
-			List<PullRequestComment> freshComments) {
-		try {
-			IWorkbenchPage page = PlatformUI.getWorkbench()
-					.getActiveWorkbenchWindow().getActivePage();
-			if (page == null) {
-				return;
-			}
-			IViewPart part = page.findView(
-					PullRequestCommentsView.VIEW_ID);
-			if (part instanceof PullRequestCommentsView) {
-				((PullRequestCommentsView) part)
-						.updateComments(freshComments);
-			}
-		} catch (Exception e) {
-			Activator.logError(
-					"Failed to refresh comments view", //$NON-NLS-1$
-					e);
-		}
-	}
-
-	private void refreshChangedFilesView(
-			List<PullRequestComment> freshComments) {
-		try {
-			IWorkbenchPage page = PlatformUI.getWorkbench()
-					.getActiveWorkbenchWindow().getActivePage();
-			if (page == null) {
-				return;
-			}
-			IViewPart part = page.findView(
-					PullRequestChangedFilesView.VIEW_ID);
-			if (part instanceof PullRequestChangedFilesView) {
-				((PullRequestChangedFilesView) part)
-						.updateComments(freshComments);
-			}
-		} catch (Exception e) {
-			Activator.logError(
-					"Failed to refresh changed files view", //$NON-NLS-1$
-					e);
-		}
 	}
 
 	private void ensureCurrentUsername() {
@@ -1219,218 +852,52 @@ class CommentOverlayInstaller {
 		}
 	}
 
-	// ---- Animation helpers -----------------------------------------------
-
-	/**
-	 * Easing function for smooth animation deceleration.
-	 *
-	 * @param t
-	 *            time progress from 0.0 to 1.0
-	 * @return eased value (ease-out quadratic)
-	 */
-	private float easeOutQuad(float t) {
-		return t * (2 - t);
-	}
-
-	/**
-	 * Animates expansion of a comment composite by gradually
-	 * increasing the line vertical indent.
-	 *
-	 * @param styledText
-	 *            the text widget
-	 * @param composite
-	 *            the expanded comment composite
-	 * @param lineIndex
-	 *            the line index
-	 * @param targetHeight
-	 *            the target indent height
-	 * @param isLeft
-	 *            whether this is the left side
-	 */
-	private void animateExpand(StyledText styledText,
-			ExpandedCommentComposite composite, int lineIndex,
-			int targetHeight, boolean isLeft) {
-		final long startTime = System.currentTimeMillis();
-		final int steps = ANIMATION_DURATION_MS / ANIMATION_STEP_MS;
-
-		composite.setVisible(false);
-
-		Runnable[] animation = new Runnable[1];
-		animation[0] = new Runnable() {
-			int step = 0;
-
-			@Override
-			public void run() {
-				if (styledText.isDisposed()
-						|| composite.isDisposed()) {
-					if (isLeft) {
-						leftAnimating = false;
-					} else {
-						rightAnimating = false;
-					}
-					return;
-				}
-
-				step++;
-				float progress = Math.min(1.0f,
-						(float) step / steps);
-				float easedProgress = easeOutQuad(progress);
-				int currentHeight =
-						(int) (targetHeight * easedProgress);
-
-				styledText.setLineVerticalIndent(lineIndex,
-						currentHeight);
-				positionExpandedComposite(styledText, composite,
-						lineIndex, currentHeight);
-
-				if (progress >= 0.5f && !composite.isVisible()) {
-					composite.setVisible(true);
-				}
-
-				if (step < steps) {
-					Display.getCurrent().timerExec(
-							ANIMATION_STEP_MS, animation[0]);
-				} else {
-					styledText.setLineVerticalIndent(lineIndex,
-							targetHeight);
-					positionExpandedComposite(styledText,
-							composite, lineIndex, targetHeight);
-					composite.setVisible(true);
-
-					styledText.addListener(SWT.Resize, e -> {
-						if (!composite.isDisposed()
-								&& !styledText.isDisposed()) {
-							positionExpandedComposite(
-									styledText, composite,
-									lineIndex, targetHeight);
-						}
-					});
-
-					if (isLeft) {
-						leftAnimating = false;
-					} else {
-						rightAnimating = false;
-					}
-				}
-			}
-		};
-
-		Display.getCurrent().timerExec(ANIMATION_STEP_MS,
-				animation[0]);
-	}
-
-	/**
-	 * Animates collapse of a comment composite by gradually
-	 * reducing the line vertical indent.
-	 *
-	 * @param styledText
-	 *            the text widget
-	 * @param composite
-	 *            the expanded comment composite
-	 * @param lineIndex
-	 *            the line index
-	 * @param startHeight
-	 *            the starting indent height
-	 * @param isLeft
-	 *            whether this is the left side
-	 */
-	private void animateCollapse(StyledText styledText,
-			ExpandedCommentComposite composite, int lineIndex,
-			int startHeight, boolean isLeft) {
-		final long startTime = System.currentTimeMillis();
-		final int steps = ANIMATION_DURATION_MS / ANIMATION_STEP_MS;
-
-		Runnable[] animation = new Runnable[1];
-		animation[0] = new Runnable() {
-			int step = 0;
-
-			@Override
-			public void run() {
-				if (styledText.isDisposed()) {
-					if (composite != null
-							&& !composite.isDisposed()) {
-						composite.dispose();
-					}
-					if (isLeft) {
-						leftAnimating = false;
-						leftExpandedComposite = null;
-					} else {
-						rightAnimating = false;
-						rightExpandedComposite = null;
-					}
-					return;
-				}
-
-				step++;
-				float progress = Math.min(1.0f,
-						(float) step / steps);
-				float easedProgress = easeOutQuad(progress);
-				int currentHeight = (int) (startHeight
-						* (1.0f - easedProgress));
-
-				if (lineIndex >= 0 && lineIndex
-						< styledText.getLineCount()) {
-					styledText.setLineVerticalIndent(lineIndex,
-							currentHeight);
-				}
-
-				if (!composite.isDisposed()) {
-					positionExpandedComposite(styledText,
-							composite, lineIndex, currentHeight);
-
-					if (progress >= 0.5f
-							&& composite.isVisible()) {
-						composite.setVisible(false);
-					}
-				}
-
-				if (step < steps) {
-					Display.getCurrent().timerExec(
-							ANIMATION_STEP_MS, animation[0]);
-				} else {
-					if (!composite.isDisposed()) {
-						composite.dispose();
-					}
-
-					if (lineIndex >= 0 && lineIndex
-							< styledText.getLineCount()) {
-						styledText.setLineVerticalIndent(
-								lineIndex, 0);
-					}
-
-					CommentRulerColumn column = isLeft
-							? leftRulerColumn
-							: rightRulerColumn;
-					if (column != null) {
-						column.setExpandedLine(-1);
-					}
-
-					if (isLeft) {
-						leftAnimating = false;
-						leftExpandedComposite = null;
-					} else {
-						rightAnimating = false;
-						rightExpandedComposite = null;
-					}
-				}
-			}
-		};
-
-		Display.getCurrent().timerExec(ANIMATION_STEP_MS,
-				animation[0]);
-	}
+	// ---- Disposal -------------------------------------------------------
 
 	/**
 	 * Disposes all resources managed by this installer. Should be
 	 * called when the compare editor is closed.
 	 */
 	void dispose() {
-		collapseExpanded(leftSourceViewer, true, false);
-		collapseExpanded(rightSourceViewer, false, false);
+		clearRenderedComments(leftSourceViewer, true);
+		clearRenderedComments(rightSourceViewer, false);
+
+		// Remove resize listeners before disposing renderers
+		removeResizeListener(leftSourceViewer, leftResizeListener);
+		leftResizeListener = null;
+		leftResizePending = null;
+		removeResizeListener(rightSourceViewer, rightResizeListener);
+		rightResizeListener = null;
+		rightResizePending = null;
+
+		if (leftRenderer != null) {
+			leftRenderer.dispose();
+			leftRenderer = null;
+		}
+		if (rightRenderer != null) {
+			rightRenderer.dispose();
+			rightRenderer = null;
+		}
 		leftRulerColumn = null;
 		rightRulerColumn = null;
 		leftSourceViewer = null;
 		rightSourceViewer = null;
 		currentComments = null;
+	}
+
+	/**
+	 * Safely removes a {@link ControlListener} from a source
+	 * viewer's {@link StyledText}, if both are non-null and the
+	 * widget is not disposed.
+	 */
+	private void removeResizeListener(SourceViewer sv,
+			ControlListener listener) {
+		if (listener == null || sv == null) {
+			return;
+		}
+		StyledText st = sv.getTextWidget();
+		if (st != null && !st.isDisposed()) {
+			st.removeControlListener(listener);
+		}
 	}
 }

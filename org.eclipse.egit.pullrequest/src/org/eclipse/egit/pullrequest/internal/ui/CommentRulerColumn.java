@@ -102,9 +102,9 @@ public class CommentRulerColumn extends AbstractRulerColumn {
 			new HashMap<>();
 
 	/**
-	 * The currently expanded line (1-based), or -1 if no line is expanded.
+	 * The set of lines with visible comment composites (1-based).
 	 */
-	private int expandedLine = -1;
+	private final Set<Integer> linesWithComments = new java.util.HashSet<>();
 
 	private CommentClickHandler commentClickHandler;
 
@@ -243,24 +243,53 @@ public class CommentRulerColumn extends AbstractRulerColumn {
 	}
 
 	/**
-	 * Sets the currently expanded line number. The ruler will highlight
-	 * the icon for this line differently to indicate it is expanded.
+	 * Adds a line to the set of lines with visible comment composites.
 	 *
 	 * @param line
-	 *            the 1-based line number, or -1 for no expansion
+	 *            the 1-based line number to mark as having comments
 	 */
-	public void setExpandedLine(int line) {
-		this.expandedLine = line;
+	public void addLineWithComments(int line) {
+		linesWithComments.add(line);
 		redraw();
 	}
 
 	/**
-	 * Returns the currently expanded line number.
+	 * Removes a line from the set of lines with visible comment composites.
 	 *
-	 * @return the 1-based line number, or -1 if no line is expanded
+	 * @param line
+	 *            the 1-based line number to mark as not having comments
 	 */
-	public int getExpandedLine() {
-		return expandedLine;
+	public void removeLineWithComments(int line) {
+		linesWithComments.remove(line);
+		redraw();
+	}
+
+	/**
+	 * Clears all lines with visible comment composites.
+	 */
+	public void clearLinesWithComments() {
+		linesWithComments.clear();
+		redraw();
+	}
+
+	/**
+	 * Checks if a specific line has a visible comment composite.
+	 *
+	 * @param line
+	 *            the 1-based line number
+	 * @return {@code true} if the line has a visible comment composite
+	 */
+	public boolean hasVisibleComments(int line) {
+		return linesWithComments.contains(line);
+	}
+
+	/**
+	 * Returns the set of line numbers with visible comment composites.
+	 *
+	 * @return the set of 1-based line numbers that have visible comments
+	 */
+	public Set<Integer> getLinesWithComments() {
+		return Collections.unmodifiableSet(linesWithComments);
 	}
 
 	@Override
@@ -315,37 +344,21 @@ public class CommentRulerColumn extends AbstractRulerColumn {
 			}
 		}
 
-		boolean isExpanded = (oneBasedLine == expandedLine);
-
 		int iconX = (getWidth() - ICON_SIZE) / 2;
 		int iconY = linePixel + (lineHeight - ICON_SIZE) / 2;
 
 		Color iconColor = allResolved ? resolvedIconColor
 				: commentIconColor;
 
-		// Draw speech bubble icon
-		if (isExpanded) {
-			// Filled bubble for expanded state
-			gc.setBackground(iconColor);
-			gc.fillRoundRectangle(iconX, iconY, ICON_SIZE,
-					ICON_SIZE - 3, 4, 4);
-			// Small triangle at bottom
-			gc.fillPolygon(new int[] { iconX + 3,
-					iconY + ICON_SIZE - 3, iconX + 7,
-					iconY + ICON_SIZE, iconX + 7,
-					iconY + ICON_SIZE - 3 });
-		} else {
-			// Outline bubble for collapsed state
-			gc.setForeground(iconColor);
-			gc.setLineWidth(1);
-			gc.drawRoundRectangle(iconX, iconY, ICON_SIZE,
-					ICON_SIZE - 3, 4, 4);
-			// Small triangle at bottom
-			gc.drawPolygon(new int[] { iconX + 3,
-					iconY + ICON_SIZE - 3, iconX + 7,
-					iconY + ICON_SIZE, iconX + 7,
-					iconY + ICON_SIZE - 3 });
-		}
+		// Draw speech bubble icon (always filled since comments are always expanded)
+		gc.setBackground(iconColor);
+		gc.fillRoundRectangle(iconX, iconY, ICON_SIZE,
+				ICON_SIZE - 3, 4, 4);
+		// Small triangle at bottom
+		gc.fillPolygon(new int[] { iconX + 3,
+				iconY + ICON_SIZE - 3, iconX + 7,
+				iconY + ICON_SIZE, iconX + 7,
+				iconY + ICON_SIZE - 3 });
 
 		// Draw count badge if multiple comments
 		int totalComments = lineComments.size();
