@@ -1492,13 +1492,16 @@ public class PullRequestCommentsView extends ViewPart {
 								// Highlight the line
 								highlightCommentInCompareEditor(comment);
 
-								// Expand the inline comment
+								// Expand the inline comment and highlight it
 								CommentOverlayInstaller overlay = compareInput
 										.getCommentOverlay();
 								if (overlay != null && comment.getLine() != null
 										&& comment.getFileType() != null) {
 									overlay.scrollToComment(
 											comment.getLine(),
+											comment.getFileType());
+									// Highlight the specific comment bubble
+									overlay.highlightComment(comment, 
 											comment.getFileType());
 								}
 
@@ -1563,6 +1566,9 @@ public class PullRequestCommentsView extends ViewPart {
 										&& finalComment.getFileType() != null) {
 									overlay.scrollToComment(
 											finalComment.getLine(),
+											finalComment.getFileType());
+									// Highlight the specific comment bubble
+									overlay.highlightComment(finalComment, 
 											finalComment.getFileType());
 								}
 							}
