@@ -69,10 +69,6 @@ public class CommentPaintRenderer
 		}
 	}
 
-	// ---- Hit-test regions ------------------------------------------------
-
-	// Hit action constants are now in CommentHitTestManager
-
 	// ---- State -----------------------------------------------------------
 
 	private final Map<Integer, ThreadData> threads = new HashMap<>();
@@ -145,10 +141,8 @@ public class CommentPaintRenderer
 	 * @param lineIndex    0-based line index
 	 * @param rootComments the root comments on that line
 	 */
-	void addThread(int lineIndex,
-			List<PullRequestComment> rootComments) {
-		threads.put(Integer.valueOf(lineIndex),
-				new ThreadData(lineIndex, rootComments));
+	void addThread(int lineIndex, List<PullRequestComment> rootComments) {
+		threads.put(Integer.valueOf(lineIndex), new ThreadData(lineIndex, rootComments));
 	}
 
 	/**
