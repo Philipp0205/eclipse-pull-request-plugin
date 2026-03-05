@@ -12,10 +12,6 @@ import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.compare.contentmergeviewer.TextMergeViewer;
-import org.eclipse.core.runtime.IProgressMonitor;
-import org.eclipse.core.runtime.IStatus;
-import org.eclipse.core.runtime.Status;
-import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.egit.pullrequest.Activator;
 import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
 import org.eclipse.egit.pullrequest.internal.client.PullRequestClientFactory;
@@ -23,11 +19,12 @@ import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderType;
 import org.eclipse.egit.pullrequest.internal.model.DiffHunkParser;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
-import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.text.source.SourceViewer;
 import org.eclipse.jface.viewers.Viewer;
-import org.eclipse.jface.window.Window;
 import org.eclipse.swt.custom.StyledText;
+import org.eclipse.swt.events.ControlAdapter;
+import org.eclipse.swt.events.ControlEvent;
+import org.eclipse.swt.events.ControlListener;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.ui.IViewPart;
 import org.eclipse.ui.IWorkbenchPage;
@@ -59,6 +56,10 @@ public class CommentOverlayInstaller {
 
 	private CommentPaintRenderer leftRenderer;
 	private CommentPaintRenderer rightRenderer;
+	private ControlListener leftResizeListener;
+	private ControlListener rightResizeListener;
+	private Runnable leftResizePending;
+	private Runnable rightResizePending;
 	private List<PullRequestComment> currentComments;
 
 	private String currentFilePath;
@@ -66,6 +67,9 @@ public class CommentOverlayInstaller {
 	private final Viewer viewer;
 	private String currentUsername;
 	private PullRequestProviderType providerType;
+
+	private CommentActionExecutor actionExecutor;
+	private CommentViewSynchronizer viewSynchronizer;
 
 	/**
 	 * Creates a new installer for the given viewer.
@@ -212,6 +216,26 @@ public class CommentOverlayInstaller {
 	}
 
 	/**
+	 * Ensures the action executor and view synchronizer are
+	 * initialized. Called lazily when first needed.
+	 */
+	private void ensureActionExecutorAndSynchronizer() {
+		if (actionExecutor != null && viewSynchronizer != null) {
+			return;
+		}
+
+		// Create view synchronizer that refreshes the compare editor
+		viewSynchronizer = new CommentViewSynchronizer(
+				this::applyComments);
+
+		// Create action executor with PR provider and refresh callback
+		actionExecutor = new CommentActionExecutor(
+				viewer.getControl().getShell(),
+				this::getSelectedPullRequest,
+				viewSynchronizer::refreshAfterAction);
+	}
+
+	/**
 	 * Applies comments to the left and right source viewers by
 	 * installing {@link CommentRulerColumn} instances.
 	 *
@@ -219,6 +243,14 @@ public class CommentOverlayInstaller {
 	 *            the list of comments for the current file
 	 */
 	private void applyComments(List<PullRequestComment> comments) {
+		// Initialize executor and synchronizer if needed
+		ensureActionExecutorAndSynchronizer();
+
+		// Track current comments for synchronization
+		if (viewSynchronizer != null) {
+			viewSynchronizer.setCurrentComments(comments);
+		}
+
 		// Always install ruler columns so the "+" add-comment icon
 		// is available even when there are no existing comments
 		installRulerColumn(leftSourceViewer, true);
@@ -590,7 +622,9 @@ public class CommentOverlayInstaller {
 		});
 
 		column.setNewCommentClickHandler(line -> {
-			handleNewComment(line, fileType);
+			ensureActionExecutorAndSynchronizer();
+			actionExecutor.handleNewComment(line, fileType,
+					currentFilePath);
 		});
 
 		sv.addVerticalRulerColumn(column);
@@ -647,44 +681,87 @@ public class CommentOverlayInstaller {
 		st.addMouseListener(renderer);
 		st.addMouseMoveListener(renderer);
 
+		// Install a resize listener that recomputes thread heights
+		// when the widget width changes (body text reflows).
+		// Debounce with a 100 ms delay to avoid excessive
+		// recomputation during interactive resize.
+		final CommentPaintRenderer r = renderer;
+		ControlListener resizeListener = new ControlAdapter() {
+			@Override
+			public void controlResized(ControlEvent e) {
+				Runnable pending = isLeft
+						? leftResizePending
+						: rightResizePending;
+				if (pending != null) {
+					st.getDisplay().timerExec(-1, pending);
+				}
+				Runnable task = () -> {
+					if (st.isDisposed()) {
+						return;
+					}
+					for (Map.Entry<Integer, CommentPaintRenderer.ThreadData> entry : r
+							.getThreads().entrySet()) {
+						int idx = entry.getKey().intValue();
+						if (idx >= 0
+								&& idx < st.getLineCount()) {
+							int h = r.computeThreadHeight(
+									st, idx);
+							st.setLineVerticalIndent(idx, h);
+						}
+					}
+					st.redraw();
+				};
+				if (isLeft) {
+					leftResizePending = task;
+				} else {
+					rightResizePending = task;
+				}
+				st.getDisplay().timerExec(100, task);
+			}
+		};
+		st.addControlListener(resizeListener);
+
 		if (isLeft) {
 			leftRenderer = renderer;
+			leftResizeListener = resizeListener;
 		} else {
 			rightRenderer = renderer;
+			rightResizeListener = resizeListener;
 		}
 		return renderer;
 	}
 
 	/**
 	 * Creates a {@link CommentActionHandler} that delegates to the
-	 * corresponding {@code handle*} methods.
+	 * {@link CommentActionExecutor} and {@link CommentViewSynchronizer}.
 	 */
 	private CommentActionHandler createActionHandler(
 			String fileType) {
+		ensureActionExecutorAndSynchronizer();
 		return new CommentActionHandler() {
 			@Override
 			public void onReply(PullRequestComment comment) {
-				handleReply(comment, fileType);
+				actionExecutor.handleReply(comment, fileType);
 			}
 
 			@Override
 			public void onResolve(PullRequestComment comment) {
-				handleResolve(comment);
+				actionExecutor.handleResolve(comment);
 			}
 
 			@Override
 			public void onDelete(PullRequestComment comment) {
-				handleDelete(comment);
+				actionExecutor.handleDelete(comment);
 			}
 
 			@Override
 			public void onEdit(PullRequestComment comment) {
-				handleEdit(comment);
+				actionExecutor.handleEdit(comment);
 			}
 
 			@Override
 			public void onSelect(PullRequestComment comment) {
-				selectCommentInView(comment);
+				viewSynchronizer.selectCommentInView(comment);
 			}
 		};
 	}
@@ -724,323 +801,14 @@ public class CommentOverlayInstaller {
 		}
 	}
 
-	// ---- Comment actions -------------------------------------------------
-	// TODO it looks like the comment actions contain some duplicated code. Please refactor.
-
-	private void handleReply(PullRequestComment comment,
-			String fileType) {
-		MultiLineInputDialog dialog = new MultiLineInputDialog(
-				viewer.getControl().getShell(),
-				"Reply", //$NON-NLS-1$
-				"Enter your reply:", //$NON-NLS-1$
-				""); //$NON-NLS-1$
-		if (dialog.open() != Window.OK) {
-			return;
-		}
-
-		String replyText = dialog.getValue();
-		if (replyText == null || replyText.trim().isEmpty()) {
-			return;
-		}
-
-		PullRequest pr = getSelectedPullRequest();
-		if (pr == null) {
-			return;
-		}
-
-		Job job = new Job("Posting reply") { //$NON-NLS-1$
-			@Override
-			protected IStatus run(IProgressMonitor monitor) {
-				try {
-					IPullRequestClient client =
-							PullRequestClientFactory
-									.createClient();
-					if (client == null) {
-						return new Status(IStatus.ERROR,
-								Activator.PLUGIN_ID,
-								"Pull request provider" //$NON-NLS-1$
-										+ " not configured"); //$NON-NLS-1$
-					}
-
-					client.addComment(pr.getId(), replyText,
-							comment.getId());
-
-					refreshAfterReply(pr, client);
-					return Status.OK_STATUS;
-				} catch (IOException e) {
-					Activator.logError(
-							"Failed to post reply", //$NON-NLS-1$
-							e);
-					return new Status(IStatus.ERROR,
-							Activator.PLUGIN_ID,
-							"Failed to post reply: " //$NON-NLS-1$
-									+ e.getMessage(),
-							e);
-				}
-			}
-		};
-		job.setUser(true);
-		job.schedule();
-	}
-
-	private void handleResolve(PullRequestComment comment) {
-		PullRequest pr = getSelectedPullRequest();
-		if (pr == null) {
-			return;
-		}
-
-		boolean isResolved = "RESOLVED" //$NON-NLS-1$
-				.equals(comment.getState());
-		String action = isResolved
-				? "Reopening" : "Resolving"; //$NON-NLS-1$ //$NON-NLS-2$
-
-		Job job = new Job(action + " comment") { //$NON-NLS-1$
-			@Override
-			protected IStatus run(IProgressMonitor monitor) {
-				try {
-					IPullRequestClient client =
-							PullRequestClientFactory
-									.createClient();
-					if (client == null) {
-						return new Status(IStatus.ERROR,
-								Activator.PLUGIN_ID,
-								"Pull request provider" //$NON-NLS-1$
-										+ " not configured"); //$NON-NLS-1$
-					}
-
-					String newState = isResolved
-							? "OPEN" //$NON-NLS-1$
-							: "RESOLVED"; //$NON-NLS-1$
-					client.updateCommentState(pr.getId(),
-							comment.getId(),
-							comment.getVersion(),
-							newState);
-
-					refreshAfterReply(pr, client);
-					return Status.OK_STATUS;
-				} catch (IOException e) {
-					Activator.logError(
-							"Failed to update comment" //$NON-NLS-1$
-									+ " state", //$NON-NLS-1$
-							e);
-					return new Status(IStatus.ERROR,
-							Activator.PLUGIN_ID,
-							"Failed to update comment:" //$NON-NLS-1$
-									+ " " //$NON-NLS-1$
-									+ e.getMessage(),
-							e);
-				}
-			}
-		};
-		job.setUser(true);
-		job.schedule();
-	}
-
-	private void handleDelete(PullRequestComment comment) {
-		boolean confirmed = MessageDialog.openConfirm(
-				viewer.getControl().getShell(),
-				"Delete Comment", //$NON-NLS-1$
-				"Are you sure you want to delete this comment?"); //$NON-NLS-1$
-		if (!confirmed) {
-			return;
-		}
-
-		PullRequest pr = getSelectedPullRequest();
-		if (pr == null) {
-			return;
-		}
-
-		Job job = new Job("Deleting comment") { //$NON-NLS-1$
-			@Override
-			protected IStatus run(IProgressMonitor monitor) {
-				try {
-					IPullRequestClient client =
-							PullRequestClientFactory
-									.createClient();
-					if (client == null) {
-						return new Status(IStatus.ERROR,
-								Activator.PLUGIN_ID,
-								"Pull request provider" //$NON-NLS-1$
-										+ " not configured"); //$NON-NLS-1$
-					}
-
-					client.deleteComment(pr.getId(),
-							comment.getId(),
-							comment.getVersion(),
-							comment.isReviewComment());
-
-					refreshAfterReply(pr, client);
-					return Status.OK_STATUS;
-				} catch (IOException e) {
-					Activator.logError(
-							"Failed to delete comment", //$NON-NLS-1$
-							e);
-					return new Status(IStatus.ERROR,
-							Activator.PLUGIN_ID,
-							"Failed to delete comment:" //$NON-NLS-1$
-									+ " " //$NON-NLS-1$
-									+ e.getMessage(),
-							e);
-				}
-			}
-		};
-		job.setUser(true);
-		job.schedule();
-	}
-
-	private void handleEdit(PullRequestComment comment) {
-		MultiLineInputDialog dialog = new MultiLineInputDialog(
-				viewer.getControl().getShell(),
-				"Edit Comment", //$NON-NLS-1$
-				"Edit your comment:", //$NON-NLS-1$
-				comment.getText());
-		if (dialog.open() != Window.OK) {
-			return;
-		}
-
-		String newText = dialog.getValue();
-		if (newText == null || newText.trim().isEmpty()) {
-			return;
-		}
-
-		PullRequest pr = getSelectedPullRequest();
-		if (pr == null) {
-			return;
-		}
-
-		Job job = new Job("Editing comment") { //$NON-NLS-1$
-			@Override
-			protected IStatus run(IProgressMonitor monitor) {
-				try {
-					IPullRequestClient client =
-							PullRequestClientFactory
-									.createClient();
-					if (client == null) {
-						return new Status(IStatus.ERROR,
-								Activator.PLUGIN_ID,
-								"Pull request provider" //$NON-NLS-1$
-										+ " not configured"); //$NON-NLS-1$
-					}
-
-					client.editComment(pr.getId(),
-							comment.getId(),
-							comment.getVersion(), newText,
-							comment.isReviewComment());
-
-					refreshAfterReply(pr, client);
-					return Status.OK_STATUS;
-				} catch (IOException e) {
-					Activator.logError(
-							"Failed to edit comment", //$NON-NLS-1$
-							e);
-					return new Status(IStatus.ERROR,
-							Activator.PLUGIN_ID,
-							"Failed to edit comment:" //$NON-NLS-1$
-									+ " " //$NON-NLS-1$
-									+ e.getMessage(),
-							e);
-				}
-			}
-		};
-		job.setUser(true);
-		job.schedule();
-	}
-
-	private void handleNewComment(int line, String fileType) {
-		MultiLineInputDialog dialog = new MultiLineInputDialog(
-				viewer.getControl().getShell(),
-				"Add Comment", //$NON-NLS-1$
-				"Enter your comment:", //$NON-NLS-1$
-				""); //$NON-NLS-1$
-		if (dialog.open() != Window.OK) {
-			return;
-		}
-
-		String commentText = dialog.getValue();
-		if (commentText == null
-				|| commentText.trim().isEmpty()) {
-			return;
-		}
-
-		PullRequest pr = getSelectedPullRequest();
-		if (pr == null) {
-			return;
-		}
-
-		if (currentFilePath == null) {
-			Activator.logError(
-					"Cannot create comment:" //$NON-NLS-1$
-							+ " file path unknown", //$NON-NLS-1$
-					null);
-			return;
-		}
-
-		final String finalFilePath = currentFilePath;
-
-		Job job = new Job("Posting comment") { //$NON-NLS-1$
-			@Override
-			protected IStatus run(IProgressMonitor monitor) {
-				try {
-					IPullRequestClient client =
-							PullRequestClientFactory
-									.createClient();
-					if (client == null) {
-						return new Status(IStatus.ERROR,
-								Activator.PLUGIN_ID,
-								"Pull request provider" //$NON-NLS-1$
-										+ " not configured"); //$NON-NLS-1$
-					}
-
-					String commitId = pr.getFromRef()
-							.getLatestCommit();
-					String lineType = "ADDED"; //$NON-NLS-1$
-
-					client.addInlineComment(pr.getId(),
-							commentText, finalFilePath,
-							line, lineType, fileType,
-							commitId);
-
-					refreshAfterReply(pr, client);
-					return Status.OK_STATUS;
-				} catch (IOException e) {
-					Activator.logError(
-							"Failed to post comment", //$NON-NLS-1$
-							e);
-					return new Status(IStatus.ERROR,
-							Activator.PLUGIN_ID,
-							"Failed to post comment:" //$NON-NLS-1$
-									+ " " //$NON-NLS-1$
-									+ e.getMessage(),
-							e);
-				}
-			}
-		};
-		job.setUser(true);
-		job.schedule();
-	}
-
 	// ---- Helper methods --------------------------------------------------
 
-	private void selectCommentInView(PullRequestComment comment) {
-		try {
-			IWorkbenchPage page = PlatformUI.getWorkbench()
-					.getActiveWorkbenchWindow().getActivePage();
-			if (page == null) {
-				return;
-			}
-
-			IViewPart part = page.showView(
-					PullRequestCommentsView.VIEW_ID);
-			if (part instanceof PullRequestCommentsView) {
-				((PullRequestCommentsView) part)
-						.selectAndRevealComment(comment);
-			}
-		} catch (Exception e) {
-			Activator.logError(
-					"Failed to open comments view", e); //$NON-NLS-1$
-		}
-	}
-
+	/**
+	 * Returns the currently selected pull request from the Changed
+	 * Files view.
+	 *
+	 * @return the selected pull request, or {@code null}
+	 */
 	private PullRequest getSelectedPullRequest() {
 		try {
 			IWorkbenchPage page = PlatformUI.getWorkbench()
@@ -1061,99 +829,6 @@ public class CommentOverlayInstaller {
 					e);
 		}
 		return null;
-	}
-
-	// ---- Refresh ---------------------------------------------------------
-
-	private void refreshAfterReply(PullRequest pr,
-			IPullRequestClient client) {
-		try {
-			List<PullRequestComment> freshComments =
-					client.getPullRequestComments(pr.getId());
-
-			Display.getDefault().asyncExec(() -> {
-				if (viewer.getControl() != null
-						&& !viewer.getControl().isDisposed()) {
-					List<PullRequestComment> fileComments =
-							filterCommentsForCurrentFile(
-									freshComments);
-					applyComments(fileComments);
-				}
-
-				refreshCommentsView(freshComments);
-				refreshChangedFilesView(freshComments);
-			});
-		} catch (IOException e) {
-			Activator.logError(
-					"Failed to refresh comments", e); //$NON-NLS-1$
-		}
-	}
-
-	private List<PullRequestComment> filterCommentsForCurrentFile(List<PullRequestComment> allComments) {
-		if (currentComments == null
-				|| currentComments.isEmpty()) {
-			return allComments;
-		}
-
-		Set<String> paths = new HashSet<>();
-		for (PullRequestComment c : currentComments) {
-			if (c.getPath() != null) {
-				paths.add(c.getPath());
-			}
-		}
-
-		if (paths.isEmpty()) {
-			return allComments;
-		}
-
-		List<PullRequestComment> filtered = new ArrayList<>();
-		for (PullRequestComment c : allComments) {
-			if (c.getPath() != null
-					&& paths.contains(c.getPath())) {
-				filtered.add(c);
-			}
-		}
-		return filtered;
-	}
-
-	private void refreshCommentsView(List<PullRequestComment> freshComments) {
-		try {
-			IWorkbenchPage page = PlatformUI.getWorkbench()
-					.getActiveWorkbenchWindow().getActivePage();
-			if (page == null) {
-				return;
-			}
-			IViewPart part = page.findView(
-					PullRequestCommentsView.VIEW_ID);
-			if (part instanceof PullRequestCommentsView) {
-				((PullRequestCommentsView) part)
-						.updateComments(freshComments);
-			}
-		} catch (Exception e) {
-			Activator.logError(
-					"Failed to refresh comments view", //$NON-NLS-1$
-					e);
-		}
-	}
-
-	private void refreshChangedFilesView(List<PullRequestComment> freshComments) {
-		try {
-			IWorkbenchPage page = PlatformUI.getWorkbench()
-					.getActiveWorkbenchWindow().getActivePage();
-			if (page == null) {
-				return;
-			}
-			IViewPart part = page.findView(
-					PullRequestChangedFilesView.VIEW_ID);
-			if (part instanceof PullRequestChangedFilesView) {
-				((PullRequestChangedFilesView) part)
-						.updateComments(freshComments);
-			}
-		} catch (Exception e) {
-			Activator.logError(
-					"Failed to refresh changed files view", //$NON-NLS-1$
-					e);
-		}
 	}
 
 	private void ensureCurrentUsername() {
@@ -1186,6 +861,15 @@ public class CommentOverlayInstaller {
 	void dispose() {
 		clearRenderedComments(leftSourceViewer, true);
 		clearRenderedComments(rightSourceViewer, false);
+
+		// Remove resize listeners before disposing renderers
+		removeResizeListener(leftSourceViewer, leftResizeListener);
+		leftResizeListener = null;
+		leftResizePending = null;
+		removeResizeListener(rightSourceViewer, rightResizeListener);
+		rightResizeListener = null;
+		rightResizePending = null;
+
 		if (leftRenderer != null) {
 			leftRenderer.dispose();
 			leftRenderer = null;
@@ -1199,5 +883,21 @@ public class CommentOverlayInstaller {
 		leftSourceViewer = null;
 		rightSourceViewer = null;
 		currentComments = null;
+	}
+
+	/**
+	 * Safely removes a {@link ControlListener} from a source
+	 * viewer's {@link StyledText}, if both are non-null and the
+	 * widget is not disposed.
+	 */
+	private void removeResizeListener(SourceViewer sv,
+			ControlListener listener) {
+		if (listener == null || sv == null) {
+			return;
+		}
+		StyledText st = sv.getTextWidget();
+		if (st != null && !st.isDisposed()) {
+			st.removeControlListener(listener);
+		}
 	}
 }
