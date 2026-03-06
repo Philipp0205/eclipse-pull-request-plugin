@@ -18,8 +18,11 @@ import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+import org.eclipse.jface.text.ITextViewer;
 import org.eclipse.jface.text.source.AbstractRulerColumn;
 import org.eclipse.jface.text.source.CompositeRuler;
+import org.eclipse.swt.SWT;
+import org.eclipse.swt.custom.StyledText;
 import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.events.MouseListener;
 import org.eclipse.swt.events.MouseMoveListener;
@@ -87,13 +90,25 @@ public class CommentRulerColumn extends AbstractRulerColumn {
 
 	private static final int ICON_SIZE = 14;
 
-	private static final RGB COMMENT_ICON_RGB = new RGB(59, 130, 246);
+	// Light-theme icon colors
+	private static final RGB COMMENT_ICON_RGB_LIGHT =
+			new RGB(59, 130, 246);
+	private static final RGB RESOLVED_ICON_RGB_LIGHT =
+			new RGB(34, 163, 72);
+	private static final RGB HOVER_ADD_RGB_LIGHT =
+			new RGB(150, 150, 150);
+	private static final RGB BADGE_RGB_LIGHT =
+			new RGB(220, 38, 38);
 
-	private static final RGB RESOLVED_ICON_RGB = new RGB(34, 163, 72);
-
-	private static final RGB HOVER_ADD_RGB = new RGB(150, 150, 150);
-
-	private static final RGB BADGE_RGB = new RGB(220, 38, 38);
+	// Dark-theme icon colors (brighter variants for contrast)
+	private static final RGB COMMENT_ICON_RGB_DARK =
+			new RGB(100, 160, 255);
+	private static final RGB RESOLVED_ICON_RGB_DARK =
+			new RGB(72, 210, 110);
+	private static final RGB HOVER_ADD_RGB_DARK =
+			new RGB(180, 180, 180);
+	private static final RGB BADGE_RGB_DARK =
+			new RGB(240, 70, 70);
 
 	/**
 	 * Map from 1-based line number to list of comments on that line.
@@ -131,6 +146,12 @@ public class CommentRulerColumn extends AbstractRulerColumn {
 	private Color whiteColor;
 
 	private Font badgeFont;
+
+	/**
+	 * Tracks whether colours were created for a dark background so
+	 * we can recreate them when the theme changes.
+	 */
+	private Boolean lastDark;
 
 	private MouseListener mouseListener;
 
@@ -306,18 +327,53 @@ public class CommentRulerColumn extends AbstractRulerColumn {
 	@Override
 	protected void paintLine(GC gc, int modelLine, int widgetLine,
 			int linePixel, int lineHeight) {
-		// Fill background
+		// Re-check theme in case it changed since createControl
+		Control control = getParentRuler().getControl();
+		if (control != null && !control.isDisposed()) {
+			ensureColors(control);
+		}
+
+		// The lineHeight supplied by AbstractRulerColumn only covers
+		// the text row itself. When a line has a vertical indent (added
+		// by CommentPaintRenderer to make room for the comment thread
+		// bubble), the indent space sits above the text row and is
+		// included in linePixel but NOT in lineHeight. If we only fill
+		// lineHeight pixels the indent area is left unpainted, and when
+		// the ruler canvas is scrolled via pixel-copy the stale icon
+		// from that gap keeps appearing on every subsequent line —
+		// which is the root cause of duplicate comment icons on scroll.
+		//
+		// We therefore obtain the StyledText from the parent ruler and
+		// read the actual vertical indent for this widget line so that
+		// the background fill covers the complete visual row.
+		int verticalIndent = 0;
+		ITextViewer textViewer = getParentRuler().getTextViewer();
+		if (textViewer != null) {
+			StyledText st = textViewer.getTextWidget();
+			if (st != null && !st.isDisposed()
+					&& widgetLine >= 0
+					&& widgetLine < st.getLineCount()) {
+				verticalIndent = st.getLineVerticalIndent(widgetLine);
+			}
+		}
+		int totalHeight = verticalIndent + lineHeight;
+
+		// Fill the entire visual row (indent + text) with the background
 		gc.setBackground(getDefaultBackground());
-		gc.fillRectangle(0, linePixel, getWidth(), lineHeight);
+		gc.fillRectangle(0, linePixel, getWidth(), totalHeight);
 
 		// 1-based line number for comment lookup
 		int oneBasedLine = modelLine + 1;
 
 		if (hasComments(oneBasedLine)) {
-			drawCommentIcon(gc, oneBasedLine, linePixel, lineHeight);
+			// Draw the icon in the text-row portion (below the indent),
+			// so the icon aligns with the actual code line, not the
+			// top of the indent/comment-bubble space.
+			drawCommentIcon(gc, oneBasedLine,
+					linePixel + verticalIndent, lineHeight);
 		} else if (modelLine == hoveredModelLine
 				&& isCommentableLine(oneBasedLine)) {
-			drawAddIcon(gc, linePixel, lineHeight);
+			drawAddIcon(gc, linePixel + verticalIndent, lineHeight);
 		}
 	}
 
@@ -529,27 +585,84 @@ public class CommentRulerColumn extends AbstractRulerColumn {
 
 	/**
 	 * Creates the color and font resources needed for painting.
+	 * Automatically adapts to light or dark themes.
 	 *
 	 * @param control
 	 *            the control to get the display from
 	 */
 	private void ensureColors(Control control) {
-		commentIconColor = new Color(control.getDisplay(),
-				COMMENT_ICON_RGB);
-		resolvedIconColor = new Color(control.getDisplay(),
-				RESOLVED_ICON_RGB);
-		hoverAddColor = new Color(control.getDisplay(), HOVER_ADD_RGB);
-		badgeColor = new Color(control.getDisplay(), BADGE_RGB);
+		boolean dark = isDarkBackground(control);
+		if (lastDark != null && lastDark.booleanValue() == dark
+				&& commentIconColor != null) {
+			return;
+		}
+		// Dispose old colors before recreating
+		disposeColors();
+		lastDark = Boolean.valueOf(dark);
+
+		RGB iconRgb = dark ? COMMENT_ICON_RGB_DARK
+				: COMMENT_ICON_RGB_LIGHT;
+		RGB resolvedRgb = dark ? RESOLVED_ICON_RGB_DARK
+				: RESOLVED_ICON_RGB_LIGHT;
+		RGB hoverRgb = dark ? HOVER_ADD_RGB_DARK
+				: HOVER_ADD_RGB_LIGHT;
+		RGB badgeRgb = dark ? BADGE_RGB_DARK
+				: BADGE_RGB_LIGHT;
+
+		commentIconColor = new Color(
+				control.getDisplay(), iconRgb);
+		resolvedIconColor = new Color(
+				control.getDisplay(), resolvedRgb);
+		hoverAddColor = new Color(
+				control.getDisplay(), hoverRgb);
+		badgeColor = new Color(
+				control.getDisplay(), badgeRgb);
 		whiteColor = new Color(control.getDisplay(),
 				new RGB(255, 255, 255));
 
 		// Create a small font for the badge
-		Font parentFont = control.getFont();
-		FontData[] fontData = parentFont.getFontData();
-		for (FontData fd : fontData) {
-			fd.setHeight(Math.max(fd.getHeight() - 4, 5));
+		if (badgeFont == null) {
+			Font parentFont = control.getFont();
+			FontData[] fontData = parentFont.getFontData();
+			for (FontData fd : fontData) {
+				fd.setHeight(
+						Math.max(fd.getHeight() - 4, 5));
+			}
+			badgeFont = new Font(
+					control.getDisplay(), fontData);
 		}
-		badgeFont = new Font(control.getDisplay(), fontData);
+	}
+
+	/**
+	 * Returns whether the given control has a dark background.
+	 *
+	 * @param control
+	 *            the control to test
+	 * @return {@code true} when the perceived luminance is below
+	 *         50 %
+	 */
+	private static boolean isDarkBackground(Control control) {
+		Color bg = control.getBackground();
+		if (bg == null) {
+			bg = control.getDisplay()
+					.getSystemColor(SWT.COLOR_WIDGET_BACKGROUND);
+		}
+		RGB rgb = bg.getRGB();
+		double luminance = (0.299 * rgb.red
+				+ 0.587 * rgb.green + 0.114 * rgb.blue)
+				/ 255.0;
+		return luminance < 0.5;
+	}
+
+	/**
+	 * Disposes dynamically created Color resources.
+	 */
+	private void disposeColors() {
+		commentIconColor = null;
+		resolvedIconColor = null;
+		hoverAddColor = null;
+		badgeColor = null;
+		whiteColor = null;
 	}
 
 	@Override
@@ -558,12 +671,8 @@ public class CommentRulerColumn extends AbstractRulerColumn {
 			badgeFont.dispose();
 			badgeFont = null;
 		}
-		// Colors on modern SWT do not require explicit disposal
-		commentIconColor = null;
-		resolvedIconColor = null;
-		hoverAddColor = null;
-		badgeColor = null;
-		whiteColor = null;
+		disposeColors();
+		lastDark = null;
 
 		super.dispose();
 	}

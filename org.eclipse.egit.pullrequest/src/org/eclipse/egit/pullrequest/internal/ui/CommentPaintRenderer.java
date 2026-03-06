@@ -210,6 +210,7 @@ public class CommentPaintRenderer
 
 		colors.ensureColors(st);
 		colors.ensureFonts(e.gc);
+		painter.setStyledText(st);
 
 		// Rebuild hit regions on every paint
 		hitTest.clearRegions();

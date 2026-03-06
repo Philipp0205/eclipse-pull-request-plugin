@@ -950,6 +950,11 @@ public class PullRequestCommentsView extends ViewPart {
 				if (element instanceof PullRequestComment) {
 					PullRequestComment comment = (PullRequestComment) element;
 					if ("RESOLVED".equals(comment.getState())) { //$NON-NLS-1$
+						// Use a green that works on both light and
+						// dark backgrounds
+						if (isDarkTheme()) {
+							return new Color(72, 210, 110);
+						}
 						return Display.getDefault()
 								.getSystemColor(SWT.COLOR_DARK_GREEN);
 					}
@@ -1080,14 +1085,25 @@ public class PullRequestCommentsView extends ViewPart {
 				if (element instanceof PullRequestComment) {
 					PullRequestComment comment = (PullRequestComment) element;
 					if ("RESOLVED".equals(comment.getState())) { //$NON-NLS-1$
-						return Display.getDefault()
-								.getSystemColor(SWT.COLOR_GRAY);
+						// Muted foreground for resolved comments
+						Color fg = Display.getDefault()
+								.getSystemColor(
+										SWT.COLOR_WIDGET_FOREGROUND);
+						Color bg = Display.getDefault()
+								.getSystemColor(
+										SWT.COLOR_LIST_BACKGROUND);
+						return blendSwtColor(fg, bg, 0.45f);
 					}
 					// Lighter color for reply comments
 					int depth = getCommentDepth(comment, allComments);
 					if (depth > 0) {
-						return Display.getDefault()
-								.getSystemColor(SWT.COLOR_DARK_GRAY);
+						Color fg = Display.getDefault()
+								.getSystemColor(
+										SWT.COLOR_WIDGET_FOREGROUND);
+						Color bg = Display.getDefault()
+								.getSystemColor(
+										SWT.COLOR_LIST_BACKGROUND);
+						return blendSwtColor(fg, bg, 0.6f);
 					}
 				}
 				return null;
@@ -1097,11 +1113,12 @@ public class PullRequestCommentsView extends ViewPart {
 			public Color getBackground(Object element) {
 				if (element instanceof PullRequestComment) {
 					PullRequestComment comment = (PullRequestComment) element;
-					// Light gray background for replies
+					// Slightly distinct background for replies
 					int depth = getCommentDepth(comment, allComments);
 					if (depth > 0) {
 						return Display.getDefault()
-								.getSystemColor(SWT.COLOR_WIDGET_LIGHT_SHADOW);
+								.getSystemColor(
+										SWT.COLOR_WIDGET_LIGHT_SHADOW);
 					}
 				}
 				return null;
@@ -2070,6 +2087,45 @@ public class PullRequestCommentsView extends ViewPart {
 		}
 
 		refreshComments();
+	}
+
+	/**
+	 * Returns whether the current Eclipse theme has a dark
+	 * background.
+	 *
+	 * @return {@code true} when the widget background luminance is
+	 *         below 50 %
+	 */
+	private static boolean isDarkTheme() {
+		Color bg = Display.getDefault()
+				.getSystemColor(SWT.COLOR_WIDGET_BACKGROUND);
+		RGB rgb = bg.getRGB();
+		double luminance = (0.299 * rgb.red + 0.587 * rgb.green
+				+ 0.114 * rgb.blue) / 255.0;
+		return luminance < 0.5;
+	}
+
+	/**
+	 * Blends two SWT colors together.
+	 *
+	 * @param base
+	 *            the base color
+	 * @param blend
+	 *            the color to blend towards
+	 * @param factor
+	 *            1.0 = fully base, 0.0 = fully blend
+	 * @return the blended colour (caller should manage lifecycle)
+	 */
+	private static Color blendSwtColor(Color base, Color blend,
+			float factor) {
+		RGB b = base.getRGB();
+		RGB t = blend.getRGB();
+		int r = (int) (b.red * factor + t.red * (1 - factor));
+		int g = (int) (b.green * factor
+				+ t.green * (1 - factor));
+		int bl = (int) (b.blue * factor
+				+ t.blue * (1 - factor));
+		return new Color(new RGB(r, g, bl));
 	}
 
 	@Override

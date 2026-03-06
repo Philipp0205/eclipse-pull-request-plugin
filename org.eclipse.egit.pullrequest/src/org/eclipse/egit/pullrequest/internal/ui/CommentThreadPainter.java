@@ -18,6 +18,7 @@ import java.util.Map;
 import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderType;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.custom.StyledText;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.graphics.Image;
@@ -60,6 +61,12 @@ final class CommentThreadPainter {
 	/** Cached avatar images keyed by avatar URL. */
 	private final Map<String, Image> avatarImages = new HashMap<>();
 
+	/**
+	 * The StyledText widget to repaint after async avatar loads.
+	 * Updated on each paint pass.
+	 */
+	private StyledText styledText;
+
 	// ---- State -----------------------------------------------------------
 
 	private String currentUsername;
@@ -87,6 +94,17 @@ final class CommentThreadPainter {
 	}
 
 	// ---- Configuration ---------------------------------------------------
+
+	/**
+	 * Sets the StyledText widget used to trigger a repaint after
+	 * async avatar images are loaded.
+	 *
+	 * @param st
+	 *            the StyledText widget
+	 */
+	void setStyledText(StyledText st) {
+		this.styledText = st;
+	}
 
 	/**
 	 * Sets the current user name (for edit/delete permission).
@@ -539,9 +557,12 @@ final class CommentThreadPainter {
 				image -> {
 					if (image != null) {
 						avatarImages.put(avatarUrl, image);
-						// Trigger repaint on the UI thread
-						// The PaintListener will pick up the image
-						// on the next paint cycle automatically.
+						// Trigger repaint so the avatar replaces
+						// the initials fallback
+						if (styledText != null
+								&& !styledText.isDisposed()) {
+							styledText.redraw();
+						}
 					}
 				});
 	}

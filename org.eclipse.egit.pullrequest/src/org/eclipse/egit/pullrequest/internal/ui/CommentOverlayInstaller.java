@@ -442,6 +442,16 @@ public class CommentOverlayInstaller {
 		ensureCurrentUsername();
 		CommentPaintRenderer renderer = ensureRenderer(sv, isLeft);
 
+		// Clear the ruler's tracked lines before repopulating so that
+		// stale entries from a previous showAllComments() call do not
+		// accumulate and cause icons to appear on lines that no longer
+		// have comments.
+		CommentRulerColumn column = isLeft ? leftRulerColumn
+				: rightRulerColumn;
+		if (column != null) {
+			column.clearLinesWithComments();
+		}
+
 		// Register each thread with the renderer
 		String fileType = isLeft
 				? "FROM" : "TO"; //$NON-NLS-1$ //$NON-NLS-2$
@@ -463,7 +473,6 @@ public class CommentOverlayInstaller {
 
 			renderer.addThread(lineIndex, lineComments);
 
-			CommentRulerColumn column = isLeft ? leftRulerColumn : rightRulerColumn;
 			if (column != null) {
 				column.addLineWithComments(lineNum.intValue());
 			}
@@ -856,13 +865,25 @@ public class CommentOverlayInstaller {
 
 	/**
 	 * Disposes all resources managed by this installer. Should be
-	 * called when the compare editor is closed.
+	 * called when the compare editor is closed or when a new installer
+	 * is about to replace this one on the same viewer.
+	 * <p>
+	 * Removes ruler columns from the {@link SourceViewer} composite
+	 * rulers and unregisters all {@code PaintListener},
+	 * {@code MouseListener}, {@code MouseMoveListener}, and
+	 * {@code ControlListener} instances from the {@link StyledText}
+	 * widgets so that no stale listeners remain after disposal.
+	 * </p>
 	 */
 	void dispose() {
 		clearRenderedComments(leftSourceViewer, true);
 		clearRenderedComments(rightSourceViewer, false);
 
-		// Remove resize listeners before disposing renderers
+		// Remove paint/mouse listeners before disposing renderers
+		removePaintListeners(leftSourceViewer, leftRenderer);
+		removePaintListeners(rightSourceViewer, rightRenderer);
+
+		// Remove resize listeners
 		removeResizeListener(leftSourceViewer, leftResizeListener);
 		leftResizeListener = null;
 		leftResizePending = null;
@@ -878,17 +899,77 @@ public class CommentOverlayInstaller {
 			rightRenderer.dispose();
 			rightRenderer = null;
 		}
+
+		// Remove ruler columns from the SourceViewer so they are not
+		// left behind when a new installer is created for the same
+		// viewer. Not doing this is the direct cause of duplicate
+		// comment icons when findContentViewer() is called again.
+		removeRulerColumn(leftSourceViewer, leftRulerColumn);
+		removeRulerColumn(rightSourceViewer, rightRulerColumn);
 		leftRulerColumn = null;
 		rightRulerColumn = null;
+
 		leftSourceViewer = null;
 		rightSourceViewer = null;
 		currentComments = null;
 	}
 
 	/**
+	 * Removes a {@link CommentRulerColumn} from a {@link SourceViewer}'s
+	 * composite ruler. Silently ignores {@code null} arguments and a
+	 * disposed viewer.
+	 *
+	 * @param sv
+	 *            the source viewer, may be {@code null}
+	 * @param column
+	 *            the ruler column to remove, may be {@code null}
+	 */
+	private void removeRulerColumn(SourceViewer sv,
+			CommentRulerColumn column) {
+		if (sv == null || column == null) {
+			return;
+		}
+		try {
+			sv.removeVerticalRulerColumn(column);
+		} catch (Exception e) {
+			// Viewer or column may already be disposed; ignore
+		}
+	}
+
+	/**
+	 * Removes the {@link CommentPaintRenderer} from the
+	 * {@link StyledText} of the given {@link SourceViewer} as a
+	 * {@code PaintListener}, {@code MouseListener}, and
+	 * {@code MouseMoveListener}.
+	 *
+	 * @param sv
+	 *            the source viewer, may be {@code null}
+	 * @param renderer
+	 *            the renderer to remove, may be {@code null}
+	 */
+	private void removePaintListeners(SourceViewer sv,
+			CommentPaintRenderer renderer) {
+		if (sv == null || renderer == null) {
+			return;
+		}
+		StyledText st = sv.getTextWidget();
+		if (st == null || st.isDisposed()) {
+			return;
+		}
+		st.removePaintListener(renderer);
+		st.removeMouseListener(renderer);
+		st.removeMouseMoveListener(renderer);
+	}
+
+	/**
 	 * Safely removes a {@link ControlListener} from a source
 	 * viewer's {@link StyledText}, if both are non-null and the
 	 * widget is not disposed.
+	 *
+	 * @param sv
+	 *            the source viewer, may be {@code null}
+	 * @param listener
+	 *            the listener to remove, may be {@code null}
 	 */
 	private void removeResizeListener(SourceViewer sv,
 			ControlListener listener) {

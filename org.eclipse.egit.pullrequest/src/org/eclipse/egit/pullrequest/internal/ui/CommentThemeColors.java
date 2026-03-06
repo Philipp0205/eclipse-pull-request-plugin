@@ -32,10 +32,17 @@ final class CommentThemeColors {
 
 	// How much to lighten/darken base colors for different elements
 	// Lower values = more contrast with base background
-	private static final float BG_CONTRAST = 0.92f; // Comment background stands out from editor
-	private static final float HEADER_FACTOR = 0.88f; // Header more distinct
-	private static final float BORDER_FACTOR = 0.55f; // Border highly visible (increased from 0.70)
-	private static final float SEPARATOR_FACTOR = 0.82f; // Separator visible but subtle
+	private static final float BG_CONTRAST = 0.92f;
+	private static final float HEADER_FACTOR = 0.88f;
+	private static final float BORDER_FACTOR = 0.55f;
+	private static final float SEPARATOR_FACTOR = 0.82f;
+
+	// Dark-theme accent tint — a subtle blue hue so comment bubbles
+	// are visually distinct from the plain dark editor background
+	// instead of just a slightly lighter grey.
+	private static final RGB DARK_ACCENT = new RGB(60, 80, 120);
+	private static final float DARK_BG_ACCENT = 0.25f;
+	private static final float DARK_HDR_ACCENT = 0.32f;
 
 	// ---- Color fields ----------------------------------------------------
 
@@ -58,6 +65,12 @@ final class CommentThemeColors {
 
 	private boolean colorsInitialised;
 
+	/**
+	 * Tracks the widget background RGB at the time colors were
+	 * computed so we can detect a theme change.
+	 */
+	private RGB lastWidgetBgRgb;
+
 	// ---- Font fields -----------------------------------------------------
 
 	private Font boldFont;
@@ -69,57 +82,130 @@ final class CommentThemeColors {
 	 * Ensures colors are initialized based on the current theme.
 	 *
 	 * @param st
-	 *            the StyledText widget (provides Display and theme colors)
+	 *            the StyledText widget (provides Display and theme
+	 *            colors)
 	 */
 	void ensureColors(StyledText st) {
+		// Detect theme changes by comparing the actual editor
+		// background, which is the surface we paint on
+		Color editorBg = st.getBackground();
+		RGB currentRgb = editorBg.getRGB();
+
 		if (colorsInitialised) {
-			return;
+			if (currentRgb.equals(lastWidgetBgRgb)) {
+				return;
+			}
+			// Theme changed — dispose old blended colors and
+			// reinitialize
+			disposeColors();
 		}
 		colorsInitialised = true;
+		lastWidgetBgRgb = currentRgb;
 
-		// Get Eclipse theme-aware base colors
-		Color widgetBg = st.getDisplay().getSystemColor(SWT.COLOR_WIDGET_BACKGROUND);
-		Color widgetFg = st.getDisplay().getSystemColor(SWT.COLOR_WIDGET_FOREGROUND);
-		Color listBg = st.getDisplay().getSystemColor(SWT.COLOR_LIST_BACKGROUND);
-		Color listFg = st.getDisplay().getSystemColor(SWT.COLOR_LIST_FOREGROUND);
+		// Use the actual editor background as the base so comment
+		// bubbles adapt correctly to both light and dark themes
+		Color baseBg = editorBg;
+		Color widgetFg = st.getDisplay()
+				.getSystemColor(SWT.COLOR_WIDGET_FOREGROUND);
+		Color baseFg = st.getForeground();
+		boolean dark = isDarkBackground(baseBg);
 
-		// Use blended list background for comment bubbles to stand out from editor
-		bgColor = blendColor(st.getDisplay(), listBg, widgetFg, BG_CONTRAST);
-
-		// Header is slightly darker/lighter than background
-		headerBgColor = blendColor(st.getDisplay(), listBg, widgetFg, HEADER_FACTOR);
+		if (dark) {
+			// Dark theme: blend editor bg with a blue accent
+			// tint so comments are visually distinct (not just
+			// a slightly lighter grey)
+			bgColor = blendRgb(st.getDisplay(),
+					baseBg.getRGB(), DARK_ACCENT,
+					1.0f - DARK_BG_ACCENT);
+			headerBgColor = blendRgb(st.getDisplay(),
+					baseBg.getRGB(), DARK_ACCENT,
+					1.0f - DARK_HDR_ACCENT);
+		} else {
+			// Light theme: shift toward foreground for a
+			// subtle off-white background
+			bgColor = blendColor(st.getDisplay(), baseBg,
+					widgetFg, BG_CONTRAST);
+			headerBgColor = blendColor(st.getDisplay(), baseBg,
+					widgetFg, HEADER_FACTOR);
+		}
 
 		// Resolved comments get a slight green tint
-		resolvedBgColor = blendWithGreen(st.getDisplay(), listBg, 0.05f);
-		resolvedHeaderBgColor = blendWithGreen(st.getDisplay(), headerBgColor, 0.08f);
+		resolvedBgColor = blendWithGreen(
+				st.getDisplay(), bgColor, 0.05f);
+		resolvedHeaderBgColor = blendWithGreen(
+				st.getDisplay(), headerBgColor, 0.08f);
 
-		// Text colors from theme
-		authorColor = widgetFg;
-		bodyColor = listFg;
+		// Text colors from actual editor foreground
+		authorColor = baseFg;
+		bodyColor = baseFg;
 
 		// Timestamp is slightly muted
-		timestampColor = blendColor(st.getDisplay(), listFg, listBg, 0.6f);
+		timestampColor = blendColor(st.getDisplay(),
+				baseFg, baseBg, 0.6f);
 
-		// Separators and borders
-		separatorColor = blendColor(st.getDisplay(), listBg, widgetFg, SEPARATOR_FACTOR);
-		borderColor = blendColor(st.getDisplay(), listBg, widgetFg, BORDER_FACTOR);
+		// Separators and borders — use accent-tinted blend
+		// in dark mode for a cohesive look
+		if (dark) {
+			separatorColor = blendRgb(st.getDisplay(),
+					baseBg.getRGB(), DARK_ACCENT,
+					1.0f - 0.40f);
+			borderColor = blendRgb(st.getDisplay(),
+					baseBg.getRGB(), DARK_ACCENT,
+					1.0f - 0.55f);
+		} else {
+			separatorColor = blendColor(st.getDisplay(), baseBg,
+					widgetFg, SEPARATOR_FACTOR);
+			borderColor = blendColor(st.getDisplay(), baseBg,
+					widgetFg, BORDER_FACTOR);
+		}
 
-		// Links use Eclipse's hyperlink color or fall back to blue
-		linkColor = st.getDisplay().getSystemColor(SWT.COLOR_LINK_FOREGROUND);
-		linkHoverColor = blendColor(st.getDisplay(), linkColor, widgetFg, 0.8f);
+		// Links use Eclipse's hyperlink color
+		linkColor = st.getDisplay()
+				.getSystemColor(SWT.COLOR_LINK_FOREGROUND);
+		linkHoverColor = blendColor(st.getDisplay(),
+				linkColor, widgetFg, 0.8f);
 
 		// Avatar background - use a distinct color
-		avatarBgColor = st.getDisplay().getSystemColor(SWT.COLOR_TITLE_BACKGROUND);
+		avatarBgColor = st.getDisplay()
+				.getSystemColor(SWT.COLOR_TITLE_BACKGROUND);
 
 		// Resolved badge - green with good contrast
-		resolvedBadgeBgColor = new Color(st.getDisplay(), new RGB(34, 197, 94));
-		whiteColor = st.getDisplay().getSystemColor(SWT.COLOR_WHITE);
+		resolvedBadgeBgColor = new Color(
+				st.getDisplay(), new RGB(34, 197, 94));
 
-		// Highlight border for selected comments - use link color for consistency
+		// Badge/avatar text — always white (works on both
+		// dark accent backgrounds and green badges)
+		whiteColor = st.getDisplay()
+				.getSystemColor(SWT.COLOR_WHITE);
+
+		// Highlight border for selected comments
 		highlightBorderColor = linkColor;
 
-		// Action bar background - slightly different from header for visual separation
-		actionBarBgColor = blendColor(st.getDisplay(), listBg, widgetFg, 0.95f);
+		// Action bar background - between editor bg and
+		// comment bg for a subtle footer area
+		if (dark) {
+			actionBarBgColor = blendRgb(st.getDisplay(),
+					baseBg.getRGB(), DARK_ACCENT,
+					1.0f - DARK_BG_ACCENT * 0.6f);
+		} else {
+			actionBarBgColor = blendColor(st.getDisplay(),
+					baseBg, widgetFg, 0.95f);
+		}
+	}
+
+	/**
+	 * Returns whether the given colour is considered dark.
+	 *
+	 * @param color
+	 *            the colour to test
+	 * @return {@code true} when the perceived luminance is below 50 %
+	 */
+	private boolean isDarkBackground(Color color) {
+		RGB rgb = color.getRGB();
+		// Perceived luminance (ITU-R BT.601)
+		double luminance = (0.299 * rgb.red + 0.587 * rgb.green
+				+ 0.114 * rgb.blue) / 255.0;
+		return luminance < 0.5;
 	}
 
 	/**
@@ -160,8 +246,18 @@ final class CommentThemeColors {
 			smallFont = null;
 		}
 
+		disposeColors();
+	}
+
+	/**
+	 * Disposes dynamically created colors and resets the
+	 * initialisation flag so that the next
+	 * {@link #ensureColors(StyledText)} call recomputes them.
+	 */
+	private void disposeColors() {
 		// Dispose dynamically created colors (from blending)
 		// System colors (from getSystemColor) don't need disposal
+		disposeColorIfNotSystem(bgColor);
 		disposeColorIfNotSystem(headerBgColor);
 		disposeColorIfNotSystem(resolvedBgColor);
 		disposeColorIfNotSystem(resolvedHeaderBgColor);
@@ -257,11 +353,35 @@ final class CommentThemeColors {
 	 */
 	private Color blendColor(org.eclipse.swt.widgets.Display display,
 			Color base, Color blend, float factor) {
-		RGB baseRGB = base.getRGB();
-		RGB blendRGB = blend.getRGB();
-		int r = (int) (baseRGB.red * factor + blendRGB.red * (1 - factor));
-		int g = (int) (baseRGB.green * factor + blendRGB.green * (1 - factor));
-		int b = (int) (baseRGB.blue * factor + blendRGB.blue * (1 - factor));
+		return blendRgb(display, base.getRGB(), blend.getRGB(),
+				factor);
+	}
+
+	/**
+	 * Blends two RGB values together with a given factor.
+	 * Factor 1.0 = fully base, 0.0 = fully blend.
+	 *
+	 * @param display
+	 *            the display for creating the Color
+	 * @param baseRGB
+	 *            the base RGB
+	 * @param blendRGB
+	 *            the RGB to blend toward
+	 * @param factor
+	 *            1.0 = fully base, 0.0 = fully blend
+	 * @return a new Color (caller must dispose)
+	 */
+	private Color blendRgb(org.eclipse.swt.widgets.Display display,
+			RGB baseRGB, RGB blendRGB, float factor) {
+		int r = (int) (baseRGB.red * factor
+				+ blendRGB.red * (1 - factor));
+		int g = (int) (baseRGB.green * factor
+				+ blendRGB.green * (1 - factor));
+		int b = (int) (baseRGB.blue * factor
+				+ blendRGB.blue * (1 - factor));
+		r = Math.min(255, Math.max(0, r));
+		g = Math.min(255, Math.max(0, g));
+		b = Math.min(255, Math.max(0, b));
 		return new Color(display, new RGB(r, g, b));
 	}
 

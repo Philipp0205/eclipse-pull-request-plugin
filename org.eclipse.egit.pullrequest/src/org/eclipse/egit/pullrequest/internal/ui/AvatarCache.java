@@ -10,6 +10,8 @@
  *******************************************************************************/
 package org.eclipse.egit.pullrequest.internal.ui;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -25,6 +27,8 @@ import java.util.function.Consumer;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.egit.pullrequest.Activator;
+import org.eclipse.swt.SWT;
+import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.ImageData;
 import org.eclipse.swt.graphics.ImageLoader;
@@ -38,12 +42,9 @@ import org.eclipse.swt.widgets.Display;
 public class AvatarCache {
 
 	private static final int CACHE_TTL_DAYS = 7;
-
-	private static final long CACHE_TTL_MILLIS = CACHE_TTL_DAYS * 24L * 60L
-			* 60L * 1000L;
-
+	private static final long CACHE_TTL_MILLIS = CACHE_TTL_DAYS * 24L * 60L * 60L * 1000L;
 	private static final int DOWNLOAD_TIMEOUT_MS = 10000;
-
+	private static final int MAX_REDIRECTS = 5;
 	private static AvatarCache instance;
 
 	private final ConcurrentHashMap<String, Image> memoryCache = new ConcurrentHashMap<>();
@@ -69,21 +70,23 @@ public class AvatarCache {
 		return instance;
 	}
 
+
 	/**
 	 * Loads an avatar image asynchronously. If the image is in the memory
-	 * cache, the callback is invoked immediately on the calling thread. If the
-	 * image is in the disk cache and not stale, it is loaded in a background
-	 * job and the callback is invoked on the UI thread. If the image is not
-	 * cached or is stale, it is downloaded in a background job, saved to disk,
-	 * and the callback is invoked on the UI thread. On any error, the callback
-	 * is invoked with {@code null}.
+	 * cache, the callback is invoked immediately on the calling thread. If
+	 * the image is in the disk cache and not stale, it is loaded in a
+	 * background job and the callback is invoked on the UI thread. If the
+	 * image is not cached or is stale, it is downloaded in a background
+	 * job, saved to disk, and the callback is invoked on the UI thread. On
+	 * any error, the callback is invoked with {@code null}.
 	 *
 	 * @param avatarUrl
 	 *            the avatar image URL
 	 * @param size
 	 *            the desired size in pixels (both width and height)
 	 * @param callback
-	 *            consumer to receive the loaded Image (may be null on failure)
+	 *            consumer to receive the loaded Image (may be null on
+	 *            failure)
 	 */
 	public void loadAvatar(String avatarUrl, int size,
 			Consumer<Image> callback) {
@@ -100,11 +103,13 @@ public class AvatarCache {
 			return;
 		}
 
-		// Load from disk or network in background
+		// Load ImageData from disk or network in background,
+		// then create the Image on the UI thread
 		Job.create("Loading avatar", monitor -> { //$NON-NLS-1$
-			Image image = loadAvatarSync(avatarUrl, size);
+			ImageData data = loadImageDataSync(avatarUrl, size);
 			Display.getDefault().asyncExec(() -> {
-				if (image != null && !image.isDisposed()) {
+				Image image = createScaledImage(data, size);
+				if (image != null) {
 					memoryCache.put(cacheKey, image);
 				}
 				callback.accept(image);
@@ -113,17 +118,19 @@ public class AvatarCache {
 	}
 
 	/**
-	 * Synchronously loads an avatar image. First checks disk cache, then
-	 * downloads if necessary. This method should be called from a background
-	 * thread.
+	 * Synchronously loads avatar image data. First checks disk cache,
+	 * then downloads if necessary. This method only produces
+	 * {@link ImageData} (a plain Java object) and is safe to call from
+	 * any thread.
 	 *
 	 * @param avatarUrl
 	 *            the avatar image URL
 	 * @param size
-	 *            the desired size in pixels
-	 * @return the loaded and scaled circular Image, or null on failure
+	 *            the desired display size in pixels (used to request
+	 *            an appropriate resolution from the server)
+	 * @return the loaded ImageData, or {@code null} on failure
 	 */
-	private Image loadAvatarSync(String avatarUrl, int size) {
+	private ImageData loadImageDataSync(String avatarUrl, int size) {
 		try {
 			File cachedFile = getCachedFile(avatarUrl);
 
@@ -132,10 +139,9 @@ public class AvatarCache {
 				long age = System.currentTimeMillis()
 						- cachedFile.lastModified();
 				if (age < CACHE_TTL_MILLIS) {
-					// Load from disk
 					try (FileInputStream fis = new FileInputStream(
 							cachedFile)) {
-						return loadAndProcessImage(fis, size);
+						return parseImageData(fis);
 					} catch (IOException e) {
 						Activator.logWarning(
 								"Failed to load cached avatar: " //$NON-NLS-1$
@@ -145,154 +151,201 @@ public class AvatarCache {
 			}
 
 			// Download from network
-			Image image = downloadAvatar(avatarUrl, size);
-			if (image != null) {
-				// Save raw image data to disk for future use
-				saveToCache(avatarUrl, image);
-			}
-			return image;
-
-		} catch (Exception e) {
-			Activator.logWarning("Failed to load avatar from " + avatarUrl //$NON-NLS-1$
-					+ ": " + e.getMessage()); //$NON-NLS-1$
-			return null;
-		}
-	}
-
-	/**
-	 * Downloads an avatar image from a URL.
-	 *
-	 * @param avatarUrl
-	 *            the URL to download from
-	 * @param size
-	 *            the desired size in pixels
-	 * @return the downloaded and processed image, or null on failure
-	 */
-	private Image downloadAvatar(String avatarUrl, int size) {
-		HttpURLConnection conn = null;
-		try {
-			// Request higher resolution for better quality (2x size)
-			String enhancedUrl = enhanceAvatarUrl(avatarUrl, size * 2);
-			URL url = new URL(enhancedUrl);
-			conn = (HttpURLConnection) url.openConnection();
-			conn.setConnectTimeout(DOWNLOAD_TIMEOUT_MS);
-			conn.setReadTimeout(DOWNLOAD_TIMEOUT_MS);
-			conn.setRequestProperty("User-Agent", //$NON-NLS-1$
-					"Eclipse-EGit-PullRequest/1.0"); //$NON-NLS-1$
-
-			int responseCode = conn.getResponseCode();
-			if (responseCode != HttpURLConnection.HTTP_OK) {
-				Activator.logWarning("Failed to download avatar from " //$NON-NLS-1$
-						+ avatarUrl + ": HTTP " + responseCode); //$NON-NLS-1$
+			byte[] rawBytes = downloadAvatarBytes(avatarUrl,
+					size * 2);
+			if (rawBytes == null) {
 				return null;
 			}
 
-			try (InputStream is = conn.getInputStream()) {
-				return loadAndProcessImage(is, size);
+			// Save raw bytes to disk cache before parsing
+			saveBytesToCache(avatarUrl, rawBytes);
+
+			// Parse into ImageData (thread-safe)
+			try (ByteArrayInputStream bis = new ByteArrayInputStream(
+					rawBytes)) {
+				return parseImageData(bis);
 			}
 
-		} catch (IOException e) {
-			Activator.logWarning("Failed to download avatar from " //$NON-NLS-1$
-					+ avatarUrl + ": " + e.getMessage()); //$NON-NLS-1$
+		} catch (Exception e) {
+			Activator.logWarning(
+					"Failed to load avatar from " + avatarUrl //$NON-NLS-1$
+							+ ": " + e.getMessage()); //$NON-NLS-1$
 			return null;
-		} finally {
-			if (conn != null) {
-				conn.disconnect();
-			}
 		}
 	}
 
 	/**
-	 * Loads an image from an input stream, scales it, and crops it to a
-	 * circle.
+	 * Downloads raw avatar image bytes from a URL, following redirects
+	 * including cross-protocol redirects (HTTP to HTTPS).
+	 *
+	 * @param avatarUrl
+	 *            the avatar URL
+	 * @param requestedSize
+	 *            the desired image size in pixels for URL enhancement
+	 * @return the raw image bytes, or {@code null} on failure
+	 */
+	private byte[] downloadAvatarBytes(String avatarUrl,
+			int requestedSize) {
+		String currentUrl = enhanceAvatarUrl(avatarUrl, requestedSize);
+
+		for (int redirects = 0; redirects < MAX_REDIRECTS; redirects++) {
+			HttpURLConnection conn = null;
+			try {
+				URL url = new URL(currentUrl);
+				conn = (HttpURLConnection) url.openConnection();
+				conn.setInstanceFollowRedirects(false);
+				conn.setConnectTimeout(DOWNLOAD_TIMEOUT_MS);
+				conn.setReadTimeout(DOWNLOAD_TIMEOUT_MS);
+				conn.setRequestProperty("User-Agent", //$NON-NLS-1$
+						"Eclipse-EGit-PullRequest/1.0"); //$NON-NLS-1$
+
+				int code = conn.getResponseCode();
+
+				if (code == HttpURLConnection.HTTP_OK) {
+					try (InputStream is = conn.getInputStream()) {
+						return readAllBytes(is);
+					}
+				}
+
+				if (code == HttpURLConnection.HTTP_MOVED_PERM
+						|| code == HttpURLConnection.HTTP_MOVED_TEMP
+						|| code == 307 || code == 308) {
+					String location = conn.getHeaderField("Location"); //$NON-NLS-1$
+					if (location == null || location.isEmpty()) {
+						Activator.logWarning(
+								"Redirect with no Location from " //$NON-NLS-1$
+										+ currentUrl);
+						return null;
+					}
+					currentUrl = location;
+					continue;
+				}
+
+				Activator.logWarning(
+						"Failed to download avatar from " //$NON-NLS-1$
+								+ avatarUrl + ": HTTP " //$NON-NLS-1$
+								+ code);
+				return null;
+
+			} catch (IOException e) {
+				Activator.logWarning(
+						"Failed to download avatar from " //$NON-NLS-1$
+								+ avatarUrl + ": " //$NON-NLS-1$
+								+ e.getMessage());
+				return null;
+			} finally {
+				if (conn != null) {
+					conn.disconnect();
+				}
+			}
+		}
+
+		Activator.logWarning(
+				"Too many redirects for avatar: " + avatarUrl); //$NON-NLS-1$
+		return null;
+	}
+
+	/**
+	 * Reads all bytes from an input stream.
 	 *
 	 * @param is
-	 *            the input stream to load from
-	 * @param size
-	 *            the desired size in pixels
-	 * @return the processed Image, or null on failure
+	 *            the input stream
+	 * @return the bytes
+	 * @throws IOException
+	 *             on I/O error
 	 */
-	private Image loadAndProcessImage(InputStream is, int size) {
+	private byte[] readAllBytes(InputStream is) throws IOException {
+		ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+		byte[] chunk = new byte[8192];
+		int bytesRead;
+		while ((bytesRead = is.read(chunk)) != -1) {
+			buffer.write(chunk, 0, bytesRead);
+		}
+		return buffer.toByteArray();
+	}
+
+	/**
+	 * Parses an input stream into {@link ImageData}. This method uses
+	 * {@link ImageLoader} which only produces plain Java data objects
+	 * and is safe to call from any thread.
+	 *
+	 * @param is
+	 *            the input stream containing image bytes
+	 * @return the parsed ImageData, or {@code null} if parsing fails
+	 */
+	private ImageData parseImageData(InputStream is) {
 		try {
 			ImageLoader loader = new ImageLoader();
-			ImageData[] imageData = loader.load(is);
-			if (imageData == null || imageData.length == 0) {
-				return null;
+			ImageData[] data = loader.load(is);
+			if (data != null && data.length > 0) {
+				return data[0];
 			}
-
-			// Create image on UI thread's Display
-			Display display = Display.getDefault();
-			Image sourceImage = new Image(display, imageData[0]);
-
-			// Use high-quality scaling with anti-aliasing via GC
-			// This produces much better results than ImageData.scaledTo()
-			Image scaledImage = new Image(display, size, size);
-			org.eclipse.swt.graphics.GC gc = new org.eclipse.swt.graphics.GC(scaledImage);
-			try {
-				// Enable anti-aliasing and interpolation for smooth scaling
-				gc.setAntialias(org.eclipse.swt.SWT.ON);
-				gc.setInterpolation(org.eclipse.swt.SWT.HIGH);
-				
-				// Draw the source image scaled to the target size
-				gc.drawImage(sourceImage, 0, 0, sourceImage.getBounds().width,
-						sourceImage.getBounds().height, 0, 0, size, size);
-			} finally {
-				gc.dispose();
-				sourceImage.dispose();
-			}
-
-			// Note: createCircularImage returns source image directly
-			// (circular clipping is done at draw time in AvatarCanvas)
-			// so we must NOT dispose scaledImage here
-			Image circularImage = createCircularImage(display, scaledImage,
-					size);
-
-			return circularImage;
-
 		} catch (Exception e) {
 			Activator.logWarning(
-					"Failed to process avatar image: " + e.getMessage()); //$NON-NLS-1$
+					"Failed to parse avatar image: " //$NON-NLS-1$
+							+ e.getMessage());
+		}
+		return null;
+	}
+
+	/**
+	 * Creates a scaled SWT {@link Image} from {@link ImageData}. This
+	 * method uses SWT graphics resources ({@link Image}, {@link GC})
+	 * and <b>must</b> be called on the UI thread.
+	 *
+	 * @param data
+	 *            the source image data, may be {@code null}
+	 * @param size
+	 *            the desired size in pixels (width and height)
+	 * @return the scaled Image, or {@code null} if data is null
+	 */
+	private Image createScaledImage(ImageData data, int size) {
+		if (data == null) {
 			return null;
+		}
+		Display display = Display.getCurrent();
+		if (display == null) {
+			return null;
+		}
+		Image sourceImage = new Image(display, data);
+		try {
+			Image scaledImage = new Image(display, size, size);
+			GC gc = new GC(scaledImage);
+			try {
+				gc.setAntialias(SWT.ON);
+				gc.setInterpolation(SWT.HIGH);
+				gc.drawImage(sourceImage, 0, 0,
+						sourceImage.getBounds().width,
+						sourceImage.getBounds().height,
+						0, 0, size, size);
+			} finally {
+				gc.dispose();
+			}
+			return scaledImage;
+		} finally {
+			sourceImage.dispose();
 		}
 	}
 
 	/**
-	 * Creates a circular version of an image by drawing it clipped to a
-	 * circular region with proper transparency.
-	 *
-	 * @param display
-	 *            the Display to create the image on
-	 * @param source
-	 *            the source image (must be square)
-	 * @param size
-	 *            the size in pixels
-	 * @return a new circular Image
-	 */
-	private Image createCircularImage(Display display, Image source, int size) {
-		// Just return the source image - circular clipping is done at draw time
-		// in AvatarCanvas to avoid alpha compositing issues
-		return source;
-	}
-
-	/**
-	 * Saves an avatar image to the disk cache.
+	 * Saves raw image bytes to the disk cache.
 	 *
 	 * @param avatarUrl
-	 *            the avatar URL (used to generate filename)
-	 * @param image
-	 *            the image to save
+	 *            the avatar URL (used to generate the filename)
+	 * @param bytes
+	 *            the raw image bytes to save
 	 */
-	private void saveToCache(String avatarUrl, Image image) {
+	private void saveBytesToCache(String avatarUrl, byte[] bytes) {
 		try {
 			File cachedFile = getCachedFile(avatarUrl);
-			ImageLoader loader = new ImageLoader();
-			loader.data = new ImageData[] { image.getImageData() };
-			try (FileOutputStream fos = new FileOutputStream(cachedFile)) {
-				loader.save(fos, org.eclipse.swt.SWT.IMAGE_PNG);
+			try (FileOutputStream fos = new FileOutputStream(
+					cachedFile)) {
+				fos.write(bytes);
 			}
 		} catch (IOException e) {
 			Activator.logWarning(
-					"Failed to save avatar to cache: " + e.getMessage()); //$NON-NLS-1$
+					"Failed to save avatar to cache: " //$NON-NLS-1$
+							+ e.getMessage());
 		}
 	}
 

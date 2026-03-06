@@ -122,6 +122,16 @@ public class PullRequestCompareEditorInput extends CompareEditorInput {
 
 		if (useInlineComments
 				&& contentViewer instanceof TextMergeViewer) {
+			// Dispose any previous overlay before creating a new one.
+			// The compare framework may call findContentViewer() more
+			// than once (e.g. when the viewer is recycled or the input
+			// changes). Without this, every call stacks an additional
+			// ruler column and paint listener on the same SourceViewer,
+			// which is the root cause of duplicate comment icons.
+			if (commentOverlay != null) {
+				commentOverlay.dispose();
+				commentOverlay = null;
+			}
 			commentOverlay = new CommentOverlayInstaller(
 					contentViewer);
 			commentOverlay.setFilePath(changedFile.getPath());

@@ -278,9 +278,14 @@ public class PullRequestOverviewView extends EditorPart {
 		if (pr.isDraft()) {
 			Label draftBadge = toolkit.createLabel(badgeRow,
 					PRText.OverviewView_Draft, SWT.NONE);
-			draftBadge.setForeground(
-					Display.getCurrent().getSystemColor(
-							SWT.COLOR_DARK_GRAY));
+			if (isDarkTheme(Display.getCurrent())) {
+				draftBadge.setForeground(
+						new Color(170, 170, 170));
+			} else {
+				draftBadge.setForeground(
+						Display.getCurrent().getSystemColor(
+								SWT.COLOR_DARK_GRAY));
+			}
 			draftBadge.setFont(
 					JFaceResources.getFontRegistry().getBold(
 							JFaceResources.DEFAULT_FONT));
@@ -290,9 +295,14 @@ public class PullRequestOverviewView extends EditorPart {
 		String prId = "#" + pr.getId(); //$NON-NLS-1$
 		Label idLabel = toolkit.createLabel(badgeRow, prId,
 				SWT.NONE);
-		idLabel.setForeground(
-				Display.getCurrent().getSystemColor(
-						SWT.COLOR_DARK_GRAY));
+		if (isDarkTheme(Display.getCurrent())) {
+			idLabel.setForeground(
+					new Color(170, 170, 170));
+		} else {
+			idLabel.setForeground(
+					Display.getCurrent().getSystemColor(
+							SWT.COLOR_DARK_GRAY));
+		}
 
 		// Separator spanning both columns
 		Label separator = toolkit.createSeparator(
@@ -532,24 +542,63 @@ public class PullRequestOverviewView extends EditorPart {
 	private void applyStateForeground(Label label,
 			String state) {
 		Display display = Display.getCurrent();
+		boolean dark = isDarkTheme(display);
 		if ("OPEN".equals(state)) { //$NON-NLS-1$
-			label.setForeground(
-					display.getSystemColor(
-							SWT.COLOR_DARK_GREEN));
+			if (dark) {
+				label.setForeground(
+						new Color(72, 210, 110));
+			} else {
+				label.setForeground(
+						display.getSystemColor(
+								SWT.COLOR_DARK_GREEN));
+			}
 		} else if ("MERGED".equals(state)) { //$NON-NLS-1$
-			label.setForeground(
-					display.getSystemColor(
-							SWT.COLOR_DARK_MAGENTA));
+			if (dark) {
+				label.setForeground(
+						new Color(180, 120, 220));
+			} else {
+				label.setForeground(
+						display.getSystemColor(
+								SWT.COLOR_DARK_MAGENTA));
+			}
 		} else if ("DECLINED".equals(state) //$NON-NLS-1$
 				|| "CLOSED".equals(state)) { //$NON-NLS-1$
-			label.setForeground(
-					display.getSystemColor(
-							SWT.COLOR_DARK_RED));
+			if (dark) {
+				label.setForeground(
+						new Color(240, 100, 100));
+			} else {
+				label.setForeground(
+						display.getSystemColor(
+								SWT.COLOR_DARK_RED));
+			}
 		} else {
-			label.setForeground(
-					display.getSystemColor(
-							SWT.COLOR_DARK_GRAY));
+			if (dark) {
+				label.setForeground(
+						new Color(170, 170, 170));
+			} else {
+				label.setForeground(
+						display.getSystemColor(
+								SWT.COLOR_DARK_GRAY));
+			}
 		}
+	}
+
+	/**
+	 * Returns whether the current Eclipse theme is dark.
+	 *
+	 * @param display
+	 *            the display
+	 * @return {@code true} when the widget background luminance
+	 *         is below 50 %
+	 */
+	private static boolean isDarkTheme(Display display) {
+		Color bg = display
+				.getSystemColor(SWT.COLOR_WIDGET_BACKGROUND);
+		RGB rgb = bg.getRGB();
+		double luminance = (0.299 * rgb.red
+				+ 0.587 * rgb.green + 0.114 * rgb.blue)
+				/ 255.0;
+		return luminance < 0.5;
 	}
 
 	private void openInExternalBrowser() {
