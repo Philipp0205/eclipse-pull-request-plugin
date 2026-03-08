@@ -471,6 +471,15 @@ public class CommentOverlayInstaller {
 				continue;
 			}
 
+			// For the last comment: if lineIndex points to the
+			// last line or beyond, place the indent on the
+			// commented line itself to avoid a gap caused by the
+			// trailing empty line.
+			if (lineIndex >= styledText.getLineCount() - 1
+					&& lineIndex > 0) {
+				lineIndex = lineIndex - 1;
+			}
+
 			renderer.addThread(lineIndex, lineComments);
 
 			if (column != null) {
@@ -489,6 +498,12 @@ public class CommentOverlayInstaller {
 			int lineIndex = lineNum.intValue();
 			if (lineIndex >= 0
 					&& lineIndex < styledText.getLineCount()) {
+				// Apply the same adjustment as above for the last comment
+				if (lineIndex >= styledText.getLineCount() - 1
+						&& lineIndex > 0) {
+					lineIndex = lineIndex - 1;
+				}
+
 				int height = renderer.computeThreadHeight(
 						styledText, lineIndex);
 				styledText.setLineVerticalIndent(lineIndex,
