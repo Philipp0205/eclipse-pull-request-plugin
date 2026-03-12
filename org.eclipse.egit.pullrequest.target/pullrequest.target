@@ -1,16 +1,19 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <?pde?>
 <!-- Target platform for standalone EGit Pull Request plugin -->
-<target name="pullrequest" sequenceNumber="6">
+<target name="pullrequest" sequenceNumber="7">
   <locations>
-    <!-- Eclipse Platform SDK and all dependencies from 2025-06 release -->
+    <!-- Eclipse Platform SDK and all dependencies from 2024-12 release -->
     <!-- Using planner mode to automatically resolve ALL transitive dependencies -->
+    <!-- Note: 2024-12 includes EGit/JGit, so no separate repository needed -->
     <location includeMode="planner" includeAllPlatforms="false" includeSource="true" includeConfigurePhase="true" type="InstallableUnit">
       <unit id="org.eclipse.sdk.feature.group" version="0.0.0"/>
       <unit id="org.eclipse.pde.feature.group" version="0.0.0"/>
       <unit id="org.eclipse.jdt.feature.group" version="0.0.0"/>
       <unit id="org.eclipse.platform.feature.group" version="0.0.0"/>
-      <repository location="https://download.eclipse.org/releases/2025-06"/>
+      <unit id="org.eclipse.egit.feature.group" version="0.0.0"/>
+      <unit id="org.eclipse.jgit.feature.group" version="0.0.0"/>
+      <repository location="https://download.eclipse.org/releases/2024-12"/>
     </location>
 
     <!-- Orbit dependencies: Testing frameworks -->
@@ -24,14 +27,7 @@
       <unit id="junit-platform-launcher" version="0.0.0"/>
       <unit id="junit-platform-runner" version="0.0.0"/>
       <unit id="org.opentest4j" version="0.0.0"/>
-      <repository location="https://download.eclipse.org/tools/orbit/simrel/orbit-aggregation/2025-06"/>
-    </location>
-
-    <!-- EGit and JGit (nightly builds for 7.6.0) -->
-    <location includeMode="planner" includeAllPlatforms="false" includeSource="true" includeConfigurePhase="true" type="InstallableUnit">
-      <unit id="org.eclipse.egit.feature.group" version="0.0.0"/>
-      <unit id="org.eclipse.jgit.feature.group" version="0.0.0"/>
-      <repository location="https://download.eclipse.org/egit/updates-nightly/"/>
+      <repository location="https://download.eclipse.org/tools/orbit/simrel/orbit-aggregation/2024-12"/>
     </location>
   </locations>
 </target>
