@@ -22,7 +22,7 @@ import org.eclipse.swt.graphics.Rectangle;
 /**
  * Manages hit-testing for clickable regions in comment rendering.
  * <p>
- * Tracks clickable regions (Reply, Resolve, Edit, Delete, Select) painted
+ * Tracks clickable regions (Reply, Resolve, Edit, Delete) painted
  * during the most recent paint pass, and handles mouse events to dispatch
  * actions to a {@link CommentActionHandler}.
  * </p>
@@ -34,7 +34,6 @@ final class CommentHitTestManager {
 	static final int HIT_RESOLVE = 2;
 	static final int HIT_EDIT = 3;
 	static final int HIT_DELETE = 4;
-	static final int HIT_SELECT = 5;
 
 	/**
 	 * A clickable region painted during the last paint pass.
@@ -70,7 +69,7 @@ final class CommentHitTestManager {
 	 * @param bounds
 	 *            the bounds of the clickable region
 	 * @param action
-	 *            one of HIT_REPLY, HIT_RESOLVE, HIT_EDIT, HIT_DELETE, HIT_SELECT
+	 *            one of HIT_REPLY, HIT_RESOLVE, HIT_EDIT, HIT_DELETE
 	 * @param comment
 	 *            the associated comment
 	 */
@@ -190,9 +189,6 @@ final class CommentHitTestManager {
 			break;
 		case HIT_DELETE:
 			actionHandler.onDelete(hr.comment);
-			break;
-		case HIT_SELECT:
-			actionHandler.onSelect(hr.comment);
 			break;
 		default:
 			break;

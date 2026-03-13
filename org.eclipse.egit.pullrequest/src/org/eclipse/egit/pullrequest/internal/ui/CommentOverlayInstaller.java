@@ -782,11 +782,6 @@ public class CommentOverlayInstaller {
 			public void onEdit(PullRequestComment comment) {
 				actionExecutor.handleEdit(comment);
 			}
-
-			@Override
-			public void onSelect(PullRequestComment comment) {
-				viewSynchronizer.selectCommentInView(comment);
-			}
 		};
 	}
 

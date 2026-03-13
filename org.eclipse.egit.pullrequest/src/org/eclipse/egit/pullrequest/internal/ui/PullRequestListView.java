@@ -612,8 +612,8 @@ public class PullRequestListView extends ViewPart {
 	}
 
 	/**
-	 * Loads a pull request by opening the PR Overview editor,
-	 * PullRequestChangedFilesView, and PullRequestCommentsView.
+	 * Loads a pull request by opening the PR Overview editor and
+	 * PullRequestChangedFilesView.
 	 *
 	 * @param pr
 	 *            the pull request to load
@@ -635,9 +635,6 @@ public class PullRequestListView extends ViewPart {
 		if (part instanceof PullRequestChangedFilesView) {
 			((PullRequestChangedFilesView) part).loadPullRequest(pr);
 		}
-
-		// Update comments view
-		page.showView(PullRequestCommentsView.VIEW_ID);
 	} catch (PartInitException e) {
 		Activator.logError("Failed to open pull request views", //$NON-NLS-1$
 				e);

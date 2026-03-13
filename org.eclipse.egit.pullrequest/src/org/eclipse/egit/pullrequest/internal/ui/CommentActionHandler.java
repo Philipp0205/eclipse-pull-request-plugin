@@ -41,13 +41,4 @@ public interface CommentActionHandler {
 	 *            the comment being edited
 	 */
 	void onEdit(PullRequestComment comment);
-
-	/**
-	 * Called when the user selects a comment (clicks on its
-	 * header area).
-	 *
-	 * @param comment
-	 *            the selected comment
-	 */
-	void onSelect(PullRequestComment comment);
 }

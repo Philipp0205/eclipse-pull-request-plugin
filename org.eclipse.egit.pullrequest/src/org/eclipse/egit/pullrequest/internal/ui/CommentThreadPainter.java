@@ -375,11 +375,6 @@ final class CommentThreadPainter {
 					CommentHitTestManager.HIT_EDIT, comment);
 		}
 
-		// Register header as select region
-		hitTest.addRegion(
-				new Rectangle(boxX, startY, boxWidth, headerHeight),
-				CommentHitTestManager.HIT_SELECT, comment);
-
 		return startY + headerHeight;
 	}
 
