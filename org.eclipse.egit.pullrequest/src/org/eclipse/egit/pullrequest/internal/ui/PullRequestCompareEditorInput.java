@@ -160,9 +160,9 @@ public class PullRequestCompareEditorInput extends CompareEditorInput {
 	 * Updates the inline comment overlays with fresh comments and refreshes
 	 * the compare editor display.
 	 * <p>
-	 * This method is called when comments are added, modified, or deleted from
-	 * other views (e.g., {@link PullRequestCommentsView}) to ensure the inline
-	 * comment overlays in the compare editor are synchronized.
+	 * This method is called when comments are added, modified, or deleted
+	 * to ensure the inline comment overlays in the compare editor are
+	 * synchronized.
 	 * </p>
 	 *
 	 * @param fileComments

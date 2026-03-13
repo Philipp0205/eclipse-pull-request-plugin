@@ -27,14 +27,13 @@ import org.eclipse.ui.PlatformUI;
 
 /**
  * Synchronizes pull request comments across Eclipse views
- * (Comments View, Changed Files View) and the compare editor.
+ * (Changed Files View) and the compare editor.
  *
  * <p>
  * This class handles:
  * <ul>
  * <li>Fetching fresh comments from the API after an action</li>
- * <li>Refreshing the Comments View and Changed Files View</li>
- * <li>Selecting comments in the Comments View</li>
+ * <li>Refreshing the Changed Files View</li>
  * <li>Filtering comments for the current file</li>
  * </ul>
  * </p>
@@ -84,8 +83,8 @@ final class CommentViewSynchronizer {
 
 	/**
 	 * Refreshes all views after a comment action completes. Fetches
-	 * fresh comments from the API and updates the Comments View,
-	 * Changed Files View, and compare editor.
+	 * fresh comments from the API and updates the Changed Files View
+	 * and compare editor.
 	 *
 	 * @param pr
 	 *            the pull request
@@ -103,7 +102,6 @@ final class CommentViewSynchronizer {
 				compareEditorCallback
 						.onCommentsRefreshed(fileComments);
 
-				refreshCommentsView(freshComments);
 				refreshChangedFilesView(freshComments);
 			});
 		} catch (IOException e) {
@@ -143,57 +141,6 @@ final class CommentViewSynchronizer {
 			}
 		}
 		return filtered;
-	}
-
-	/**
-	 * Selects and reveals a comment in the Comments View.
-	 *
-	 * @param comment
-	 *            the comment to select
-	 */
-	void selectCommentInView(PullRequestComment comment) {
-		try {
-			IWorkbenchPage page = PlatformUI.getWorkbench()
-					.getActiveWorkbenchWindow().getActivePage();
-			if (page == null) {
-				return;
-			}
-
-			IViewPart part = page
-					.showView(PullRequestCommentsView.VIEW_ID);
-			if (part instanceof PullRequestCommentsView) {
-				((PullRequestCommentsView) part)
-						.selectAndRevealComment(comment);
-			}
-		} catch (Exception e) {
-			Activator.logError("Failed to open comments view", e); //$NON-NLS-1$
-		}
-	}
-
-	/**
-	 * Refreshes the Comments View with fresh comments.
-	 *
-	 * @param freshComments
-	 *            the fresh comments from the API
-	 */
-	private void refreshCommentsView(
-			List<PullRequestComment> freshComments) {
-		try {
-			IWorkbenchPage page = PlatformUI.getWorkbench()
-					.getActiveWorkbenchWindow().getActivePage();
-			if (page == null) {
-				return;
-			}
-			IViewPart part = page
-					.findView(PullRequestCommentsView.VIEW_ID);
-			if (part instanceof PullRequestCommentsView) {
-				((PullRequestCommentsView) part)
-						.updateComments(freshComments);
-			}
-		} catch (Exception e) {
-			Activator.logError("Failed to refresh comments view", //$NON-NLS-1$
-					e);
-		}
 	}
 
 	/**
