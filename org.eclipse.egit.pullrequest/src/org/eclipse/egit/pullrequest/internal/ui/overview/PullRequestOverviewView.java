@@ -8,7 +8,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  *******************************************************************************/
-package org.eclipse.egit.pullrequest.internal.ui;
+package org.eclipse.egit.pullrequest.internal.ui.overview;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -24,6 +24,12 @@ import org.eclipse.egit.pullrequest.internal.PRText;
 import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
 import org.eclipse.egit.pullrequest.internal.client.PullRequestClientFactory;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
+import org.eclipse.egit.pullrequest.internal.ui.AvatarCanvas;
+import org.eclipse.egit.pullrequest.internal.ui.CheckoutPullRequestBranchJob;
+import org.eclipse.egit.pullrequest.internal.ui.ManageReviewersAction;
+import org.eclipse.egit.pullrequest.internal.ui.MultiLineInputDialog;
+import org.eclipse.egit.pullrequest.internal.ui.PullRequestChangedFilesView;
+import org.eclipse.egit.pullrequest.internal.ui.PullRequestOverviewEditorInput;
 import org.eclipse.egit.ui.internal.PreferenceBasedDateFormatter;
 import org.eclipse.jface.layout.GridDataFactory;
 import org.eclipse.jface.layout.GridLayoutFactory;
@@ -34,8 +40,6 @@ import org.eclipse.swt.custom.StyledText;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.FontData;
-import org.eclipse.swt.graphics.GC;
-import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
@@ -68,26 +72,19 @@ public class PullRequestOverviewView extends EditorPart {
 					+ ".PullRequestOverviewEditor"; //$NON-NLS-1$
 
 	private FormToolkit toolkit;
-
 	private ScrolledComposite scrolledComposite;
-
 	private Composite contentComposite;
-
 	private PullRequest currentPullRequest;
-
 	private PreferenceBasedDateFormatter dateFormatter;
-
 	private Font titleFont;
-
 	private Font sectionFont;
-
 	private StyledText descriptionWidget;
 
 	private IPullRequestClient client;
 
 	@Override
-	public void init(IEditorSite site, IEditorInput input)
-			throws PartInitException {
+	public void init(IEditorSite site, IEditorInput input) throws PartInitException {
+
 		if (!(input instanceof PullRequestOverviewEditorInput)) {
 			throw new PartInitException(
 					"Invalid input: must be PullRequestOverviewEditorInput"); //$NON-NLS-1$
@@ -107,6 +104,7 @@ public class PullRequestOverviewView extends EditorPart {
 		dateFormatter = PreferenceBasedDateFormatter.create();
 		client = createClient();
 		toolkit = new FormToolkit(parent.getDisplay());
+
 		parent.addDisposeListener(e -> {
 			toolkit.dispose();
 			disposeFonts();
@@ -114,23 +112,16 @@ public class PullRequestOverviewView extends EditorPart {
 
 		GridLayoutFactory.fillDefaults().applyTo(parent);
 
-		scrolledComposite = new ScrolledComposite(parent,
-				SWT.V_SCROLL | SWT.H_SCROLL);
+		scrolledComposite = new ScrolledComposite(parent, SWT.V_SCROLL | SWT.H_SCROLL);
 		scrolledComposite.setExpandHorizontal(true);
 		scrolledComposite.setExpandVertical(true);
-		GridDataFactory.fillDefaults().grab(true, true)
-				.applyTo(scrolledComposite);
+		GridDataFactory.fillDefaults().grab(true, true).applyTo(scrolledComposite);
 		toolkit.adapt(scrolledComposite);
 
 		scrolledComposite.addListener(SWT.Resize, e -> {
-			if (contentComposite != null
-					&& !contentComposite.isDisposed()) {
-				scrolledComposite.setMinSize(
-						contentComposite.computeSize(
-								scrolledComposite
-										.getClientArea()
-										.width,
-								SWT.DEFAULT));
+			if (contentComposite != null && !contentComposite.isDisposed()) {
+				scrolledComposite
+						.setMinSize(contentComposite.computeSize(scrolledComposite.getClientArea().width, SWT.DEFAULT));
 			}
 		});
 
@@ -169,8 +160,7 @@ public class PullRequestOverviewView extends EditorPart {
 
 	@Override
 	public void setFocus() {
-		if (scrolledComposite != null
-				&& !scrolledComposite.isDisposed()) {
+		if (scrolledComposite != null && !scrolledComposite.isDisposed()) {
 			scrolledComposite.setFocus();
 		}
 	}
@@ -249,35 +239,29 @@ public class PullRequestOverviewView extends EditorPart {
 
 	private void renderHeader(PullRequest pr, Composite parent) {
 		// Title spans both columns
-		Label titleLabel = toolkit.createLabel(parent,
-				pr.getTitle(), SWT.WRAP);
+		Label titleLabel = toolkit.createLabel(parent, pr.getTitle(), SWT.WRAP);
 		titleLabel.setFont(getTitleFont());
 		GridDataFactory.fillDefaults().grab(true, false)
 				.span(2, 1).applyTo(titleLabel);
 
 		// Badges row spanning both columns
-		Composite badgeRow = toolkit.createComposite(
-				parent);
-		GridLayoutFactory.fillDefaults().numColumns(4)
-				.spacing(8, 0).applyTo(badgeRow);
-		GridDataFactory.fillDefaults().grab(true, false)
-				.span(2, 1).applyTo(badgeRow);
+		Composite badgeRow = toolkit.createComposite(parent);
+		GridLayoutFactory.fillDefaults().numColumns(4).spacing(8, 0).applyTo(badgeRow);
+		GridDataFactory.fillDefaults().grab(true, false).span(2, 1).applyTo(badgeRow);
 
 		// State badge
 		String state = pr.getState() != null
 				? pr.getState()
 				: PRText.OverviewView_Unknown;
-		Label stateBadge = toolkit.createLabel(badgeRow, state,
-				SWT.NONE);
-		stateBadge.setFont(
-				JFaceResources.getFontRegistry().getBold(
-						JFaceResources.DEFAULT_FONT));
+
+		Label stateBadge = toolkit.createLabel(badgeRow, state,SWT.NONE);
+
+		stateBadge.setFont(JFaceResources.getFontRegistry().getBold(JFaceResources.DEFAULT_FONT));
 		applyStateForeground(stateBadge, state);
 
 		// Draft badge
 		if (pr.isDraft()) {
-			Label draftBadge = toolkit.createLabel(badgeRow,
-					PRText.OverviewView_Draft, SWT.NONE);
+			Label draftBadge = toolkit.createLabel(badgeRow, PRText.OverviewView_Draft, SWT.NONE);
 			if (isDarkTheme(Display.getCurrent())) {
 				draftBadge.setForeground(
 						new Color(170, 170, 170));
@@ -387,26 +371,23 @@ public class PullRequestOverviewView extends EditorPart {
 
 	private void renderDescription(PullRequest pr, Composite parent) {
 		// Section label spanning both columns
-		Label sectionLabel = toolkit.createLabel(
-				parent,
-				PRText.OverviewView_Description, SWT.NONE);
+		Label sectionLabel = toolkit.createLabel(parent, PRText.OverviewView_Description, SWT.NONE);
 		sectionLabel.setFont(getSectionFont());
-		GridDataFactory.fillDefaults().grab(true, false)
-				.span(2, 1).applyTo(sectionLabel);
+		GridDataFactory.fillDefaults().grab(true, false).span(2, 1).applyTo(sectionLabel);
 
 		String descText = pr.getDescription();
 		if (descText == null) {
 			descText = ""; //$NON-NLS-1$
 		}
 
-		// Always create editable StyledText widget
-		descriptionWidget = new StyledText(parent,
-				SWT.MULTI | SWT.WRAP | SWT.BORDER);
+		// Always create editable StyledText widget with vertical scrollbar
+		descriptionWidget = new StyledText(parent, SWT.MULTI | SWT.WRAP | SWT.BORDER | SWT.V_SCROLL);
 		descriptionWidget.setText(descText);
 		toolkit.adapt(descriptionWidget, true, false);
+
 		GridDataFactory.fillDefaults().grab(true, false)
 				.span(2, 1)
-				.hint(SWT.DEFAULT, 100)
+				.hint(SWT.DEFAULT, 200)
 				.applyTo(descriptionWidget);
 
 		// Separator
@@ -657,8 +638,8 @@ public class PullRequestOverviewView extends EditorPart {
 	}
 
 	private void saveDescription() {
-		if (currentPullRequest == null || descriptionWidget == null
-				|| descriptionWidget.isDisposed()) {
+
+		if (currentPullRequest == null || descriptionWidget == null || descriptionWidget.isDisposed()) {
 			return;
 		}
 
