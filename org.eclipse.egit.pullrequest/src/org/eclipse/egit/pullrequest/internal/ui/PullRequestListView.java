@@ -27,6 +27,8 @@ import org.eclipse.egit.pullrequest.internal.PRText;
 import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
 import org.eclipse.egit.pullrequest.internal.client.PullRequestClientFactory;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
+import org.eclipse.egit.pullrequest.internal.ui.overview.AddMyselfAsReviewerAction;
+import org.eclipse.egit.pullrequest.internal.ui.overview.PullRequestOverviewView;
 import org.eclipse.egit.ui.internal.UIIcons;
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.ActionContributionItem;

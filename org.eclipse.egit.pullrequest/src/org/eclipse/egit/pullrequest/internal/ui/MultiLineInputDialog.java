@@ -24,7 +24,7 @@ import org.eclipse.swt.widgets.Text;
  * Multi-line input dialog for entering comment replies with a larger,
  * resizable text area.
  */
-class MultiLineInputDialog extends Dialog {
+public class MultiLineInputDialog extends Dialog {
 
 	private String title;
 
@@ -46,7 +46,7 @@ class MultiLineInputDialog extends Dialog {
 	 * @param initialValue
 	 *            the initial text value
 	 */
-	MultiLineInputDialog(Shell parentShell, String dialogTitle,
+	public MultiLineInputDialog(Shell parentShell, String dialogTitle,
 			String dialogMessage, String initialValue) {
 		super(parentShell);
 		this.title = dialogTitle;
@@ -102,7 +102,7 @@ class MultiLineInputDialog extends Dialog {
 	 *
 	 * @return the entered text
 	 */
-	String getValue() {
+	public String getValue() {
 		return value;
 	}
 }

@@ -83,7 +83,7 @@
    <extension
          point="org.eclipse.ui.editors">
       <editor
-            class="org.eclipse.egit.pullrequest.internal.ui.PullRequestOverviewView"
+            class="org.eclipse.egit.pullrequest.internal.ui.overview.PullRequestOverviewView"
             icon="icons/obj16/gitrepository.png"
             id="org.eclipse.egit.pullrequest.PullRequestOverviewEditor"
             name="%PullRequestOverviewView">
