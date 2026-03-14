@@ -408,15 +408,6 @@ public class PullRequestChangedFilesView extends ViewPart {
 							changedFilesViewer.setInput(changedFiles);
 							changedFilesViewer.refresh();
 							updateFormTitle();
-
-							// Notify the comments view that comments are available
-							IWorkbenchPart commentsPart = getSite()
-									.getWorkbenchWindow().getActivePage()
-									.findView(PullRequestCommentsView.VIEW_ID);
-							if (commentsPart instanceof PullRequestCommentsView) {
-								((PullRequestCommentsView) commentsPart)
-										.onCommentsLoaded(allComments);
-							}
 						}
 					});
 
@@ -768,10 +759,9 @@ public class PullRequestChangedFilesView extends ViewPart {
 	 * Updates the comments for the currently selected pull request and
 	 * refreshes the view to reflect updated comment counts.
 	 * <p>
-	 * This method is called by other views (e.g., {@link PullRequestCommentsView}
-	 * or inline comment overlay) when comments are added, modified, or deleted
-	 * to ensure the comment counts displayed in the "Comments" column are
-	 * synchronized.
+	 * This method is called by the inline comment overlay when comments
+	 * are added, modified, or deleted to ensure the comment counts
+	 * displayed in the "Comments" column are synchronized.
 	 * </p>
 	 *
 	 * @param comments
