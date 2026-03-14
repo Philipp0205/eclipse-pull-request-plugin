@@ -625,21 +625,25 @@ public class PullRequestListView extends ViewPart {
 			IWorkbenchPage page = getSite().getWorkbenchWindow()
 					.getActivePage();
 
-			// Open overview editor
-			PullRequestOverviewEditorInput input =
-					new PullRequestOverviewEditorInput(pr);
-			page.openEditor(input, PullRequestOverviewView.EDITOR_ID);
+		// Open overview editor
+		PullRequestOverviewEditorInput input =
+				new PullRequestOverviewEditorInput(pr);
+		page.openEditor(input, PullRequestOverviewView.EDITOR_ID);
 
-		// Update changed files view
-		IWorkbenchPart part = page
-				.showView(PullRequestChangedFilesView.VIEW_ID);
+		// Update changed files view and activate it
+		IWorkbenchPart changedFilesView = page.showView(
+				PullRequestChangedFilesView.VIEW_ID,
+				null,
+				IWorkbenchPage.VIEW_ACTIVATE);
 
-		if (part instanceof PullRequestChangedFilesView) {
-			((PullRequestChangedFilesView) part).loadPullRequest(pr);
+		if (changedFilesView instanceof PullRequestChangedFilesView) {
+			((PullRequestChangedFilesView) changedFilesView).loadPullRequest(pr);
 		}
 
-		// Update comments view
-		page.showView(PullRequestCommentsView.VIEW_ID);
+		// Update comments view (but don't activate it)
+		page.showView(PullRequestCommentsView.VIEW_ID,
+				null,
+				IWorkbenchPage.VIEW_VISIBLE);
 	} catch (PartInitException e) {
 		Activator.logError("Failed to open pull request views", //$NON-NLS-1$
 				e);

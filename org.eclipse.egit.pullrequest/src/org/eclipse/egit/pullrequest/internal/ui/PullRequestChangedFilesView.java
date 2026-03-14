@@ -177,14 +177,40 @@ public class PullRequestChangedFilesView extends ViewPart {
 		// getSite().getWorkbenchWindow().getSelectionService()
 		// 		.addSelectionListener(PullRequestListView.VIEW_ID,
 		// 				prSelectionListener);
-		createMarkAllUnreadAction();
+		createToolbarActions();
 	}
 
 	/**
-	 * Creates the "Mark All as Unread" action and adds it to the
-	 * view toolbar.
+	 * Creates toolbar actions and adds them to the view toolbar.
 	 */
-	private void createMarkAllUnreadAction() {
+	private void createToolbarActions() {
+		// Expand All action
+		Action expandAllAction = new Action(
+				PRText.ChangedFilesView_ExpandAll) {
+			@Override
+			public void run() {
+				changedFilesViewer.expandAll();
+			}
+		};
+		expandAllAction.setToolTipText(
+				PRText.ChangedFilesView_ExpandAllTooltip);
+		expandAllAction.setImageDescriptor(
+				Activator.getImageDescriptor("icons/elcl16/expandall.png")); //$NON-NLS-1$
+
+		// Collapse All action
+		Action collapseAllAction = new Action(
+				PRText.ChangedFilesView_CollapseAll) {
+			@Override
+			public void run() {
+				changedFilesViewer.collapseAll();
+			}
+		};
+		collapseAllAction.setToolTipText(
+				PRText.ChangedFilesView_CollapseAllTooltip);
+		collapseAllAction.setImageDescriptor(Activator
+				.getImageDescriptor("icons/elcl16/collapseall.png")); //$NON-NLS-1$
+
+		// Mark All as Unread action
 		Action markAllUnreadAction = new Action(
 				PRText.ChangedFilesView_MarkAllUnread) {
 			@Override
@@ -195,7 +221,14 @@ public class PullRequestChangedFilesView extends ViewPart {
 				changedFilesViewer.refresh();
 			}
 		};
-		markAllUnreadAction.setToolTipText(PRText.ChangedFilesView_MarkAllUnread);
+		markAllUnreadAction.setToolTipText(
+				PRText.ChangedFilesView_MarkAllUnread);
+
+		// Add actions to toolbar
+		getViewSite().getActionBars().getToolBarManager()
+				.add(expandAllAction);
+		getViewSite().getActionBars().getToolBarManager()
+				.add(collapseAllAction);
 		getViewSite().getActionBars().getToolBarManager()
 				.add(markAllUnreadAction);
 	}
