@@ -1,1 +1,0 @@
-/home/philipp/.eclipse/platform-sdk/git/eclipse.jdt.ui/org.eclipse.jdt.ui/ui/org/eclipse/jdt/internal/ui/compare/JavaCompareUtilities.java

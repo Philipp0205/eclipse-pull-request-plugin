@@ -39,3 +39,11 @@ buildNumber.properties
 # OS
 .DS_Store
 Thumbs.db
+
+# AI agent/tool directories
+.agents/
+.opencode/
+.ralph/
+
+# Root-level Eclipse IDE files
+.project
