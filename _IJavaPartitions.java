@@ -1,1 +1,0 @@
-/home/philipp/.eclipse/platform-sdk/git/eclipse.jdt.ui/org.eclipse.jdt.core.manipulation/proposals/org/eclipse/jdt/ui/text/IJavaPartitions.java

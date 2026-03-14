@@ -27,6 +27,18 @@ public class PRText extends NLS {
 	public static String ChangedFilesView_MarkAllUnread;
 
 	/** */
+	public static String ChangedFilesView_ExpandAll;
+
+	/** */
+	public static String ChangedFilesView_ExpandAllTooltip;
+
+	/** */
+	public static String ChangedFilesView_CollapseAll;
+
+	/** */
+	public static String ChangedFilesView_CollapseAllTooltip;
+
+	/** */
 	public static String OverviewView_NoPullRequestSelected;
 
 	/** */
