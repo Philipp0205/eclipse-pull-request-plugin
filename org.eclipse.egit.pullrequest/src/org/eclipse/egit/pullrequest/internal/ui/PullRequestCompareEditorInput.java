@@ -27,8 +27,14 @@ import org.eclipse.egit.pullrequest.internal.PRPreferences;
 import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+import org.eclipse.jface.text.ITextSelection;
+import org.eclipse.jface.text.source.SourceViewer;
+import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.Viewer;
+import org.eclipse.swt.custom.StyledText;
 import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.Control;
+import org.eclipse.swt.widgets.Display;
 
 /**
  * Compare editor input for comparing files from a pull request
@@ -103,6 +109,43 @@ public class PullRequestCompareEditorInput extends CompareEditorInput {
 			throws InvocationTargetException, InterruptedException {
 		Object result = createCompareInput(client, pullRequest, changedFile, monitor);
 		return result;
+	}
+
+	@Override
+	public Control createContents(Composite parent) {
+		Control control = super.createContents(parent);
+		// Clear any text selection that may have been set by the framework
+		// when the editor was activated. Schedule this after the UI thread
+		// has finished processing to ensure all default initialization is
+		// complete.
+		Display.getDefault().asyncExec(() -> {
+			clearTextSelection(control);
+		});
+		return control;
+	}
+
+	/**
+	 * Clears text selection in the compare editor by finding all StyledText
+	 * widgets and resetting their selection to offset 0 with length 0.
+	 *
+	 * @param control
+	 *            the root control to search
+	 */
+	private void clearTextSelection(Control control) {
+		if (control == null || control.isDisposed()) {
+			return;
+		}
+		if (control instanceof StyledText) {
+			StyledText styledText = (StyledText) control;
+			if (!styledText.isDisposed() && styledText.getSelectionCount() > 0) {
+				styledText.setSelection(0, 0);
+			}
+		} else if (control instanceof Composite) {
+			Composite composite = (Composite) control;
+			for (Control child : composite.getChildren()) {
+				clearTextSelection(child);
+			}
+		}
 	}
 
 	@Override
