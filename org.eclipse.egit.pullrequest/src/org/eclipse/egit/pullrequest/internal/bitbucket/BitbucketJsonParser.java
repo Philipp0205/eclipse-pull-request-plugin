@@ -11,12 +11,18 @@
 package org.eclipse.egit.pullrequest.internal.bitbucket;
 
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
+import org.eclipse.egit.pullrequest.internal.model.TimelineEvent;
+import org.eclipse.egit.pullrequest.internal.model.TimelineEventList;
+import org.eclipse.egit.pullrequest.internal.model.TimelineEventType;
 
 /**
  * Utility class for parsing JSON responses from Bitbucket Data Center REST API
@@ -1287,5 +1293,256 @@ class BitbucketJsonParser {
 	static String extractJsonString(String json, String key) {
 		String value = extractStringValue(json, "\"" + key + "\":"); //$NON-NLS-1$ //$NON-NLS-2$
 		return value != null ? value : ""; //$NON-NLS-1$
+	}
+
+	/**
+	 * Parses timeline activities from Bitbucket API JSON response
+	 *
+	 * @param json
+	 *            the JSON response from /activities endpoint
+	 * @return timeline event list with pagination state
+	 */
+	public static TimelineEventList parseTimelineActivities(String json) {
+		TimelineEventList result = new TimelineEventList();
+		result.setEvents(new ArrayList<>());
+
+		// Find the "values" array
+		int valuesStart = json.indexOf("\"values\":"); //$NON-NLS-1$
+		if (valuesStart == -1) {
+			return result;
+		}
+
+		int arrayStart = json.indexOf('[', valuesStart);
+		if (arrayStart == -1) {
+			return result;
+		}
+
+		// Parse each activity object in the array
+		int pos = arrayStart + 1;
+		while (pos < json.length()) {
+			// Skip whitespace
+			while (pos < json.length()
+					&& Character.isWhitespace(json.charAt(pos))) {
+				pos++;
+			}
+
+			if (pos >= json.length() || json.charAt(pos) == ']') {
+				break;
+			}
+
+			// Find the opening brace of the activity object
+			if (json.charAt(pos) == '{') {
+				int objEnd = findMatchingBrace(json, pos);
+				if (objEnd == -1) {
+					break;
+				}
+
+				String activityJson = json.substring(pos, objEnd + 1);
+				TimelineEvent event = parseTimelineActivity(activityJson);
+				if (event != null) {
+					result.getEvents().add(event);
+				}
+
+				pos = objEnd + 1;
+				// Skip comma if present
+				while (pos < json.length() && (Character.isWhitespace(
+						json.charAt(pos)) || json.charAt(pos) == ',')) {
+					pos++;
+				}
+			} else {
+				pos++;
+			}
+		}
+
+		// Extract pagination state
+		Boolean isLastPage = extractBooleanValue(json, "\"isLastPage\":"); //$NON-NLS-1$
+		if (isLastPage != null) {
+			result.setLastPage(isLastPage.booleanValue());
+		}
+
+		Integer nextPageStart = extractIntValue(json, "\"nextPageStart\":"); //$NON-NLS-1$
+		if (nextPageStart != null) {
+			result.setNextPageStart(nextPageStart.intValue());
+		}
+
+		return result;
+	}
+
+	/**
+	 * Parses a single timeline activity from Bitbucket API JSON
+	 *
+	 * @param json
+	 *            the JSON activity object
+	 * @return the parsed timeline event, or null if not supported
+	 */
+	static TimelineEvent parseTimelineActivity(String json) {
+		if (json == null || json.trim().isEmpty()) {
+			return null;
+		}
+
+		// Extract activity ID
+		Long id = extractLongValue(json, "\"id\":"); //$NON-NLS-1$
+		String idStr = id != null ? String.valueOf(id) : "0"; //$NON-NLS-1$
+
+		// Extract createdDate (Bitbucket uses milliseconds timestamp)
+		Long createdTimestamp = extractLongValue(json, "\"createdDate\":"); //$NON-NLS-1$
+		Date createdDate = createdTimestamp != null
+				? new Date(createdTimestamp.longValue())
+				: new Date();
+
+		// Extract action type
+		String action = extractStringValue(json, "\"action\":"); //$NON-NLS-1$
+		TimelineEventType type = mapBitbucketActionType(action);
+		if (type == null) {
+			// Unsupported action type
+			return null;
+		}
+
+		// Extract user (actor)
+		String userObject = extractObjectValue(json, "\"user\":"); //$NON-NLS-1$
+		String actorName = null;
+		String actorUsername = null;
+		String actorAvatarUrl = null;
+		if (userObject != null) {
+			actorName = extractStringValue(userObject, "\"displayName\":"); //$NON-NLS-1$
+			actorUsername = extractStringValue(userObject, "\"name\":"); //$NON-NLS-1$
+			// Bitbucket uses self links for avatars, extract from links
+			String linksObject = extractObjectValue(userObject, "\"links\":"); //$NON-NLS-1$
+			if (linksObject != null) {
+				String avatarObject = extractObjectValue(linksObject,
+						"\"avatar\":"); //$NON-NLS-1$
+				if (avatarObject != null) {
+					actorAvatarUrl = extractStringValue(avatarObject,
+							"\"href\":"); //$NON-NLS-1$
+				}
+			}
+		}
+
+		// Extract message and metadata based on action type
+		String message = null;
+		Map<String, String> metadata = new HashMap<>();
+
+		switch (type) {
+		case COMMENTED:
+			// Extract comment object
+			String commentObject = extractObjectValue(json, "\"comment\":"); //$NON-NLS-1$
+			if (commentObject != null) {
+				message = extractStringValue(commentObject, "\"text\":"); //$NON-NLS-1$
+			}
+			break;
+
+		case REVIEW_COMMENT:
+			// Extract comment object (inline comments also in comment field)
+			String reviewCommentObject = extractObjectValue(json,
+					"\"comment\":"); //$NON-NLS-1$
+			if (reviewCommentObject != null) {
+				message = extractStringValue(reviewCommentObject, "\"text\":"); //$NON-NLS-1$
+
+				// Extract anchor for file path and line
+				String anchorObject = extractObjectValue(reviewCommentObject,
+						"\"anchor\":"); //$NON-NLS-1$
+				if (anchorObject != null) {
+					String path = extractStringValue(anchorObject, "\"path\":"); //$NON-NLS-1$
+					if (path != null) {
+						metadata.put("path", path); //$NON-NLS-1$
+					}
+					Integer line = extractIntValue(anchorObject, "\"line\":"); //$NON-NLS-1$
+					if (line != null) {
+						metadata.put("line", String.valueOf(line)); //$NON-NLS-1$
+					}
+				}
+			}
+			break;
+
+		case COMMITTED:
+			// Extract commit object
+			String commitObject = extractObjectValue(json, "\"commit\":"); //$NON-NLS-1$
+			if (commitObject != null) {
+				message = extractStringValue(commitObject, "\"message\":"); //$NON-NLS-1$
+				String sha = extractStringValue(commitObject, "\"id\":"); //$NON-NLS-1$
+				if (sha != null) {
+					metadata.put("sha", sha); //$NON-NLS-1$
+				}
+
+				// Commit author
+				String authorObject = extractObjectValue(commitObject,
+						"\"author\":"); //$NON-NLS-1$
+				if (authorObject != null) {
+					actorName = extractStringValue(authorObject, "\"name\":"); //$NON-NLS-1$
+					actorUsername = extractStringValue(authorObject,
+							"\"emailAddress\":"); //$NON-NLS-1$
+				}
+			}
+			break;
+
+		case REVIEWED:
+			// Bitbucket reviews may have comment text
+			String reviewCommentObj = extractObjectValue(json, "\"comment\":"); //$NON-NLS-1$
+			if (reviewCommentObj != null) {
+				message = extractStringValue(reviewCommentObj, "\"text\":"); //$NON-NLS-1$
+			}
+			// Extract review outcome from action
+			if (action != null) {
+				metadata.put("state", action); //$NON-NLS-1$
+			}
+			break;
+
+		case OPENED:
+		case CLOSED:
+		case REOPENED:
+		case MERGED:
+		case DRAFT:
+		case READY_FOR_REVIEW:
+			// State changes typically don't have messages
+			break;
+
+		default:
+			return null;
+		}
+
+		return new TimelineEvent(idStr, type, createdDate, actorName,
+				actorUsername, actorAvatarUrl, message, metadata);
+	}
+
+	/**
+	 * Maps Bitbucket action type to our TimelineEventType enum
+	 *
+	 * @param bitbucketAction
+	 *            the Bitbucket action string
+	 * @return the corresponding TimelineEventType, or null if not supported
+	 */
+	private static TimelineEventType mapBitbucketActionType(
+			String bitbucketAction) {
+		if (bitbucketAction == null) {
+			return null;
+		}
+
+		switch (bitbucketAction) {
+		case "OPENED": //$NON-NLS-1$
+			return TimelineEventType.OPENED;
+		case "CLOSED": //$NON-NLS-1$
+			return TimelineEventType.CLOSED;
+		case "MERGED": //$NON-NLS-1$
+			return TimelineEventType.MERGED;
+		case "REOPENED": //$NON-NLS-1$
+			return TimelineEventType.REOPENED;
+		case "COMMENTED": //$NON-NLS-1$
+			return TimelineEventType.COMMENTED;
+		case "REVIEWED": //$NON-NLS-1$
+		case "APPROVED": //$NON-NLS-1$
+		case "UNAPPROVED": //$NON-NLS-1$
+			return TimelineEventType.REVIEWED;
+		case "COMMENTED_ON_DIFF": //$NON-NLS-1$
+			return TimelineEventType.REVIEW_COMMENT;
+		case "COMMITTED": //$NON-NLS-1$
+			return TimelineEventType.COMMITTED;
+		case "MARKED_AS_DRAFT": //$NON-NLS-1$
+			return TimelineEventType.DRAFT;
+		case "READY_FOR_REVIEW": //$NON-NLS-1$
+			return TimelineEventType.READY_FOR_REVIEW;
+		default:
+			// Unsupported action type
+			return null;
+		}
 	}
 }

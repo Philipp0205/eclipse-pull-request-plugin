@@ -1,0 +1,24 @@
+Test JSON for line-commented event (single comment):
+{
+  "id": 999,
+  "event": "line-commented",
+  "created_at": "2026-02-22T10:00:00Z",
+  "comments": [
+    {
+      "id": 555,
+      "body": "test comment",
+      "path": "Main.java",
+      "created_at": "2026-02-22T10:00:00Z",
+      "user": {
+        "login": "Philipp0205",
+        "avatar_url": "https://avatars.githubusercontent.com/u/36603238"
+      }
+    }
+  ]
+}
+
+Expected result:
+- Type: REVIEW_COMMENT
+- Actor: Philipp0205
+- Message: "test comment"
+- Path metadata: "Main.java"

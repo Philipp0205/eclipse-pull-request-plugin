@@ -17,6 +17,7 @@ import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
+import org.eclipse.egit.pullrequest.internal.model.TimelineEventList;
 import org.eclipse.jgit.annotations.NonNull;
 import org.eclipse.jgit.annotations.Nullable;
 
@@ -364,6 +365,31 @@ public interface IPullRequestClient {
 	 */
 	List<PullRequestCommit> getPullRequestCommits(long pullRequestId)
 			throws IOException;
+
+	/**
+	 * Retrieves timeline events for a pull request, including comments,
+	 * commits, reviews, and state changes. Events are returned in
+	 * chronological order.
+	 * <p>
+	 * This method supports pagination. Providers use different pagination
+	 * mechanisms: GitHub uses Link header URLs, Bitbucket uses index-based
+	 * pagination. The returned {@link TimelineEventList} contains pagination
+	 * state for follow-up requests.
+	 *
+	 * @param pullRequestId
+	 *            the pull request ID or number
+	 * @param start
+	 *            the start index for pagination (0 for first page; ignored by
+	 *            GitHub)
+	 * @param limit
+	 *            the maximum number of events per page
+	 * @return timeline event list with pagination state
+	 * @throws IOException
+	 *             if the request fails
+	 */
+	@NonNull
+	TimelineEventList getTimelineEvents(long pullRequestId, int start,
+			int limit) throws IOException;
 
 	/**
 	 * Retrieves changed files for a specific commit.

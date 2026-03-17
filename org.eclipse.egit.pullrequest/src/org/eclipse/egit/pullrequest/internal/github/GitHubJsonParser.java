@@ -25,6 +25,9 @@ import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
+import org.eclipse.egit.pullrequest.internal.model.TimelineEvent;
+import org.eclipse.egit.pullrequest.internal.model.TimelineEventList;
+import org.eclipse.egit.pullrequest.internal.model.TimelineEventType;
 
 /**
  * Parser for GitHub API JSON responses
@@ -36,8 +39,7 @@ class GitHubJsonParser {
 	/**
 	 * Parses a list of pull requests from GitHub API JSON
 	 *
-	 * @param json
-	 *            the JSON response
+	 * @param json the JSON response
 	 * @return list of pull requests
 	 */
 	static List<PullRequest> parsePullRequests(String json) {
@@ -60,7 +62,7 @@ class GitHubJsonParser {
 
 		for (int i = 1; i < json.length(); i++) {
 			char c = json.charAt(i);
-			
+
 			// Handle escape sequences
 			if (escaped) {
 				escaped = false;
@@ -70,13 +72,13 @@ class GitHubJsonParser {
 				escaped = true;
 				continue;
 			}
-			
+
 			// Track string boundaries
 			if (c == '"') {
 				inString = !inString;
 				continue;
 			}
-			
+
 			// Only process structural characters when NOT inside a string
 			if (!inString) {
 				if (c == '{') {
@@ -92,8 +94,7 @@ class GitHubJsonParser {
 						}
 						// Skip comma and whitespace
 						while (i + 1 < json.length()
-								&& (json.charAt(i + 1) == ',' || Character
-										.isWhitespace(json.charAt(i + 1)))) {
+								&& (json.charAt(i + 1) == ',' || Character.isWhitespace(json.charAt(i + 1)))) {
 							i++;
 						}
 						start = i + 1;
@@ -108,8 +109,7 @@ class GitHubJsonParser {
 	/**
 	 * Parses a single pull request from GitHub API JSON
 	 *
-	 * @param json
-	 *            the JSON response
+	 * @param json the JSON response
 	 * @return the pull request
 	 */
 	static PullRequest parseSinglePullRequest(String json) {
@@ -122,8 +122,7 @@ class GitHubJsonParser {
 	/**
 	 * Parses a single pull request object from JSON
 	 *
-	 * @param json
-	 *            the JSON string to parse
+	 * @param json the JSON string to parse
 	 * @return the parsed pull request
 	 */
 	private static PullRequest parseSinglePullRequestObject(String json) {
@@ -186,11 +185,9 @@ class GitHubJsonParser {
 		pr.setCommentCount(issueComments + reviewComments);
 
 		// Parse reviewers (requested_reviewers)
-		String requestedReviewersJson = extractArray(json,
-				"requested_reviewers"); //$NON-NLS-1$
+		String requestedReviewersJson = extractArray(json, "requested_reviewers"); //$NON-NLS-1$
 		if (requestedReviewersJson != null) {
-			List<PullRequest.PullRequestParticipant> reviewers = parseReviewers(
-					requestedReviewersJson);
+			List<PullRequest.PullRequestParticipant> reviewers = parseReviewers(requestedReviewersJson);
 			if (!reviewers.isEmpty()) {
 				pr.setReviewers(reviewers);
 			}
@@ -210,8 +207,7 @@ class GitHubJsonParser {
 	/**
 	 * Parses a branch reference from JSON
 	 *
-	 * @param json
-	 *            the JSON string to parse
+	 * @param json the JSON string to parse
 	 * @return the parsed pull request reference
 	 */
 	private static PullRequest.PullRequestRef parseRef(String json) {
@@ -244,8 +240,7 @@ class GitHubJsonParser {
 	/**
 	 * Parses changed files from GitHub API JSON
 	 *
-	 * @param json
-	 *            the JSON response
+	 * @param json the JSON response
 	 * @return list of changed files
 	 */
 	static List<ChangedFile> parseChangedFiles(String json) {
@@ -257,7 +252,8 @@ class GitHubJsonParser {
 
 		json = json.trim();
 		if (!json.startsWith("[")) { //$NON-NLS-1$
-			Activator.logInfo("GitHubJsonParser.parseChangedFiles: JSON does not start with '[', got: " + (json.length() > 50 ? json.substring(0, 50) : json)); //$NON-NLS-1$
+			Activator.logInfo("GitHubJsonParser.parseChangedFiles: JSON does not start with '[', got: " //$NON-NLS-1$
+					+ (json.length() > 50 ? json.substring(0, 50) : json));
 			return result;
 		}
 
@@ -269,7 +265,7 @@ class GitHubJsonParser {
 
 		for (int i = 1; i < json.length(); i++) {
 			char c = json.charAt(i);
-			
+
 			// Handle escape sequences
 			if (escaped) {
 				escaped = false;
@@ -279,13 +275,13 @@ class GitHubJsonParser {
 				escaped = true;
 				continue;
 			}
-			
+
 			// Track string boundaries
 			if (c == '"') {
 				inString = !inString;
 				continue;
 			}
-			
+
 			// Only process structural characters when NOT inside a string
 			if (!inString) {
 				if (c == '{') {
@@ -299,8 +295,7 @@ class GitHubJsonParser {
 							result.add(file);
 						}
 						while (i + 1 < json.length()
-								&& (json.charAt(i + 1) == ',' || Character
-										.isWhitespace(json.charAt(i + 1)))) {
+								&& (json.charAt(i + 1) == ',' || Character.isWhitespace(json.charAt(i + 1)))) {
 							i++;
 						}
 						start = i + 1;
@@ -315,8 +310,7 @@ class GitHubJsonParser {
 	/**
 	 * Parses a single changed file from JSON
 	 *
-	 * @param json
-	 *            the JSON string to parse
+	 * @param json the JSON string to parse
 	 * @return the parsed changed file
 	 */
 	private static ChangedFile parseChangedFile(String json) {
@@ -338,8 +332,7 @@ class GitHubJsonParser {
 				? filename.substring(filename.lastIndexOf('/') + 1)
 				: filename);
 		if (filename.contains(".")) { //$NON-NLS-1$
-			path.setExtension(
-					filename.substring(filename.lastIndexOf('.') + 1));
+			path.setExtension(filename.substring(filename.lastIndexOf('.') + 1));
 		}
 		file.setPath(path);
 
@@ -356,11 +349,10 @@ class GitHubJsonParser {
 				ChangedFile.Path srcPath = new ChangedFile.Path();
 				srcPath.setToString(previousFilename);
 				srcPath.setName(previousFilename.contains("/") //$NON-NLS-1$
-						? previousFilename
-								.substring(previousFilename.lastIndexOf('/') + 1)
+						? previousFilename.substring(previousFilename.lastIndexOf('/') + 1)
 						: previousFilename);
 				file.setSrcPath(srcPath);
-		}
+			}
 		}
 
 		// Extract patch field if present
@@ -375,21 +367,17 @@ class GitHubJsonParser {
 	/**
 	 * Parses comments from GitHub API JSON (both review and issue comments)
 	 *
-	 * @param reviewCommentsJson
-	 *            the review comments JSON
-	 * @param issueCommentsJson
-	 *            the issue comments JSON
+	 * @param reviewCommentsJson the review comments JSON
+	 * @param issueCommentsJson  the issue comments JSON
 	 * @return list of comments
 	 */
-	static List<PullRequestComment> parseComments(String reviewCommentsJson,
-			String issueCommentsJson) {
+	static List<PullRequestComment> parseComments(String reviewCommentsJson, String issueCommentsJson) {
 		List<PullRequestComment> result = new ArrayList<>();
 
 		// Parse review comments (inline code comments)
 		if (reviewCommentsJson != null && !reviewCommentsJson.trim().isEmpty()
 				&& !reviewCommentsJson.trim().equals("[]")) { //$NON-NLS-1$
-			List<PullRequestComment> reviewComments = parseCommentArray(
-					reviewCommentsJson, true);
+			List<PullRequestComment> reviewComments = parseCommentArray(reviewCommentsJson, true);
 			// Group review comments into threads based on in_reply_to_id
 			// This reconstructs GitHub's flat threading model where all replies
 			// point to the root comment
@@ -410,13 +398,11 @@ class GitHubJsonParser {
 	/**
 	 * Counts the number of elements in a JSON array
 	 *
-	 * @param json
-	 *            the JSON array string
+	 * @param json the JSON array string
 	 * @return the count of array elements, or 0 if not a valid array
 	 */
 	static int countArrayElements(String json) {
-		if (json == null || json.trim().isEmpty()
-				|| json.trim().equals("[]")) { //$NON-NLS-1$
+		if (json == null || json.trim().isEmpty() || json.trim().equals("[]")) { //$NON-NLS-1$
 			return 0;
 		}
 
@@ -468,8 +454,7 @@ class GitHubJsonParser {
 	/**
 	 * Parses review comments from GitHub API JSON
 	 *
-	 * @param json
-	 *            the JSON response containing an array of review comments
+	 * @param json the JSON response containing an array of review comments
 	 * @return list of review comments
 	 */
 	static List<PullRequestComment> parseReviewComments(String json) {
@@ -482,14 +467,12 @@ class GitHubJsonParser {
 	/**
 	 * Parses an array of comments
 	 *
-	 * @param json
-	 *            the JSON string to parse
-	 * @param isReviewComment
-	 *            true if parsing review comments, false for issue comments
+	 * @param json            the JSON string to parse
+	 * @param isReviewComment true if parsing review comments, false for issue
+	 *                        comments
 	 * @return the list of parsed comments
 	 */
-	private static List<PullRequestComment> parseCommentArray(String json,
-			boolean isReviewComment) {
+	private static List<PullRequestComment> parseCommentArray(String json, boolean isReviewComment) {
 		List<PullRequestComment> result = new ArrayList<>();
 		json = json.trim();
 		if (!json.startsWith("[")) { //$NON-NLS-1$
@@ -503,7 +486,7 @@ class GitHubJsonParser {
 
 		for (int i = 1; i < json.length(); i++) {
 			char c = json.charAt(i);
-			
+
 			// Handle escape sequences
 			if (escaped) {
 				escaped = false;
@@ -513,13 +496,13 @@ class GitHubJsonParser {
 				escaped = true;
 				continue;
 			}
-			
+
 			// Track string boundaries
 			if (c == '"') {
 				inString = !inString;
 				continue;
 			}
-			
+
 			// Only process structural characters when NOT inside a string
 			if (!inString) {
 				if (c == '{') {
@@ -528,14 +511,12 @@ class GitHubJsonParser {
 					depth--;
 					if (depth == 0) {
 						String commentJson = json.substring(start, i + 1);
-						PullRequestComment comment = parseComment(commentJson,
-								isReviewComment);
+						PullRequestComment comment = parseComment(commentJson, isReviewComment);
 						if (comment != null) {
 							result.add(comment);
 						}
 						while (i + 1 < json.length()
-								&& (json.charAt(i + 1) == ',' || Character
-										.isWhitespace(json.charAt(i + 1)))) {
+								&& (json.charAt(i + 1) == ',' || Character.isWhitespace(json.charAt(i + 1)))) {
 							i++;
 						}
 						start = i + 1;
@@ -550,8 +531,7 @@ class GitHubJsonParser {
 	/**
 	 * Parses a single comment from JSON
 	 *
-	 * @param json
-	 *            the JSON string to parse
+	 * @param json the JSON string to parse
 	 * @return the parsed comment or null if JSON is empty
 	 */
 	static PullRequestComment parseSingleComment(String json) {
@@ -566,14 +546,12 @@ class GitHubJsonParser {
 	/**
 	 * Parses a comment object
 	 *
-	 * @param json
-	 *            the JSON string to parse
-	 * @param isReviewComment
-	 *            true if parsing a review comment, false for issue comment
+	 * @param json            the JSON string to parse
+	 * @param isReviewComment true if parsing a review comment, false for issue
+	 *                        comment
 	 * @return the parsed comment
 	 */
-	private static PullRequestComment parseComment(String json,
-			boolean isReviewComment) {
+	private static PullRequestComment parseComment(String json, boolean isReviewComment) {
 		PullRequestComment comment = new PullRequestComment();
 
 		comment.setId(extractLong(json, "id")); //$NON-NLS-1$
@@ -592,8 +570,9 @@ class GitHubJsonParser {
 		// GitHub doesn't have comment state or severity
 		comment.setState("OPEN"); //$NON-NLS-1$
 		comment.setSeverity("NORMAL"); //$NON-NLS-1$
-		
-		// Set the review comment flag so edit/delete operations use correct API endpoint
+
+		// Set the review comment flag so edit/delete operations use correct API
+		// endpoint
 		comment.setReviewComment(isReviewComment);
 
 		if (isReviewComment) {
@@ -605,11 +584,11 @@ class GitHubJsonParser {
 			if (nodeId != null && !nodeId.isEmpty()) {
 				comment.setThreadId(nodeId);
 			}
-			
+
 			// Review comments have file and line information
 			comment.setPath(extractString(json, "path")); //$NON-NLS-1$
 			Integer line = extractInteger(json, "line"); //$NON-NLS-1$
-			
+
 			// Fall back to original_line when line is null (outdated comments)
 			if (line == null) {
 				line = extractInteger(json, "original_line"); //$NON-NLS-1$
@@ -640,12 +619,10 @@ class GitHubJsonParser {
 	 * model is flat: all replies in a thread point to the root comment via
 	 * in_reply_to_id.
 	 *
-	 * @param comments
-	 *            flat list of comments
+	 * @param comments flat list of comments
 	 * @return list of root comments with replies nested in getReplies()
 	 */
-	private static List<PullRequestComment> groupIntoThreads(
-			List<PullRequestComment> comments) {
+	private static List<PullRequestComment> groupIntoThreads(List<PullRequestComment> comments) {
 		if (comments == null || comments.isEmpty()) {
 			return comments;
 		}
@@ -681,8 +658,7 @@ class GitHubJsonParser {
 			List<PullRequestComment> replies = root.getReplies();
 			if (!replies.isEmpty()) {
 				replies.sort((r1, r2) -> {
-					if (r1.getCreatedDate() == null
-							|| r2.getCreatedDate() == null) {
+					if (r1.getCreatedDate() == null || r2.getCreatedDate() == null) {
 						return 0;
 					}
 					return r1.getCreatedDate().compareTo(r2.getCreatedDate());
@@ -696,8 +672,7 @@ class GitHubJsonParser {
 	/**
 	 * Parses file content from GitHub API JSON response
 	 *
-	 * @param json
-	 *            the JSON response
+	 * @param json the JSON response
 	 * @return the decoded file content
 	 */
 	static byte[] parseFileContent(String json) {
@@ -720,8 +695,7 @@ class GitHubJsonParser {
 	/**
 	 * Parses the current user from GitHub API JSON
 	 *
-	 * @param json
-	 *            the JSON response
+	 * @param json the JSON response
 	 * @return the username
 	 */
 	static String parseCurrentUser(String json) {
@@ -734,8 +708,7 @@ class GitHubJsonParser {
 		return extractString(json, key, null);
 	}
 
-	static String extractString(String json, String key,
-			String defaultValue) {
+	static String extractString(String json, String key, String defaultValue) {
 		String pattern = "\"" + key + "\":"; //$NON-NLS-1$ //$NON-NLS-2$
 		int colonIndex = json.indexOf(pattern);
 		if (colonIndex == -1) {
@@ -744,8 +717,7 @@ class GitHubJsonParser {
 
 		// Skip whitespace after colon
 		int startIndex = colonIndex + pattern.length();
-		while (startIndex < json.length()
-				&& Character.isWhitespace(json.charAt(startIndex))) {
+		while (startIndex < json.length() && Character.isWhitespace(json.charAt(startIndex))) {
 			startIndex++;
 		}
 
@@ -830,8 +802,7 @@ class GitHubJsonParser {
 		}
 
 		int startIndex = colonIndex + pattern.length();
-		while (startIndex < json.length()
-				&& Character.isWhitespace(json.charAt(startIndex))) {
+		while (startIndex < json.length() && Character.isWhitespace(json.charAt(startIndex))) {
 			startIndex++;
 		}
 
@@ -846,8 +817,7 @@ class GitHubJsonParser {
 		}
 
 		int startIndex = colonIndex + pattern.length();
-		while (startIndex < json.length()
-				&& Character.isWhitespace(json.charAt(startIndex))) {
+		while (startIndex < json.length() && Character.isWhitespace(json.charAt(startIndex))) {
 			startIndex++;
 		}
 
@@ -864,8 +834,7 @@ class GitHubJsonParser {
 		int endIndex = startIndex;
 		while (endIndex < json.length()) {
 			char c = json.charAt(endIndex);
-			if (!Character.isDigit(c) && c != '.' && c != '-' && c != 'e'
-					&& c != 'E' && c != '+') {
+			if (!Character.isDigit(c) && c != '.' && c != '-' && c != 'e' && c != 'E' && c != '+') {
 				break;
 			}
 			endIndex++;
@@ -901,8 +870,7 @@ class GitHubJsonParser {
 		}
 
 		int startIndex = colonIndex + pattern.length();
-		while (startIndex < json.length()
-				&& Character.isWhitespace(json.charAt(startIndex))) {
+		while (startIndex < json.length() && Character.isWhitespace(json.charAt(startIndex))) {
 			startIndex++;
 		}
 
@@ -946,10 +914,8 @@ class GitHubJsonParser {
 	/**
 	 * Extracts an array value from JSON
 	 *
-	 * @param json
-	 *            the JSON string
-	 * @param key
-	 *            the key to extract
+	 * @param json the JSON string
+	 * @param key  the key to extract
 	 * @return the array JSON string including brackets, or null if not found
 	 */
 	static String extractArray(String json, String key) {
@@ -960,8 +926,7 @@ class GitHubJsonParser {
 		}
 
 		int startIndex = colonIndex + pattern.length();
-		while (startIndex < json.length()
-				&& Character.isWhitespace(json.charAt(startIndex))) {
+		while (startIndex < json.length() && Character.isWhitespace(json.charAt(startIndex))) {
 			startIndex++;
 		}
 
@@ -1028,16 +993,13 @@ class GitHubJsonParser {
 	/**
 	 * Parses an array of reviewers from GitHub's requested_reviewers JSON
 	 *
-	 * @param arrayJson
-	 *            the JSON array string
+	 * @param arrayJson the JSON array string
 	 * @return list of reviewer participants
 	 */
-	private static List<PullRequest.PullRequestParticipant> parseReviewers(
-			String arrayJson) {
+	private static List<PullRequest.PullRequestParticipant> parseReviewers(String arrayJson) {
 		List<PullRequest.PullRequestParticipant> reviewers = new ArrayList<>();
 
-		if (arrayJson == null || arrayJson.trim().isEmpty()
-				|| arrayJson.trim().equals("[]")) { //$NON-NLS-1$
+		if (arrayJson == null || arrayJson.trim().isEmpty() || arrayJson.trim().equals("[]")) { //$NON-NLS-1$
 			return reviewers;
 		}
 
@@ -1079,15 +1041,12 @@ class GitHubJsonParser {
 					depth--;
 					if (depth == 0) {
 						String reviewerJson = arrayJson.substring(start, i + 1);
-						PullRequest.PullRequestParticipant reviewer = parseReviewer(
-								reviewerJson);
+						PullRequest.PullRequestParticipant reviewer = parseReviewer(reviewerJson);
 						if (reviewer != null) {
 							reviewers.add(reviewer);
 						}
-						while (i + 1 < arrayJson.length()
-								&& (arrayJson.charAt(i + 1) == ','
-										|| Character.isWhitespace(
-												arrayJson.charAt(i + 1)))) {
+						while (i + 1 < arrayJson.length() && (arrayJson.charAt(i + 1) == ','
+								|| Character.isWhitespace(arrayJson.charAt(i + 1)))) {
 							i++;
 						}
 						start = i + 1;
@@ -1102,12 +1061,10 @@ class GitHubJsonParser {
 	/**
 	 * Parses a single reviewer participant from GitHub JSON
 	 *
-	 * @param json
-	 *            the JSON object representing a user or team
+	 * @param json the JSON object representing a user or team
 	 * @return the reviewer participant
 	 */
-	private static PullRequest.PullRequestParticipant parseReviewer(
-			String json) {
+	private static PullRequest.PullRequestParticipant parseReviewer(String json) {
 		PullRequest.PullRequestParticipant reviewer = new PullRequest.PullRequestParticipant();
 
 		// Create user object
@@ -1138,14 +1095,12 @@ class GitHubJsonParser {
 	/**
 	 * Parses a list of commits from GitHub API JSON
 	 *
-	 * @param json
-	 *            the JSON response (array of commits)
+	 * @param json the JSON response (array of commits)
 	 * @return list of pull request commits
 	 */
 	static List<PullRequestCommit> parseCommits(String json) {
 		List<PullRequestCommit> result = new ArrayList<>();
-		if (json == null || json.trim().isEmpty()
-				|| json.trim().equals("[]")) { //$NON-NLS-1$
+		if (json == null || json.trim().isEmpty() || json.trim().equals("[]")) { //$NON-NLS-1$
 			return result;
 		}
 
@@ -1194,8 +1149,8 @@ class GitHubJsonParser {
 							result.add(commit);
 						}
 						// Skip comma and whitespace
-						while (i + 1 < json.length() && (json.charAt(i + 1) == ','
-								|| Character.isWhitespace(json.charAt(i + 1)))) {
+						while (i + 1 < json.length()
+								&& (json.charAt(i + 1) == ',' || Character.isWhitespace(json.charAt(i + 1)))) {
 							i++;
 						}
 						start = i + 1;
@@ -1210,8 +1165,7 @@ class GitHubJsonParser {
 	/**
 	 * Parses a single commit from GitHub API JSON
 	 *
-	 * @param json
-	 *            the JSON commit object
+	 * @param json the JSON commit object
 	 * @return the parsed commit, or null if parsing failed
 	 */
 	static PullRequestCommit parseCommit(String json) {
@@ -1282,17 +1236,13 @@ class GitHubJsonParser {
 					} else if (c == '}') {
 						depth--;
 						if (depth == 0) {
-							String parentObject = parentsArray.substring(start,
-									i + 1);
-							String parentSha = extractString(parentObject,
-									"sha"); //$NON-NLS-1$
+							String parentObject = parentsArray.substring(start, i + 1);
+							String parentSha = extractString(parentObject, "sha"); //$NON-NLS-1$
 							if (parentSha != null) {
 								parents.add(parentSha);
 							}
-							while (i + 1 < parentsArray.length()
-									&& (parentsArray.charAt(i + 1) == ','
-											|| Character.isWhitespace(
-													parentsArray.charAt(i + 1)))) {
+							while (i + 1 < parentsArray.length() && (parentsArray.charAt(i + 1) == ','
+									|| Character.isWhitespace(parentsArray.charAt(i + 1)))) {
 								i++;
 							}
 							start = i + 1;
@@ -1302,7 +1252,427 @@ class GitHubJsonParser {
 			}
 		}
 
-		return new PullRequestCommit(sha, message, authorName, authorEmail,
-				authorDate, parents);
+		return new PullRequestCommit(sha, message, authorName, authorEmail, authorDate, parents);
+	}
+
+	/**
+	 * Parses timeline events from GitHub API JSON array
+	 *
+	 * @param json the JSON response (array of timeline events)
+	 * @return timeline event list
+	 */
+	static TimelineEventList parseTimelineEvents(String json) {
+		TimelineEventList result = new TimelineEventList();
+		result.setEvents(new ArrayList<>());
+		if (json == null || json.trim().isEmpty() || json.trim().equals("[]")) { //$NON-NLS-1$
+			return result;
+		}
+
+		json = json.trim();
+		if (!json.startsWith("[")) { //$NON-NLS-1$
+			return result;
+		}
+
+		// Parse array with string boundary tracking
+		int depth = 0;
+		int start = 1; // Skip opening [
+		boolean inString = false;
+		boolean escaped = false;
+
+		for (int i = 1; i < json.length(); i++) {
+			char c = json.charAt(i);
+
+			// Handle escape sequences
+			if (escaped) {
+				escaped = false;
+				continue;
+			}
+			if (c == '\\') {
+				escaped = true;
+				continue;
+			}
+
+			// Track string boundaries
+			if (c == '"') {
+				inString = !inString;
+				continue;
+			}
+
+			// Only process structural characters when NOT inside a string
+			if (!inString) {
+				if (c == '{') {
+					depth++;
+				} else if (c == '}') {
+					depth--;
+					if (depth == 0) {
+						// End of an object
+						String eventJson = json.substring(start, i + 1);
+						TimelineEvent event = parseTimelineEvent(eventJson);
+						if (event != null) {
+							result.getEvents().add(event);
+						}
+						// Skip comma and whitespace
+						while (i + 1 < json.length()
+								&& (json.charAt(i + 1) == ',' || Character.isWhitespace(json.charAt(i + 1)))) {
+							i++;
+						}
+						start = i + 1;
+					}
+				}
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * Parses review comments from GitHub API and converts them to timeline
+	 * events. Review comments are inline code comments that are not included
+	 * in GitHub's timeline API, so we fetch and convert them separately.
+	 *
+	 * @param json
+	 *            the JSON array string containing review comments from GitHub's
+	 *            /repos/{owner}/{repo}/pulls/{pr}/comments endpoint
+	 * @return list of timeline events representing review comments
+	 */
+	static List<TimelineEvent> parseReviewCommentsAsTimelineEvents(String json) {
+		List<TimelineEvent> result = new ArrayList<>();
+
+		if (json == null || json.trim().isEmpty()
+				|| json.trim().equals("[]")) { //$NON-NLS-1$
+			return result;
+		}
+
+		// Parse the JSON array manually to extract individual comment objects
+		json = json.trim();
+		if (!json.startsWith("[")) { //$NON-NLS-1$
+			Activator.logWarning(
+					"parseReviewCommentsAsTimelineEvents: JSON doesn't start with '[': " //$NON-NLS-1$
+							+ json.substring(0, Math.min(100, json.length())));
+			return result;
+		}
+
+		int depth = 0;
+		int start = 1; // Skip opening bracket
+		boolean inString = false;
+		boolean escaped = false;
+
+		for (int i = 1; i < json.length(); i++) {
+			char c = json.charAt(i);
+
+			if (escaped) {
+				escaped = false;
+				continue;
+			}
+			if (c == '\\') {
+				escaped = true;
+				continue;
+			}
+			if (c == '"') {
+				inString = !inString;
+				continue;
+			}
+
+			if (!inString) {
+				if (c == '{') {
+					if (depth == 0) {
+						start = i;
+					}
+					depth++;
+				} else if (c == '}') {
+					depth--;
+					if (depth == 0) {
+						String commentJson = json.substring(start, i + 1);
+						TimelineEvent event = parseReviewCommentAsTimelineEvent(
+								commentJson);
+						if (event != null) {
+							result.add(event);
+						}
+						start = i + 1;
+					}
+				}
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * Parses a single review comment JSON object and converts it to a timeline
+	 * event.
+	 *
+	 * @param json
+	 *            the JSON object string for a single review comment
+	 * @return the timeline event, or null if parsing failed
+	 */
+	private static TimelineEvent parseReviewCommentAsTimelineEvent(
+			String json) {
+		if (json == null || json.trim().isEmpty()) {
+			return null;
+		}
+
+		// Extract fields from review comment
+		long id = extractLong(json, "id"); //$NON-NLS-1$
+		if (id == 0) {
+			return null;
+		}
+
+		String body = extractString(json, "body"); //$NON-NLS-1$
+		if (body == null || body.isEmpty()) {
+			return null;
+		}
+
+		Date createdDate = extractDate(json, "created_at"); //$NON-NLS-1$
+
+		// Extract user information
+		String userObject = extractObject(json, "user"); //$NON-NLS-1$
+		String actorUsername = null;
+		String actorName = null;
+		String actorAvatarUrl = null;
+		if (userObject != null) {
+			actorUsername = extractString(userObject, "login"); //$NON-NLS-1$
+			actorName = extractString(userObject, "login"); //$NON-NLS-1$
+			actorAvatarUrl = extractString(userObject, "avatar_url"); //$NON-NLS-1$
+		}
+
+		// Extract file path for metadata
+		Map<String, String> metadata = new HashMap<>();
+		String path = extractString(json, "path"); //$NON-NLS-1$
+		if (path != null) {
+			metadata.put("path", path); //$NON-NLS-1$
+		}
+
+		TimelineEvent event = new TimelineEvent(String.valueOf(id),
+				TimelineEventType.REVIEW_COMMENT, createdDate, actorName,
+				actorUsername, actorAvatarUrl, body, metadata);
+		return event;
+	}
+
+	/**
+	 * Parses a Pull Request Review object from GitHub's timeline API and
+	 * converts it to a timeline event. Review objects have "submitted_at" and
+	 * "state" fields but no "event" field.
+	 *
+	 * @param json
+	 *            the JSON object string for a PR review
+	 * @return the timeline event, or null if parsing failed
+	 */
+	private static TimelineEvent parseReviewObject(String json) {
+		if (json == null || json.trim().isEmpty()) {
+			return null;
+		}
+
+		long id = extractLong(json, "id"); //$NON-NLS-1$
+		if (id == 0) {
+			return null;
+		}
+
+		String body = extractString(json, "body"); //$NON-NLS-1$
+		Date createdDate = extractDate(json, "submitted_at"); //$NON-NLS-1$
+
+		// Extract user information
+		String userObject = extractObject(json, "user"); //$NON-NLS-1$
+		String actorUsername = null;
+		String actorName = null;
+		String actorAvatarUrl = null;
+		if (userObject != null) {
+			actorUsername = extractString(userObject, "login"); //$NON-NLS-1$
+			actorName = extractString(userObject, "login"); //$NON-NLS-1$
+			actorAvatarUrl = extractString(userObject, "avatar_url"); //$NON-NLS-1$
+		}
+
+		// Extract review state for metadata
+		Map<String, String> metadata = new HashMap<>();
+		String state = extractString(json, "state"); //$NON-NLS-1$
+		if (state != null) {
+			metadata.put("state", state); //$NON-NLS-1$
+		}
+
+		return new TimelineEvent(String.valueOf(id),
+				TimelineEventType.REVIEWED, createdDate, actorName,
+				actorUsername, actorAvatarUrl, body, metadata);
+	}
+
+	/**
+	 * Parses a single timeline event from GitHub API JSON
+	 *
+	 * @param json the JSON event object
+	 * @return the parsed timeline event, or null if parsing failed or event type is
+	 *         not supported
+	 */
+	static TimelineEvent parseTimelineEvent(String json) {
+		if (json == null || json.trim().isEmpty()) {
+			return null;
+		}
+
+		// Extract event type
+		String event = extractString(json, "event"); //$NON-NLS-1$
+		if (event == null) {
+			// Check if this is a Pull Request Review object (has
+			// "submitted_at" and "state" but no "event" field)
+			String submittedAt = extractString(json, "submitted_at"); //$NON-NLS-1$
+			String state = extractString(json, "state"); //$NON-NLS-1$
+			if (submittedAt != null && state != null) {
+				return parseReviewObject(json);
+			}
+			return null;
+		}
+
+		// Map GitHub event types to our TimelineEventType
+		TimelineEventType type = mapGitHubEventType(event);
+		if (type == null) {
+			// Unsupported event type, skip
+			return null;
+		}
+
+		// Extract common fields
+		long id = extractLong(json, "id"); //$NON-NLS-1$
+		String idStr = String.valueOf(id);
+		Date createdDate = extractDate(json, "created_at"); //$NON-NLS-1$
+
+		// Extract actor
+		String actorObject = extractObject(json, "actor"); //$NON-NLS-1$
+		String actorName = null;
+		String actorUsername = null;
+		String actorAvatarUrl = null;
+		if (actorObject != null) {
+			actorUsername = extractString(actorObject, "login"); //$NON-NLS-1$
+			actorName = extractString(actorObject, "login"); //$NON-NLS-1$
+			actorAvatarUrl = extractString(actorObject, "avatar_url"); //$NON-NLS-1$
+		}
+
+		// Extract message and metadata based on event type
+		String message = null;
+		Map<String, String> metadata = new HashMap<>();
+
+		switch (type) {
+		case COMMENTED:
+			// Extract comment body
+			message = extractString(json, "body"); //$NON-NLS-1$
+
+			// Comment actor is in "user" field, not "actor"
+			String commentUserObject = extractObject(json, "user"); //$NON-NLS-1$
+			if (commentUserObject != null) {
+				actorUsername = extractString(commentUserObject, "login"); //$NON-NLS-1$
+				actorName = extractString(commentUserObject, "login"); //$NON-NLS-1$
+				actorAvatarUrl = extractString(commentUserObject, "avatar_url"); //$NON-NLS-1$
+			}
+			break;
+
+		case REVIEW_COMMENT:
+			// Review comments are fetched separately from the
+			// /pulls/{pr}/comments endpoint and converted via
+			// parseReviewCommentsAsTimelineEvents(). This case handles
+			// any line-commented events from the timeline API, which are
+			// rare in practice as GitHub typically doesn't include them.
+			break;
+
+		case COMMITTED:
+			// Extract commit SHA
+			String sha = extractString(json, "sha"); //$NON-NLS-1$
+			if (sha != null) {
+				metadata.put("sha", sha); //$NON-NLS-1$
+			}
+
+			// Commit message is nested in "commit.message"
+			String commitObject = extractObject(json, "commit"); //$NON-NLS-1$
+			if (commitObject != null) {
+				message = extractString(commitObject, "message"); //$NON-NLS-1$
+
+				// Commit date is in "commit.author.date"
+				String commitAuthorObject = extractObject(commitObject, "author"); //$NON-NLS-1$
+				if (commitAuthorObject != null) {
+					Date commitDate = extractDate(commitAuthorObject, "date"); //$NON-NLS-1$
+					if (commitDate != null) {
+						createdDate = commitDate;
+					}
+				}
+			}
+
+			// Commit actor is in "author" field (top level)
+			String authorObject = extractObject(json, "author"); //$NON-NLS-1$
+			if (authorObject != null) {
+				actorUsername = extractString(authorObject, "login"); //$NON-NLS-1$
+				actorName = extractString(authorObject, "login"); //$NON-NLS-1$
+				actorAvatarUrl = extractString(authorObject, "avatar_url"); //$NON-NLS-1$
+			}
+			break;
+
+		case REVIEWED:
+			// Extract review body
+			message = extractString(json, "body"); //$NON-NLS-1$
+			String state = extractString(json, "state"); //$NON-NLS-1$
+			if (state != null) {
+				metadata.put("state", state); //$NON-NLS-1$
+			}
+
+			// Review actor is in "user" field, not "actor"
+			String userObject = extractObject(json, "user"); //$NON-NLS-1$
+			if (userObject != null) {
+				actorUsername = extractString(userObject, "login"); //$NON-NLS-1$
+				actorName = extractString(userObject, "login"); //$NON-NLS-1$
+				actorAvatarUrl = extractString(userObject, "avatar_url"); //$NON-NLS-1$
+			}
+
+			// Review date is in "submitted_at", not "created_at"
+			Date submittedDate = extractDate(json, "submitted_at"); //$NON-NLS-1$
+			if (submittedDate != null) {
+				createdDate = submittedDate;
+			}
+			break;
+
+		case CLOSED:
+		case REOPENED:
+		case MERGED:
+		case DRAFT:
+		case READY_FOR_REVIEW:
+		case OPENED:
+			// These events typically don't have a message
+			break;
+
+		default:
+			// Unknown type
+			return null;
+		}
+
+		return new TimelineEvent(idStr, type, createdDate, actorName, actorUsername, actorAvatarUrl, message, metadata);
+	}
+
+	/**
+	 * Maps GitHub event type string to our TimelineEventType enum
+	 *
+	 * @param githubEvent the GitHub event type string
+	 * @return the corresponding TimelineEventType, or null if not supported
+	 */
+	private static TimelineEventType mapGitHubEventType(String githubEvent) {
+		if (githubEvent == null) {
+			return null;
+		}
+
+		switch (githubEvent) {
+		case "opened": //$NON-NLS-1$
+			return TimelineEventType.OPENED;
+		case "closed": //$NON-NLS-1$
+			return TimelineEventType.CLOSED;
+		case "merged": //$NON-NLS-1$
+			return TimelineEventType.MERGED;
+		case "reopened": //$NON-NLS-1$
+			return TimelineEventType.REOPENED;
+		case "commented": //$NON-NLS-1$
+			return TimelineEventType.COMMENTED;
+		case "line-commented": //$NON-NLS-1$
+			return TimelineEventType.REVIEW_COMMENT;
+		case "reviewed": //$NON-NLS-1$
+			return TimelineEventType.REVIEWED;
+		case "committed": //$NON-NLS-1$
+			return TimelineEventType.COMMITTED;
+		case "convert_to_draft": //$NON-NLS-1$
+			return TimelineEventType.DRAFT;
+		case "ready_for_review": //$NON-NLS-1$
+			return TimelineEventType.READY_FOR_REVIEW;
+		default:
+			// Unsupported event type
+			return null;
+		}
 	}
 }

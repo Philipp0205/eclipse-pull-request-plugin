@@ -275,6 +275,78 @@ public class PRText extends NLS {
 	/** */
 	public static String PreferencePage_ExpandCommentsByDefault;
 
+	/** */
+	public static String Timeline_SectionTitle;
+
+	/** */
+	public static String Timeline_Loading;
+
+	/** */
+	public static String Timeline_Empty;
+
+	/** */
+	public static String Timeline_LoadMore;
+
+	/** */
+	public static String Timeline_ErrorLoading;
+
+	/** */
+	public static String Timeline_LoadingJobName;
+
+	/** */
+	public static String TimelineEvent_Opened;
+
+	/** */
+	public static String TimelineEvent_Closed;
+
+	/** */
+	public static String TimelineEvent_Merged;
+
+	/** */
+	public static String TimelineEvent_Reopened;
+
+	/** */
+	public static String TimelineEvent_Commented;
+
+	/** */
+	public static String TimelineEvent_ReviewComment;
+
+	/** */
+	public static String TimelineEvent_ReviewCommentOnFile;
+
+	/** */
+	public static String TimelineEvent_Committed;
+
+	/** */
+	public static String TimelineEvent_Reviewed_Approved;
+
+	/** */
+	public static String TimelineEvent_Reviewed_ChangesRequested;
+
+	/** */
+	public static String TimelineEvent_Reviewed_Commented;
+
+	/** */
+	public static String TimelineEvent_Reviewed_Generic;
+
+	/** */
+	public static String TimelineEvent_Reviewed_Unapproved;
+
+	/** */
+	public static String TimelineEvent_Draft;
+
+	/** */
+	public static String TimelineEvent_ReadyForReview;
+
+	/** */
+	public static String TimelineEvent_Unknown;
+
+	/** */
+	public static String TimelineEvent_UnknownActor;
+
+	/** */
+	public static String TimelineEvent_Committed_Generic;
+
 	static {
 		initializeMessages("org.eclipse.egit.pullrequest.internal.prtext", //$NON-NLS-1$
 				PRText.class);

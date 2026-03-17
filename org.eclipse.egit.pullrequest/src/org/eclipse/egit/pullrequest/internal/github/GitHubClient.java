@@ -23,14 +23,16 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.eclipse.egit.pullrequest.Activator;
+import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
+import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderCapabilities;
+import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderType;
 import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
-import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
-import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderCapabilities;
-import org.eclipse.egit.pullrequest.Activator;
-import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderType;
+import org.eclipse.egit.pullrequest.internal.model.TimelineEvent;
+import org.eclipse.egit.pullrequest.internal.model.TimelineEventList;
 import org.eclipse.jgit.annotations.NonNull;
 import org.eclipse.jgit.annotations.Nullable;
 
@@ -773,6 +775,56 @@ public class GitHubClient implements IPullRequestClient {
 		}
 
 		return allCommits;
+	}
+
+	@Override
+	public @NonNull TimelineEventList getTimelineEvents(long pullRequestId, int start, int limit) throws IOException {
+
+		String path = "/repos/" + owner + "/" + repo + "/issues/" //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				+ pullRequestId + "/timeline?per_page=" + limit; //$NON-NLS-1$
+
+		List<String> pages = doGetAllPages(path);
+		TimelineEventList result = new TimelineEventList();
+		result.setEvents(new ArrayList<>());
+
+		for (String page : pages) {
+			TimelineEventList pageEvents = GitHubJsonParser.parseTimelineEvents(page);
+			result.getEvents().addAll(pageEvents.getEvents());
+		}
+
+		// Fetch review comments (inline code comments) and add them
+		// to the timeline. GitHub's timeline API doesn't include
+		// individual review comments, only review submission events.
+		String reviewCommentsPath = "/repos/" + owner + "/" + repo //$NON-NLS-1$ //$NON-NLS-2$
+				+ "/pulls/" + pullRequestId + "/comments?per_page=100"; //$NON-NLS-1$ //$NON-NLS-2$
+
+		List<String> reviewPages = doGetAllPages(reviewCommentsPath);
+
+		for (String page : reviewPages) {
+			List<TimelineEvent> reviewCommentEvents =
+					GitHubJsonParser.parseReviewCommentsAsTimelineEvents(page);
+			result.getEvents().addAll(reviewCommentEvents);
+		}
+
+		// Sort all events by creation date to maintain chronological order
+		result.getEvents().sort((e1, e2) -> {
+			if (e1.getCreatedDate() == null && e2.getCreatedDate() == null) {
+				return 0;
+			}
+			if (e1.getCreatedDate() == null) {
+				return 1;
+			}
+			if (e2.getCreatedDate() == null) {
+				return -1;
+			}
+			return e1.getCreatedDate().compareTo(e2.getCreatedDate());
+		});
+
+		// GitHub uses Link header pagination, so isLastPage is determined
+		// by whether there are more pages available
+		result.setLastPage(pages.size() <= 1);
+
+		return result;
 	}
 
 	/**

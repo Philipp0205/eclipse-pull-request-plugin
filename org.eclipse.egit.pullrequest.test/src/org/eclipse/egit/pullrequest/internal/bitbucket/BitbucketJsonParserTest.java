@@ -16,6 +16,9 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
 
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
+import org.eclipse.egit.pullrequest.internal.model.TimelineEvent;
+import org.eclipse.egit.pullrequest.internal.model.TimelineEventList;
+import org.eclipse.egit.pullrequest.internal.model.TimelineEventType;
 import org.junit.Test;
 
 /**
@@ -167,5 +170,99 @@ public class BitbucketJsonParserTest {
 		assertThat(pr.getReviewers(), hasSize(1));
 		assertThat(pr.getReviewers().get(0).getRole(),
 				equalTo("REVIEWER")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseTimelineCommentActivity() {
+		String json = "{\"id\":123,\"action\":\"COMMENTED\"," //$NON-NLS-1$
+				+ "\"createdDate\":1705318800000," //$NON-NLS-1$
+				+ "\"comment\":{\"text\":\"Great work!\"}," //$NON-NLS-1$
+				+ "\"user\":{\"name\":\"reviewer\"," //$NON-NLS-1$
+				+ "\"displayName\":\"Reviewer Name\"}}"; //$NON-NLS-1$
+
+		TimelineEvent event = BitbucketJsonParser
+				.parseTimelineActivity(json);
+
+		assertThat(event, notNullValue());
+		assertThat(event.getType(),
+				equalTo(TimelineEventType.COMMENTED));
+		assertThat(event.getActorUsername(), equalTo("reviewer")); //$NON-NLS-1$
+		assertThat(event.getActorName(),
+				equalTo("Reviewer Name")); //$NON-NLS-1$
+		assertThat(event.getMessage(), equalTo("Great work!")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseTimelineApprovedActivity() {
+		String json = "{\"id\":456,\"action\":\"APPROVED\"," //$NON-NLS-1$
+				+ "\"createdDate\":1705318800000," //$NON-NLS-1$
+				+ "\"user\":{\"name\":\"reviewer\"," //$NON-NLS-1$
+				+ "\"displayName\":\"Reviewer Name\"}}"; //$NON-NLS-1$
+
+		TimelineEvent event = BitbucketJsonParser
+				.parseTimelineActivity(json);
+
+		assertThat(event, notNullValue());
+		assertThat(event.getType(), equalTo(TimelineEventType.REVIEWED));
+		assertThat(event.getActorUsername(), equalTo("reviewer")); //$NON-NLS-1$
+		assertThat(event.getMetadata().get("state"), //$NON-NLS-1$
+				equalTo("approved")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseTimelineMergedActivity() {
+		String json = "{\"id\":789,\"action\":\"MERGED\"," //$NON-NLS-1$
+				+ "\"createdDate\":1705318800000," //$NON-NLS-1$
+				+ "\"user\":{\"name\":\"maintainer\"," //$NON-NLS-1$
+				+ "\"displayName\":\"Maintainer Name\"}}"; //$NON-NLS-1$
+
+		TimelineEvent event = BitbucketJsonParser
+				.parseTimelineActivity(json);
+
+		assertThat(event, notNullValue());
+		assertThat(event.getType(), equalTo(TimelineEventType.MERGED));
+		assertThat(event.getActorUsername(), equalTo("maintainer")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseTimelineOpenedActivity() {
+		String json = "{\"id\":101,\"action\":\"OPENED\"," //$NON-NLS-1$
+				+ "\"createdDate\":1705318800000," //$NON-NLS-1$
+				+ "\"user\":{\"name\":\"author\"," //$NON-NLS-1$
+				+ "\"displayName\":\"Author Name\"}}"; //$NON-NLS-1$
+
+		TimelineEvent event = BitbucketJsonParser
+				.parseTimelineActivity(json);
+
+		assertThat(event, notNullValue());
+		assertThat(event.getType(), equalTo(TimelineEventType.OPENED));
+		assertThat(event.getActorUsername(), equalTo("author")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseTimelineActivities() {
+		String json = "{\"values\":[" //$NON-NLS-1$
+				+ "{\"id\":1,\"action\":\"COMMENTED\"," //$NON-NLS-1$
+				+ "\"createdDate\":1705318800000," //$NON-NLS-1$
+				+ "\"comment\":{\"text\":\"First\"}," //$NON-NLS-1$
+				+ "\"user\":{\"name\":\"user1\"," //$NON-NLS-1$
+				+ "\"displayName\":\"User 1\"}}," //$NON-NLS-1$
+				+ "{\"id\":2,\"action\":\"MERGED\"," //$NON-NLS-1$
+				+ "\"createdDate\":1705319100000," //$NON-NLS-1$
+				+ "\"user\":{\"name\":\"user2\"," //$NON-NLS-1$
+				+ "\"displayName\":\"User 2\"}}" //$NON-NLS-1$
+				+ "],\"isLastPage\":false,\"nextPageStart\":2}"; //$NON-NLS-1$
+
+		TimelineEventList events = BitbucketJsonParser
+				.parseTimelineActivities(json);
+
+		assertThat(events, notNullValue());
+		assertThat(events.getEvents(), hasSize(2));
+		assertThat(events.getEvents().get(0).getType(),
+				equalTo(TimelineEventType.COMMENTED));
+		assertThat(events.getEvents().get(1).getType(),
+				equalTo(TimelineEventType.MERGED));
+		assertThat(events.isLastPage(), equalTo(false));
+		assertThat(events.getNextPageStart(), equalTo(2));
 	}
 }

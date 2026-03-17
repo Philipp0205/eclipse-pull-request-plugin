@@ -27,6 +27,7 @@ import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
+import org.eclipse.egit.pullrequest.internal.model.TimelineEventList;
 import org.eclipse.jgit.annotations.NonNull;
 import org.eclipse.jgit.annotations.Nullable;
 
@@ -325,6 +326,18 @@ public class BitbucketClient implements IPullRequestClient {
 				+ "/commits?limit=1000"; //$NON-NLS-1$
 		String jsonResponse = executeGet(url);
 		return BitbucketJsonParser.parseCommits(jsonResponse);
+	}
+
+	@Override
+	@NonNull
+	public TimelineEventList getTimelineEvents(long pullRequestId, int start,
+			int limit) throws IOException {
+		String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
+				+ "/repos/" + repositorySlug //$NON-NLS-1$
+				+ "/pull-requests/" + pullRequestId //$NON-NLS-1$
+				+ "/activities?limit=" + limit + "&start=" + start; //$NON-NLS-1$ //$NON-NLS-2$
+		String jsonResponse = executeGet(url);
+		return BitbucketJsonParser.parseTimelineActivities(jsonResponse);
 	}
 
 	private String executeGet(String urlString) throws IOException {

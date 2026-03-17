@@ -22,6 +22,9 @@ import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
+import org.eclipse.egit.pullrequest.internal.model.TimelineEvent;
+import org.eclipse.egit.pullrequest.internal.model.TimelineEventList;
+import org.eclipse.egit.pullrequest.internal.model.TimelineEventType;
 import org.junit.Test;
 
 /**
@@ -779,5 +782,231 @@ public class GitHubJsonParserTest {
 		assertThat(pr, notNullValue());
 		// Only review comments should be counted
 		assertThat(pr.getCommentCount(), equalTo(8));
+	}
+
+	@Test
+	public void testParseTimelineCommentEvent() {
+		String json = "{\"id\":123,\"event\":\"commented\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"body\":\"Great work!\"," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"reviewer\"," //$NON-NLS-1$
+				+ "\"avatar_url\":\"https://example.com/avatar.png\"}}"; //$NON-NLS-1$
+
+		TimelineEvent event = GitHubJsonParser
+				.parseTimelineEvent(json);
+
+		assertThat(event, notNullValue());
+		assertThat(event.getType(),
+				equalTo(TimelineEventType.COMMENTED));
+		assertThat(event.getActorUsername(), equalTo("reviewer")); //$NON-NLS-1$
+		assertThat(event.getMessage(), equalTo("Great work!")); //$NON-NLS-1$
+		assertThat(event.getActorAvatarUrl(),
+				equalTo("https://example.com/avatar.png")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseTimelineCommittedEvent() {
+		String json = "{\"sha\":\"abc123\",\"event\":\"committed\"," //$NON-NLS-1$
+				+ "\"commit\":{\"message\":\"Fix bug\"," //$NON-NLS-1$
+				+ "\"author\":{\"date\":\"2026-01-15T10:00:00Z\"}}," //$NON-NLS-1$
+				+ "\"author\":{\"login\":\"developer\"," //$NON-NLS-1$
+				+ "\"avatar_url\":\"https://example.com/dev.png\"}}"; //$NON-NLS-1$
+
+		TimelineEvent event = GitHubJsonParser
+				.parseTimelineEvent(json);
+
+		assertThat(event, notNullValue());
+		assertThat(event.getType(),
+				equalTo(TimelineEventType.COMMITTED));
+		assertThat(event.getActorUsername(), equalTo("developer")); //$NON-NLS-1$
+		assertThat(event.getMessage(), equalTo("Fix bug")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseTimelineReviewedApprovedEvent() {
+		String json = "{\"id\":456,\"event\":\"reviewed\"," //$NON-NLS-1$
+				+ "\"submitted_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"state\":\"approved\"," //$NON-NLS-1$
+				+ "\"body\":\"LGTM!\"," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"reviewer\"," //$NON-NLS-1$
+				+ "\"avatar_url\":\"https://example.com/avatar.png\"}}"; //$NON-NLS-1$
+
+		TimelineEvent event = GitHubJsonParser
+				.parseTimelineEvent(json);
+
+		assertThat(event, notNullValue());
+		assertThat(event.getType(), equalTo(TimelineEventType.REVIEWED));
+		assertThat(event.getActorUsername(), equalTo("reviewer")); //$NON-NLS-1$
+		assertThat(event.getMessage(), equalTo("LGTM!")); //$NON-NLS-1$
+		assertThat(event.getMetadata().get("state"), //$NON-NLS-1$
+				equalTo("approved")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseTimelineMergedEvent() {
+		String json = "{\"id\":789,\"event\":\"merged\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"actor\":{\"login\":\"maintainer\"," //$NON-NLS-1$
+				+ "\"avatar_url\":\"https://example.com/maintainer.png\"}}"; //$NON-NLS-1$
+
+		TimelineEvent event = GitHubJsonParser
+				.parseTimelineEvent(json);
+
+		assertThat(event, notNullValue());
+		assertThat(event.getType(), equalTo(TimelineEventType.MERGED));
+		assertThat(event.getActorUsername(), equalTo("maintainer")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseTimelineClosedEvent() {
+		String json = "{\"id\":101,\"event\":\"closed\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"actor\":{\"login\":\"admin\"," //$NON-NLS-1$
+				+ "\"avatar_url\":\"https://example.com/admin.png\"}}"; //$NON-NLS-1$
+
+		TimelineEvent event = GitHubJsonParser
+				.parseTimelineEvent(json);
+
+		assertThat(event, notNullValue());
+		assertThat(event.getType(), equalTo(TimelineEventType.CLOSED));
+		assertThat(event.getActorUsername(), equalTo("admin")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseTimelineReopenedEvent() {
+		String json = "{\"id\":102,\"event\":\"reopened\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"actor\":{\"login\":\"admin\"," //$NON-NLS-1$
+				+ "\"avatar_url\":\"https://example.com/admin.png\"}}"; //$NON-NLS-1$
+
+		TimelineEvent event = GitHubJsonParser
+				.parseTimelineEvent(json);
+
+		assertThat(event, notNullValue());
+		assertThat(event.getType(), equalTo(TimelineEventType.REOPENED));
+		assertThat(event.getActorUsername(), equalTo("admin")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseTimelineLineCommentedEvent() {
+		// GitHub's timeline API returns line-commented events with a
+		// "comments" array containing nested comment objects
+		String json = "{\"id\":999,\"event\":\"line-commented\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T12:00:00Z\"," //$NON-NLS-1$
+				+ "\"comments\":[" //$NON-NLS-1$
+				+ "{\"id\":555,\"body\":\"Consider using Optional here\"," //$NON-NLS-1$
+				+ "\"path\":\"src/main/java/Foo.java\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T12:01:00Z\"," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"code-reviewer\"," //$NON-NLS-1$
+				+ "\"avatar_url\":\"https://example.com/reviewer.png\"}}" //$NON-NLS-1$
+				+ "]}"; //$NON-NLS-1$
+
+		TimelineEvent event = GitHubJsonParser
+				.parseTimelineEvent(json);
+
+		assertThat(event, notNullValue());
+		assertThat(event.getType(),
+				equalTo(TimelineEventType.REVIEW_COMMENT));
+		assertThat(event.getActorUsername(), equalTo("code-reviewer")); //$NON-NLS-1$
+		assertThat(event.getActorName(), equalTo("code-reviewer")); //$NON-NLS-1$
+		assertThat(event.getMessage(),
+				equalTo("Consider using Optional here")); //$NON-NLS-1$
+		assertThat(event.getActorAvatarUrl(),
+				equalTo("https://example.com/reviewer.png")); //$NON-NLS-1$
+		assertThat(event.getMetadata().get("path"), //$NON-NLS-1$
+				equalTo("src/main/java/Foo.java")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseTimelineLineCommentedEventWithMultipleComments() {
+		// Test that when multiple comments are in the array, we extract the
+		// first one
+		String json = "{\"id\":999,\"event\":\"line-commented\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T12:00:00Z\"," //$NON-NLS-1$
+				+ "\"comments\":[" //$NON-NLS-1$
+				+ "{\"id\":555,\"body\":\"First comment\"," //$NON-NLS-1$
+				+ "\"path\":\"Foo.java\"," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"reviewer1\"}}," //$NON-NLS-1$
+				+ "{\"id\":556,\"body\":\"Second comment\"," //$NON-NLS-1$
+				+ "\"path\":\"Bar.java\"," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"reviewer2\"}}" //$NON-NLS-1$
+				+ "]}"; //$NON-NLS-1$
+
+		TimelineEvent event = GitHubJsonParser
+				.parseTimelineEvent(json);
+
+		assertThat(event, notNullValue());
+		assertThat(event.getType(),
+				equalTo(TimelineEventType.REVIEW_COMMENT));
+		// Should extract the FIRST comment
+		assertThat(event.getActorUsername(), equalTo("reviewer1")); //$NON-NLS-1$
+		assertThat(event.getMessage(), equalTo("First comment")); //$NON-NLS-1$
+		assertThat(event.getMetadata().get("path"), equalTo("Foo.java")); //$NON-NLS-1$ //$NON-NLS-2$
+	}
+
+	@Test
+	public void testParseTimelineEvents() {
+		String json = "[" //$NON-NLS-1$
+				+ "{\"id\":1,\"event\":\"commented\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"body\":\"First comment\"," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"user1\"," //$NON-NLS-1$
+				+ "\"avatar_url\":\"https://example.com/u1.png\"}}," //$NON-NLS-1$
+				+ "{\"id\":2,\"event\":\"merged\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-15T10:05:00Z\"," //$NON-NLS-1$
+				+ "\"actor\":{\"login\":\"user2\"," //$NON-NLS-1$
+				+ "\"avatar_url\":\"https://example.com/u2.png\"}}" //$NON-NLS-1$
+				+ "]"; //$NON-NLS-1$
+
+		TimelineEventList events = GitHubJsonParser
+				.parseTimelineEvents(json);
+
+		assertThat(events, notNullValue());
+		assertThat(events.getEvents(), hasSize(2));
+		assertThat(events.getEvents().get(0).getType(),
+				equalTo(TimelineEventType.COMMENTED));
+		assertThat(events.getEvents().get(1).getType(),
+				equalTo(TimelineEventType.MERGED));
+	}
+
+	@Test
+	public void testParseReviewCommentsAsTimelineEvents() {
+		String json = "[{" //$NON-NLS-1$
+				+ "\"id\":123456," //$NON-NLS-1$
+				+ "\"body\":\"This looks good!\"," //$NON-NLS-1$
+				+ "\"path\":\"src/Main.java\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-02-20T12:50:00Z\"," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"reviewer1\"," //$NON-NLS-1$
+				+ "\"avatar_url\":\"https://example.com/avatar.png\"}" //$NON-NLS-1$
+				+ "},{" //$NON-NLS-1$
+				+ "\"id\":123457," //$NON-NLS-1$
+				+ "\"body\":\"Consider refactoring this\"," //$NON-NLS-1$
+				+ "\"path\":\"src/Utils.java\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-02-20T12:51:00Z\"," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"reviewer2\"," //$NON-NLS-1$
+				+ "\"avatar_url\":\"https://example.com/avatar2.png\"}" //$NON-NLS-1$
+				+ "}]"; //$NON-NLS-1$
+
+		List<TimelineEvent> events = GitHubJsonParser
+				.parseReviewCommentsAsTimelineEvents(json);
+
+		assertThat(events, notNullValue());
+		assertThat(events, hasSize(2));
+
+		TimelineEvent event1 = events.get(0);
+		assertThat(event1.getType(), equalTo(TimelineEventType.REVIEW_COMMENT));
+		assertThat(event1.getMessage(), equalTo("This looks good!")); //$NON-NLS-1$
+		assertThat(event1.getActorUsername(), equalTo("reviewer1")); //$NON-NLS-1$
+		assertThat(event1.getActorName(), equalTo("reviewer1")); //$NON-NLS-1$
+		assertThat(event1.getActorAvatarUrl(),
+				equalTo("https://example.com/avatar.png")); //$NON-NLS-1$
+		assertThat(event1.getMetadata().get("path"), //$NON-NLS-1$
+				equalTo("src/Main.java")); //$NON-NLS-1$
+
+		TimelineEvent event2 = events.get(1);
+		assertThat(event2.getType(), equalTo(TimelineEventType.REVIEW_COMMENT));
+		assertThat(event2.getMessage(),
+				equalTo("Consider refactoring this")); //$NON-NLS-1$
+		assertThat(event2.getActorUsername(), equalTo("reviewer2")); //$NON-NLS-1$
 	}
 }
