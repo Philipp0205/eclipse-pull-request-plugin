@@ -1,13 +1,3 @@
-/*******************************************************************************
- * Copyright (C) 2026, Eclipse EGit contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License 2.0
- * which accompanies this distribution, and is available at
- * https://www.eclipse.org/legal/epl-2.0/
- *
- * SPDX-License-Identifier: EPL-2.0
- *******************************************************************************/
 package org.eclipse.egit.pullrequest.internal.ui;
 
 import java.io.IOException;
@@ -21,9 +11,6 @@ import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
 import org.eclipse.swt.widgets.Display;
-import org.eclipse.ui.IViewPart;
-import org.eclipse.ui.IWorkbenchPage;
-import org.eclipse.ui.PlatformUI;
 
 /**
  * Synchronizes pull request comments across Eclipse views
@@ -64,8 +51,7 @@ final class CommentViewSynchronizer {
 	 * @param compareEditorCallback
 	 *            callback for refreshing the compare editor
 	 */
-	CommentViewSynchronizer(
-			CompareEditorRefreshCallback compareEditorCallback) {
+	CommentViewSynchronizer(CompareEditorRefreshCallback compareEditorCallback) {
 		this.compareEditorCallback = compareEditorCallback;
 	}
 
@@ -93,14 +79,11 @@ final class CommentViewSynchronizer {
 	 */
 	void refreshAfterAction(PullRequest pr, IPullRequestClient client) {
 		try {
-			List<PullRequestComment> freshComments = client
-					.getPullRequestComments(pr.getId());
+			List<PullRequestComment> freshComments = client.getPullRequestComments(pr.getId());
 
 			Display.getDefault().asyncExec(() -> {
-				List<PullRequestComment> fileComments = filterCommentsForCurrentFile(
-						freshComments);
-				compareEditorCallback
-						.onCommentsRefreshed(fileComments);
+				List<PullRequestComment> fileComments = filterCommentsForCurrentFile(freshComments);
+				compareEditorCallback.onCommentsRefreshed(fileComments);
 
 				refreshChangedFilesView(freshComments);
 			});
@@ -117,8 +100,7 @@ final class CommentViewSynchronizer {
 	 *            all comments from the API
 	 * @return filtered comments for the current file
 	 */
-	private List<PullRequestComment> filterCommentsForCurrentFile(
-			List<PullRequestComment> allComments) {
+	private List<PullRequestComment> filterCommentsForCurrentFile(List<PullRequestComment> allComments) {
 		if (currentComments == null || currentComments.isEmpty()) {
 			return allComments;
 		}
@@ -144,58 +126,17 @@ final class CommentViewSynchronizer {
 	}
 
 	/**
-	 * Refreshes the Changed Files View with fresh comments.
+	 * Refreshes the comment display and decorator. Updates the
+	 * PullRequestContext with fresh comments and triggers a decorator
+	 * refresh so comment counts update in the Synchronize View.
 	 *
 	 * @param freshComments
 	 *            the fresh comments from the API
 	 */
-	private void refreshChangedFilesView(
-			List<PullRequestComment> freshComments) {
-		try {
-			IWorkbenchPage page = PlatformUI.getWorkbench()
-					.getActiveWorkbenchWindow().getActivePage();
-			if (page == null) {
-				return;
-			}
-			IViewPart part = page
-					.findView(PullRequestChangedFilesView.VIEW_ID);
-			if (part instanceof PullRequestChangedFilesView) {
-				((PullRequestChangedFilesView) part)
-						.updateComments(freshComments);
-			}
-		} catch (Exception e) {
-			Activator.logError(
-					"Failed to refresh changed files view", //$NON-NLS-1$
-					e);
-		}
-	}
-
-	/**
-	 * Returns the currently selected pull request from the Changed
-	 * Files View.
-	 *
-	 * @return the pull request or null
-	 */
-	static PullRequest getSelectedPullRequest() {
-		try {
-			IWorkbenchPage page = PlatformUI.getWorkbench()
-					.getActiveWorkbenchWindow().getActivePage();
-			if (page == null) {
-				return null;
-			}
-
-			IViewPart part = page
-					.findView(PullRequestChangedFilesView.VIEW_ID);
-			if (part instanceof PullRequestChangedFilesView) {
-				return ((PullRequestChangedFilesView) part)
-						.getSelectedPullRequest();
-			}
-		} catch (Exception e) {
-			Activator.logError(
-					"Failed to get selected pull" //$NON-NLS-1$
-							+ " request", //$NON-NLS-1$
-					e);
-		}
-		return null;
+	private void refreshChangedFilesView(List<PullRequestComment> freshComments) {
+		// Update context with fresh comments to trigger decorator refresh
+		PullRequestContext context = PullRequestContext.getInstance();
+		context.setComments(freshComments);
+		context.refreshDecorators();
 	}
 }

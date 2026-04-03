@@ -1,13 +1,3 @@
-/*******************************************************************************
- * Copyright (C) 2026, Eclipse EGit contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License 2.0
- * which accompanies this distribution, and is available at
- * https://www.eclipse.org/legal/epl-2.0/
- *
- * SPDX-License-Identifier: EPL-2.0
- *******************************************************************************/
 package org.eclipse.egit.pullrequest.internal.ui;
 
 import org.eclipse.core.resources.IFile;
@@ -50,8 +40,6 @@ public class PullRequestChangedFile implements IProblemDecoratable {
 	private final ChangeType changeType;
 
 	private final String srcPath;
-
-	private PullRequestFolderEntry parent;
 
 	private Repository repository;
 
@@ -124,21 +112,6 @@ public class PullRequestChangedFile implements IProblemDecoratable {
 	 */
 	public String getOldPath() {
 		return srcPath;
-	}
-
-	/**
-	 * @return the parent folder entry
-	 */
-	public PullRequestFolderEntry getParent() {
-		return parent;
-	}
-
-	/**
-	 * @param parent
-	 *            the parent folder entry
-	 */
-	public void setParent(PullRequestFolderEntry parent) {
-		this.parent = parent;
 	}
 
 	/**

@@ -28,8 +28,8 @@ import org.eclipse.egit.pullrequest.internal.ui.AvatarCanvas;
 import org.eclipse.egit.pullrequest.internal.ui.CheckoutPullRequestBranchJob;
 import org.eclipse.egit.pullrequest.internal.ui.ManageReviewersAction;
 import org.eclipse.egit.pullrequest.internal.ui.MultiLineInputDialog;
-import org.eclipse.egit.pullrequest.internal.ui.PullRequestChangedFilesView;
 import org.eclipse.egit.pullrequest.internal.ui.PullRequestOverviewEditorInput;
+import org.eclipse.egit.pullrequest.internal.ui.PullRequestSynchronizeLauncher;
 import org.eclipse.egit.ui.internal.PreferenceBasedDateFormatter;
 import org.eclipse.jface.layout.GridDataFactory;
 import org.eclipse.jface.layout.GridLayoutFactory;
@@ -41,14 +41,13 @@ import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.FontData;
 import org.eclipse.swt.graphics.RGB;
+//import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.ui.IEditorInput;
 import org.eclipse.ui.IEditorSite;
-import org.eclipse.ui.IWorkbenchPage;
-import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.browser.IWebBrowser;
@@ -624,17 +623,13 @@ public class PullRequestOverviewView extends EditorPart {
 	}
 
 	private void activateChangedFilesView() {
-		try {
-			IWorkbenchPage page = getSite()
-					.getWorkbenchWindow().getActivePage();
-			IWorkbenchPart part = page.showView(
-					PullRequestChangedFilesView.VIEW_ID);
-			page.activate(part);
-		} catch (PartInitException e) {
-			Activator.logError(
-					"Failed to activate changed files view", //$NON-NLS-1$
-					e);
+		if (currentPullRequest == null) {
+			return;
 		}
+
+		// Launch synchronize view for the pull request
+		PullRequestSynchronizeLauncher.launchForPullRequest(
+				currentPullRequest);
 	}
 
 	private void saveDescription() {

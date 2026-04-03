@@ -1,13 +1,3 @@
-/*******************************************************************************
- * Copyright (C) 2026, Eclipse EGit contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License 2.0
- * which accompanies this distribution, and is available at
- * https://www.eclipse.org/legal/epl-2.0/
- *
- * SPDX-License-Identifier: EPL-2.0
- *******************************************************************************/
 package org.eclipse.egit.pullrequest.internal.ui;
 
 import java.io.IOException;
@@ -347,17 +337,11 @@ public class PullRequestCommitsView extends ViewPart {
 				return;
 			}
 
-			// Find or show the changed files view
-			IWorkbenchPart part = page
-					.showView(PullRequestChangedFilesView.VIEW_ID);
-			if (!(part instanceof PullRequestChangedFilesView)) {
-				return;
-			}
-
-			PullRequestChangedFilesView changedFilesView = (PullRequestChangedFilesView) part;
-			changedFilesView.loadCommit(selectedPullRequest, commit);
-		} catch (PartInitException e) {
-			Activator.logError("Failed to show changed files view", e); //$NON-NLS-1$
+			// Launch synchronize view for this commit
+			PullRequestSynchronizeLauncher.launchForCommit(
+					selectedPullRequest, commit);
+		} catch (Exception e) {
+			Activator.logError("Failed to launch synchronize view", e); //$NON-NLS-1$
 		}
 	}
 
@@ -417,19 +401,12 @@ public class PullRequestCommitsView extends ViewPart {
 				return;
 			}
 
-			// Find or show the changed files view
-			IWorkbenchPart part = page
-					.showView(PullRequestChangedFilesView.VIEW_ID);
-			if (!(part instanceof PullRequestChangedFilesView)) {
-				return;
-			}
-
-			PullRequestChangedFilesView changedFilesView = (PullRequestChangedFilesView) part;
-			changedFilesView.loadCommitRange(selectedPullRequest,
-					earliestCommit, latestCommit);
-		} catch (PartInitException e) {
-			Activator.logError("Failed to show changed files view", e); //$NON-NLS-1$
-		}
+		// Launch synchronize view for commit range
+		PullRequestSynchronizeLauncher.launchForCommitRange(
+				selectedPullRequest, earliestCommit, latestCommit);
+	} catch (Exception e) {
+		Activator.logError("Failed to launch synchronize view", e); //$NON-NLS-1$
+	}
 	}
 
 	@Override
