@@ -83,4 +83,26 @@
          </description>
       </perspective>
    </extension>
+
+   <!-- Label Decorator for comment counts -->
+   <extension
+         point="org.eclipse.ui.decorators">
+      <decorator
+            id="org.eclipse.egit.pullrequest.commentDecorator"
+            label="%PullRequestCommentDecorator_label"
+            lightweight="true"
+            adaptable="true"
+            class="org.eclipse.egit.pullrequest.internal.ui.PullRequestCommentDecorator"
+            state="true">
+         <enablement>
+            <or>
+               <objectClass name="org.eclipse.core.resources.IResource"/>
+               <objectClass name="org.eclipse.compare.IResourceProvider"/>
+            </or>
+         </enablement>
+         <description>
+            %PullRequestCommentDecorator_description
+         </description>
+      </decorator>
+   </extension>
 </plugin>

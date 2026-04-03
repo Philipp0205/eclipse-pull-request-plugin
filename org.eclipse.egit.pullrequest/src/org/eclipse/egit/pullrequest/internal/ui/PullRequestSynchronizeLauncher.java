@@ -1,41 +1,54 @@
-/*******************************************************************************
- * Copyright (C) 2026, Eclipse EGit contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License 2.0
- * which accompanies this distribution, and is available at
- * https://www.eclipse.org/legal/epl-2.0/
- *
- * SPDX-License-Identifier: EPL-2.0
- *******************************************************************************/
 package org.eclipse.egit.pullrequest.internal.ui;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.resources.WorkspaceJob;
+import org.eclipse.core.resources.mapping.RemoteResourceMappingContext;
+import org.eclipse.core.resources.mapping.ResourceMapping;
+import org.eclipse.core.runtime.Adapters;
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.Status;
+import org.eclipse.core.runtime.jobs.IJobChangeEvent;
+import org.eclipse.core.runtime.jobs.Job;
+import org.eclipse.core.runtime.jobs.JobChangeAdapter;
 import org.eclipse.egit.core.internal.util.ResourceUtil;
+import org.eclipse.egit.core.synchronize.GitResourceVariantTreeSubscriber;
+import org.eclipse.egit.core.synchronize.GitSubscriberMergeContext;
+import org.eclipse.egit.core.synchronize.GitSubscriberResourceMappingContext;
 import org.eclipse.egit.core.synchronize.dto.GitSynchronizeData;
 import org.eclipse.egit.core.synchronize.dto.GitSynchronizeDataSet;
 import org.eclipse.egit.pullrequest.Activator;
 import org.eclipse.egit.pullrequest.internal.PRText;
+import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
+import org.eclipse.egit.pullrequest.internal.client.PullRequestClientFactory;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
+import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
 import org.eclipse.egit.pullrequest.internal.util.PullRequestRefResolver;
 import org.eclipse.egit.pullrequest.internal.util.PullRequestRefResolver.ResolvedRefs;
 import org.eclipse.egit.pullrequest.internal.util.RepositoryResolver;
-import org.eclipse.egit.ui.internal.synchronize.model.GitModelSynchronize;
+import org.eclipse.egit.ui.JobFamilies;
+import org.eclipse.egit.ui.internal.synchronize.GitModelSynchronizeParticipant;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.dialogs.ProgressMonitorDialog;
 import org.eclipse.jface.operation.IRunnableWithProgress;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.team.core.subscribers.SubscriberScopeManager;
+import org.eclipse.team.ui.TeamUI;
+import org.eclipse.team.ui.synchronize.ISynchronizeParticipant;
+import org.eclipse.ui.IWorkbenchPart;
+import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
 
 /**
@@ -57,7 +70,24 @@ public class PullRequestSynchronizeLauncher {
 	 */
 	public static void launchForPullRequest(PullRequest pr) {
 		// Set the active PR in context for comment overlay
-		PullRequestContext.getInstance().setActivePullRequest(pr);
+		PullRequestContext context = PullRequestContext.getInstance();
+		IPullRequestClient client = PullRequestClientFactory.createClient();
+		
+		if (client != null) {
+			try {
+				List<PullRequestComment> comments = client
+						.getPullRequestComments(pr.getId());
+				context.setActivePullRequest(pr, client);
+				context.setComments(comments);
+			} catch (IOException e) {
+				Activator.logWarning(
+						"Failed to fetch comments for PR, continuing without: " //$NON-NLS-1$
+								+ e.getMessage());
+				context.setActivePullRequest(pr);
+			}
+		} else {
+			context.setActivePullRequest(pr);
+		}
 
 		Repository repo = RepositoryResolver.resolve(pr);
 		if (repo == null) {
@@ -97,7 +127,24 @@ public class PullRequestSynchronizeLauncher {
 	public static void launchForCommit(PullRequest pr,
 			PullRequestCommit commit) {
 		// Set the active PR in context for comment overlay
-		PullRequestContext.getInstance().setActivePullRequest(pr);
+		PullRequestContext context = PullRequestContext.getInstance();
+		IPullRequestClient client = PullRequestClientFactory.createClient();
+		
+		if (client != null) {
+			try {
+				List<PullRequestComment> comments = client
+						.getPullRequestComments(pr.getId());
+				context.setActivePullRequest(pr, client);
+				context.setComments(comments);
+			} catch (IOException e) {
+				Activator.logWarning(
+						"Failed to fetch comments for PR, continuing without: " //$NON-NLS-1$
+								+ e.getMessage());
+				context.setActivePullRequest(pr);
+			}
+		} else {
+			context.setActivePullRequest(pr);
+		}
 
 		Repository repo = RepositoryResolver.resolve(pr);
 		if (repo == null) {
@@ -143,7 +190,24 @@ public class PullRequestSynchronizeLauncher {
 	public static void launchForCommitRange(PullRequest pr,
 			PullRequestCommit baseCommit, PullRequestCommit headCommit) {
 		// Set the active PR in context for comment overlay
-		PullRequestContext.getInstance().setActivePullRequest(pr);
+		PullRequestContext context = PullRequestContext.getInstance();
+		IPullRequestClient client = PullRequestClientFactory.createClient();
+		
+		if (client != null) {
+			try {
+				List<PullRequestComment> comments = client
+						.getPullRequestComments(pr.getId());
+				context.setActivePullRequest(pr, client);
+				context.setComments(comments);
+			} catch (IOException e) {
+				Activator.logWarning(
+						"Failed to fetch comments for PR, continuing without: " //$NON-NLS-1$
+								+ e.getMessage());
+				context.setActivePullRequest(pr);
+			}
+		} else {
+			context.setActivePullRequest(pr);
+		}
 
 		Repository repo = RepositoryResolver.resolve(pr);
 		if (repo == null) {
@@ -252,6 +316,12 @@ public class PullRequestSynchronizeLauncher {
 	/**
 	 * Launches EGit's Synchronize view for the given repository and commit
 	 * range.
+	 * <p>
+	 * This method replicates the logic from
+	 * {@code GitModelSynchronize.launch()} but adds a custom action
+	 * contributor to override the default open action with one that opens
+	 * our {@link PullRequestCompareEditorInput} with inline comment overlays.
+	 * </p>
 	 *
 	 * @param repo
 	 *            the repository
@@ -259,9 +329,11 @@ public class PullRequestSynchronizeLauncher {
 	 *            the base commit (may be null for initial commits)
 	 * @param headCommit
 	 *            the head commit
+	 * @throws IOException
+	 *             if an error occurs
 	 */
 	private static void launchSynchronize(Repository repo,
-			RevCommit baseCommit, RevCommit headCommit) {
+			RevCommit baseCommit, RevCommit headCommit) throws IOException {
 		// Get all projects mapped to this repository
 		Set<IProject> projects = new LinkedHashSet<>();
 		IProject[] workspaceProjects = ResourcesPlugin.getWorkspace().getRoot()
@@ -301,8 +373,141 @@ public class PullRequestSynchronizeLauncher {
 				false);
 		GitSynchronizeDataSet dataSet = new GitSynchronizeDataSet(data);
 
-		// Launch the synchronize view
-		GitModelSynchronize.launch(dataSet, resources);
+		// Convert resources to resource mappings
+		ResourceMapping[] mappings = getGitResourceMappings(resources);
+
+		// Launch using our custom logic (replicated from GitModelSynchronize)
+		launchWithCustomParticipant(dataSet, mappings);
+	}
+
+	/**
+	 * Converts resources to resource mappings.
+	 * <p>
+	 * Based on {@code GitModelSynchronize.getGitResourceMappings()}.
+	 * </p>
+	 *
+	 * @param elements
+	 *            the resources
+	 * @return the resource mappings
+	 */
+	private static ResourceMapping[] getGitResourceMappings(
+			IResource[] elements) {
+		List<ResourceMapping> gitMappings = new ArrayList<>();
+
+		for (IResource element : elements) {
+			ResourceMapping mapping = Adapters.adapt(element,
+					ResourceMapping.class);
+			if (mapping != null && isMappedToGitProvider(mapping)) {
+				gitMappings.add(mapping);
+			}
+		}
+
+		return gitMappings.toArray(new ResourceMapping[0]);
+	}
+
+	/**
+	 * Checks if a resource mapping is mapped to a Git provider.
+	 * <p>
+	 * Based on {@code GitModelSynchronize.isMappedToGitProvider()}.
+	 * </p>
+	 *
+	 * @param element
+	 *            the resource mapping
+	 * @return true if mapped to Git
+	 */
+	private static boolean isMappedToGitProvider(ResourceMapping element) {
+		IProject[] projects = element.getProjects();
+		for (IProject project : projects) {
+			if (ResourceUtil.isSharedWithGit(project)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Launches the synchronize view with a custom participant that includes
+	 * our action contributor.
+	 * <p>
+	 * This method replicates the logic from
+	 * {@code GitModelSynchronize.fireSynchronizeAction()} but creates the
+	 * participant ourselves so we can call
+	 * {@code configuration.addActionContribution()} before it's displayed.
+	 * </p>
+	 *
+	 * @param gsdSet
+	 *            the synchronize data set
+	 * @param mappings
+	 *            the resource mappings
+	 */
+	private static void launchWithCustomParticipant(
+			final GitSynchronizeDataSet gsdSet,
+			final ResourceMapping[] mappings) {
+		final GitResourceVariantTreeSubscriber subscriber = 
+				new GitResourceVariantTreeSubscriber(gsdSet);
+
+		IWorkbenchWindow window = PlatformUI.getWorkbench()
+				.getActiveWorkbenchWindow();
+		final IWorkbenchPart activePart = window != null
+				? window.getActivePage().getActivePart()
+				: null;
+
+		Job syncJob = new WorkspaceJob(
+				"Fetching Git data for pull request synchronization") { //$NON-NLS-1$
+
+			@Override
+			public IStatus runInWorkspace(IProgressMonitor monitor) {
+				subscriber.init(monitor);
+				return Status.OK_STATUS;
+			}
+
+			@Override
+			public boolean belongsTo(Object family) {
+				if (JobFamilies.SYNCHRONIZE_READ_DATA.equals(family)) {
+					return true;
+				}
+				return super.belongsTo(family);
+			}
+		};
+
+		syncJob.addJobChangeListener(new JobChangeAdapter() {
+			@Override
+			public void done(IJobChangeEvent event) {
+				RemoteResourceMappingContext remoteContext = 
+						new GitSubscriberResourceMappingContext(subscriber,
+								gsdSet);
+				SubscriberScopeManager manager = new SubscriberScopeManager(
+						subscriber.getName(), mappings, subscriber,
+						remoteContext, true);
+				GitSubscriberMergeContext context = 
+						new GitSubscriberMergeContext(subscriber, manager,
+								gsdSet);
+
+				// Create the participant - this is where we can inject our
+				// action contributor
+				final GitModelSynchronizeParticipant participant = 
+						new GitModelSynchronizeParticipant(context) {
+					@Override
+					protected void initializeConfiguration(
+							org.eclipse.team.ui.synchronize.ISynchronizePageConfiguration configuration) {
+						super.initializeConfiguration(configuration);
+
+						// Add our custom action contributor to override the
+						// open action
+						configuration.addActionContribution(
+								new PullRequestActionContributor());
+					}
+				};
+
+				TeamUI.getSynchronizeManager().addSynchronizeParticipants(
+						new ISynchronizeParticipant[] { participant });
+
+				participant.run(activePart);
+			}
+		});
+
+		syncJob.setUser(true);
+		syncJob.schedule();
 	}
 
 	/**

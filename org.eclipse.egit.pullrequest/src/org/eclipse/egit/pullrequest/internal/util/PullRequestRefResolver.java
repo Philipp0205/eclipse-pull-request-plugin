@@ -1,16 +1,7 @@
-/*******************************************************************************
- * Copyright (C) 2026, Eclipse EGit contributors
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License 2.0
- * which accompanies this distribution, and is available at
- * https://www.eclipse.org/legal/epl-2.0/
- *
- * SPDX-License-Identifier: EPL-2.0
- *******************************************************************************/
 package org.eclipse.egit.pullrequest.internal.util;
 
 import java.io.IOException;
+import java.util.Collections;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.SubMonitor;
@@ -34,7 +25,7 @@ import org.eclipse.jgit.transport.URIish;
  * This class provides the capability to resolve PR branch refs into JGit
  * {@link RevCommit} objects, with optional fetching of missing PR refs from
  * the remote repository.
- */
+// */
 public class PullRequestRefResolver {
 
 	private final Repository repository;
@@ -190,10 +181,10 @@ public class PullRequestRefResolver {
 				return;
 			}
 
-			URIish uri = originRemote.getURIs().get(0);
-			FetchOperation fetchOp = new FetchOperation(repository, uri,
-					refSpec, false);
-			fetchOp.run(monitor);
+		URIish uri = originRemote.getURIs().get(0);
+		FetchOperation fetchOp = new FetchOperation(repository, uri,
+				Collections.singletonList(refSpec), 30, false);
+		fetchOp.run(monitor);
 		} catch (Exception e) {
 			throw new IOException("Failed to fetch PR refs", e); //$NON-NLS-1$
 		}
