@@ -630,15 +630,8 @@ public class PullRequestListView extends ViewPart {
 				new PullRequestOverviewEditorInput(pr);
 		page.openEditor(input, PullRequestOverviewView.EDITOR_ID);
 
-		// Update changed files view and activate it
-		IWorkbenchPart changedFilesView = page.showView(
-				PullRequestChangedFilesView.VIEW_ID,
-				null,
-				IWorkbenchPage.VIEW_ACTIVATE);
-
-		if (changedFilesView instanceof PullRequestChangedFilesView) {
-			((PullRequestChangedFilesView) changedFilesView).loadPullRequest(pr);
-		}
+		// Launch synchronize view for the pull request
+		PullRequestSynchronizeLauncher.launchForPullRequest(pr);
 	} catch (PartInitException e) {
 		Activator.logError("Failed to open pull request views", //$NON-NLS-1$
 				e);

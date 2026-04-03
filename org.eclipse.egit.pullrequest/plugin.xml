@@ -11,18 +11,6 @@
    SPDX-License-Identifier: EPL-2.0
 -->
 <plugin>
-   <!-- Adapter factory for PullRequestChangedFile -->
-   <extension
-         point="org.eclipse.core.runtime.adapters">
-      <factory
-            adaptableType="org.eclipse.egit.pullrequest.internal.ui.PullRequestChangedFile"
-            class="org.eclipse.egit.pullrequest.internal.ui.PullRequestChangedFileAdapterFactory">
-         <adapter type="org.eclipse.core.resources.IResource" />
-         <adapter type="org.eclipse.core.resources.IFile" />
-         <adapter type="org.eclipse.core.runtime.IPath" />
-      </factory>
-   </extension>
-
    <!-- Preference page -->
    <extension
          point="org.eclipse.ui.preferencePages">
@@ -60,14 +48,6 @@
             icon="icons/obj16/gitrepository.png"
             id="org.eclipse.egit.pullrequest.PullRequestListView"
             name="%PullRequestListView">
-      </view>
-      <view
-            allowMultiple="false"
-            category="org.eclipse.egit.pullrequest.PullRequestCategory"
-            class="org.eclipse.egit.pullrequest.internal.ui.PullRequestChangedFilesView"
-            icon="icons/obj16/gitrepository.png"
-            id="org.eclipse.egit.pullrequest.PullRequestChangedFilesView"
-            name="%PullRequestChangedFilesView">
       </view>
       <view
             allowMultiple="false"

@@ -24,21 +24,6 @@ public class PRText extends NLS {
 	public static String StagingView_CopyPaths;
 
 	/** */
-	public static String ChangedFilesView_MarkAllUnread;
-
-	/** */
-	public static String ChangedFilesView_ExpandAll;
-
-	/** */
-	public static String ChangedFilesView_ExpandAllTooltip;
-
-	/** */
-	public static String ChangedFilesView_CollapseAll;
-
-	/** */
-	public static String ChangedFilesView_CollapseAllTooltip;
-
-	/** */
 	public static String OverviewView_NoPullRequestSelected;
 
 	/** */
@@ -274,6 +259,27 @@ public class PRText extends NLS {
 
 	/** */
 	public static String PreferencePage_ExpandCommentsByDefault;
+
+	/** */
+	public static String PullRequestSynchronizeLauncher_ErrorTitle;
+
+	/** */
+	public static String PullRequestSynchronizeLauncher_ErrorMessage;
+
+	/** */
+	public static String PullRequestSynchronizeLauncher_FetchErrorMessage;
+
+	/** */
+	public static String PullRequestSynchronizeLauncher_RepoNotFoundTitle;
+
+	/** */
+	public static String PullRequestSynchronizeLauncher_RepoNotFoundMessage;
+
+	/** */
+	public static String PullRequestSynchronizeLauncher_WarningTitle;
+
+	/** */
+	public static String PullRequestSynchronizeLauncher_NoProjectsMessage;
 
 	static {
 		initializeMessages("org.eclipse.egit.pullrequest.internal.prtext", //$NON-NLS-1$

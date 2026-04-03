@@ -347,17 +347,11 @@ public class PullRequestCommitsView extends ViewPart {
 				return;
 			}
 
-			// Find or show the changed files view
-			IWorkbenchPart part = page
-					.showView(PullRequestChangedFilesView.VIEW_ID);
-			if (!(part instanceof PullRequestChangedFilesView)) {
-				return;
-			}
-
-			PullRequestChangedFilesView changedFilesView = (PullRequestChangedFilesView) part;
-			changedFilesView.loadCommit(selectedPullRequest, commit);
-		} catch (PartInitException e) {
-			Activator.logError("Failed to show changed files view", e); //$NON-NLS-1$
+			// Launch synchronize view for this commit
+			PullRequestSynchronizeLauncher.launchForCommit(
+					selectedPullRequest, commit);
+		} catch (Exception e) {
+			Activator.logError("Failed to launch synchronize view", e); //$NON-NLS-1$
 		}
 	}
 
@@ -417,16 +411,12 @@ public class PullRequestCommitsView extends ViewPart {
 				return;
 			}
 
-			// Find or show the changed files view
-			IWorkbenchPart part = page
-					.showView(PullRequestChangedFilesView.VIEW_ID);
-			if (!(part instanceof PullRequestChangedFilesView)) {
-				return;
-			}
-
-			PullRequestChangedFilesView changedFilesView = (PullRequestChangedFilesView) part;
-			changedFilesView.loadCommitRange(selectedPullRequest,
-					earliestCommit, latestCommit);
+			// Launch synchronize view for commit range
+			PullRequestSynchronizeLauncher.launchForCommitRange(
+					selectedPullRequest, earliestCommit, latestCommit);
+		} catch (Exception e) {
+			Activator.logError("Failed to launch synchronize view", e); //$NON-NLS-1$
+		}
 		} catch (PartInitException e) {
 			Activator.logError("Failed to show changed files view", e); //$NON-NLS-1$
 		}

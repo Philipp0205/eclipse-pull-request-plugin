@@ -624,17 +624,13 @@ public class PullRequestOverviewView extends EditorPart {
 	}
 
 	private void activateChangedFilesView() {
-		try {
-			IWorkbenchPage page = getSite()
-					.getWorkbenchWindow().getActivePage();
-			IWorkbenchPart part = page.showView(
-					PullRequestChangedFilesView.VIEW_ID);
-			page.activate(part);
-		} catch (PartInitException e) {
-			Activator.logError(
-					"Failed to activate changed files view", //$NON-NLS-1$
-					e);
+		if (currentPullRequest == null) {
+			return;
 		}
+
+		// Launch synchronize view for the pull request
+		PullRequestSynchronizeLauncher.launchForPullRequest(
+				currentPullRequest);
 	}
 
 	private void saveDescription() {

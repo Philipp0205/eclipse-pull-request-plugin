@@ -823,31 +823,12 @@ public class CommentOverlayInstaller {
 	// ---- Helper methods --------------------------------------------------
 
 	/**
-	 * Returns the currently selected pull request from the Changed
-	 * Files view.
+	 * Returns the currently active pull request from the context.
 	 *
-	 * @return the selected pull request, or {@code null}
+	 * @return the active pull request, or {@code null}
 	 */
 	private PullRequest getSelectedPullRequest() {
-		try {
-			IWorkbenchPage page = PlatformUI.getWorkbench()
-					.getActiveWorkbenchWindow().getActivePage();
-			if (page == null) {
-				return null;
-			}
-			IViewPart part = page.findView(
-					PullRequestChangedFilesView.VIEW_ID);
-			if (part instanceof PullRequestChangedFilesView) {
-				return ((PullRequestChangedFilesView) part)
-						.getSelectedPullRequest();
-			}
-		} catch (Exception e) {
-			Activator.logError(
-					"Failed to get selected pull" //$NON-NLS-1$
-							+ " request", //$NON-NLS-1$
-					e);
-		}
-		return null;
+		return PullRequestContext.getInstance().getActivePullRequest();
 	}
 
 	private void ensureCurrentUsername() {

@@ -144,58 +144,25 @@ final class CommentViewSynchronizer {
 	}
 
 	/**
-	 * Refreshes the Changed Files View with fresh comments.
+	 * Refreshes the comment display (no longer updates Changed Files View
+	 * since it has been replaced by Synchronize View).
 	 *
 	 * @param freshComments
 	 *            the fresh comments from the API
 	 */
 	private void refreshChangedFilesView(
 			List<PullRequestComment> freshComments) {
-		try {
-			IWorkbenchPage page = PlatformUI.getWorkbench()
-					.getActiveWorkbenchWindow().getActivePage();
-			if (page == null) {
-				return;
-			}
-			IViewPart part = page
-					.findView(PullRequestChangedFilesView.VIEW_ID);
-			if (part instanceof PullRequestChangedFilesView) {
-				((PullRequestChangedFilesView) part)
-						.updateComments(freshComments);
-			}
-		} catch (Exception e) {
-			Activator.logError(
-					"Failed to refresh changed files view", //$NON-NLS-1$
-					e);
-		}
+		// Changed Files View has been replaced with Synchronize View.
+		// Comments are shown in the compare editor overlay instead.
+		// No refresh needed here.
 	}
 
 	/**
-	 * Returns the currently selected pull request from the Changed
-	 * Files View.
+	 * Returns the currently active pull request from the context.
 	 *
 	 * @return the pull request or null
 	 */
 	static PullRequest getSelectedPullRequest() {
-		try {
-			IWorkbenchPage page = PlatformUI.getWorkbench()
-					.getActiveWorkbenchWindow().getActivePage();
-			if (page == null) {
-				return null;
-			}
-
-			IViewPart part = page
-					.findView(PullRequestChangedFilesView.VIEW_ID);
-			if (part instanceof PullRequestChangedFilesView) {
-				return ((PullRequestChangedFilesView) part)
-						.getSelectedPullRequest();
-			}
-		} catch (Exception e) {
-			Activator.logError(
-					"Failed to get selected pull" //$NON-NLS-1$
-							+ " request", //$NON-NLS-1$
-					e);
-		}
-		return null;
+		return PullRequestContext.getInstance().getActivePullRequest();
 	}
 }

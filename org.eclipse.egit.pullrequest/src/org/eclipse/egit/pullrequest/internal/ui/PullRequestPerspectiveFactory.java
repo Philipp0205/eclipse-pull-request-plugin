@@ -34,19 +34,19 @@ public class PullRequestPerspectiveFactory implements IPerspectiveFactory {
 				0.3f,
 				editorArea);
 
-		// Changed Files and Commits Views below the PR List on the left
+		// Synchronize View and Commits Views below the PR List on the left
 		// (60% height of left area) in a tabbed folder
 		IFolderLayout leftBottom = layout.createFolder(
 				"leftBottom", //$NON-NLS-1$
 				IPageLayout.BOTTOM,
 				0.6f,
 				PullRequestListView.VIEW_ID);
-		leftBottom.addView(PullRequestChangedFilesView.VIEW_ID);
+		leftBottom.addView("org.eclipse.team.sync.views.SynchronizeView"); //$NON-NLS-1$
 		leftBottom.addView(PullRequestCommitsView.VIEW_ID);
 
 		// Window->Show View shortcuts
 		layout.addShowViewShortcut(PullRequestListView.VIEW_ID);
-		layout.addShowViewShortcut(PullRequestChangedFilesView.VIEW_ID);
+		layout.addShowViewShortcut("org.eclipse.team.sync.views.SynchronizeView"); //$NON-NLS-1$
 		layout.addShowViewShortcut(PullRequestCommitsView.VIEW_ID);
 
 		// Window->Perspective->Open shortcuts
