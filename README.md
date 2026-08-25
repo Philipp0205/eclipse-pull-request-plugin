@@ -123,6 +123,88 @@ Not yet available - coming soon.
 3. Copy the JAR to your Eclipse `dropins/` folder
 4. Restart Eclipse
 
+## Troubleshooting a connection
+
+All connection problems are written to the Eclipse log. There are three ways to
+read them:
+
+1. **Error Log view** — `Window > Show View > Other... > General > Error Log`.
+   Double-click an entry to see the full message and stack trace.
+2. **Log file** — `<workspace>/.metadata/.log`. The exact path is shown in the
+   *Diagnostics* section of `Preferences > Pull Requests`, and can be tailed
+   from a terminal:
+   ```bash
+   tail -f <workspace>/.metadata/.log
+   ```
+3. **Console output** — start Eclipse with `-consoleLog` to have the same
+   entries printed to the terminal that launched it.
+
+### Test Connection
+
+`Preferences > Pull Requests > Test Connection` runs the checks one by one and
+shows which one fails, for example:
+
+```
+OK       Configuration
+         Server https://bitbucket.example.com
+         Project key PROJ
+         Repository slug my-repo
+         Access token set, 40 characters
+OK       Server URL
+         Scheme https, host bitbucket.example.com, port 443
+OK       Network route
+         direct connection (no Eclipse proxy applies to this host)
+OK       Name resolution
+         bitbucket.example.com resolves to 10.1.2.3
+OK       TCP connection
+         bitbucket.example.com:443 accepts connections
+FAILED   REST API
+         GET https://bitbucket.example.com/rest/api/1.0/application-properties
+         answered HTTP 401. Bitbucket rejected the personal access token. ...
+```
+
+Use *Copy Report* to put the whole report on the clipboard. The same report is
+written to the log.
+
+### Common causes
+
+| Failing step | Usual cause |
+| --- | --- |
+| Name resolution | Wrong host name, or the VPN to the corporate network is not connected |
+| TCP connection | A firewall blocks the port, or requests must go through a proxy that Eclipse does not know about (`Preferences > General > Network Connections`) |
+| REST API returns HTTP 401 | The access token is invalid or expired |
+| REST API succeeds but Authentication fails | The token never reaches Bitbucket, usually because a reverse proxy strips the `Authorization` header |
+| REST API answers HTML | Bitbucket runs under a context path, for example `https://host/bitbucket` |
+| Repository step fails | The project key or repository slug is wrong; both are case sensitive |
+| TLS handshake failure | The server certificate is issued by an internal CA that the JRE running Eclipse does not trust |
+
+### Checking the same thing from a terminal
+
+The plug-in calls the Bitbucket Data Center REST API, so `curl` reproduces its
+requests. The `X-AUSERNAME` header in the first response tells you whether the
+token was accepted; without it the request was handled anonymously.
+
+```bash
+# Is the token accepted? Look for X-AUSERNAME in the response headers.
+curl -i -H "Authorization: Bearer $TOKEN" \
+  https://bitbucket.example.com/rest/api/1.0/application-properties
+
+# Do the project key and repository slug match?
+curl -i -H "Authorization: Bearer $TOKEN" \
+  https://bitbucket.example.com/rest/api/1.0/projects/PROJ/repos/my-repo
+
+# Can pull requests be read?
+curl -i -H "Authorization: Bearer $TOKEN" \
+  "https://bitbucket.example.com/rest/api/1.0/projects/PROJ/repos/my-repo/pull-requests?limit=1"
+```
+
+### Verbose logging
+
+Enable *Log every provider request to the Eclipse log (verbose)* in the
+*Diagnostics* section of the preference page to record every REST request and
+its status. Access tokens are never logged. Turn it off again afterwards, as it
+makes the log noisy.
+
 ## Architecture
 
 ### Package Structure
