@@ -642,10 +642,11 @@ public class BitbucketClient implements IPullRequestClient {
 			probe.contentType = connection.getContentType();
 			probe.location = connection.getHeaderField("Location"); //$NON-NLS-1$
 			probe.username = authenticatedUser(connection);
-			probe.body = truncate(
+			probe.body = summarize(
 					probe.status == HttpURLConnection.HTTP_OK
 							? readResponse(connection.getInputStream())
-							: readErrorBody(connection));
+							: readErrorBody(connection),
+					probe.contentType);
 		} catch (IOException e) {
 			probe.failure = e.getClass().getSimpleName()
 					+ (e.getMessage() == null ? "" : ": " + e.getMessage()); //$NON-NLS-1$ //$NON-NLS-2$
@@ -792,7 +793,8 @@ public class BitbucketClient implements IPullRequestClient {
 				connection.getContentType(),
 				connection.getHeaderField("Location"))); //$NON-NLS-1$
 
-		String body = truncate(readErrorBody(connection));
+		String body = summarize(readErrorBody(connection),
+				connection.getContentType());
 		if (!body.isEmpty()) {
 			message.append(" Server response: ").append(body); //$NON-NLS-1$
 		}
@@ -841,9 +843,17 @@ public class BitbucketClient implements IPullRequestClient {
 		case HttpURLConnection.HTTP_CONFLICT:
 			return "Version conflict: the item was changed on the server," //$NON-NLS-1$
 					+ " refresh and retry."; //$NON-NLS-1$
+		case HttpURLConnection.HTTP_BAD_GATEWAY:
 		case HttpURLConnection.HTTP_UNAVAILABLE:
-			return "Bitbucket is unavailable, it may be starting up or in" //$NON-NLS-1$
-					+ " maintenance mode."; //$NON-NLS-1$
+		case HttpURLConnection.HTTP_GATEWAY_TIMEOUT:
+			return html
+					? "The answer is an HTML error page, so a proxy or load" //$NON-NLS-1$
+							+ " balancer in front of Bitbucket refused to" //$NON-NLS-1$
+							+ " forward the request. This is what a corporate" //$NON-NLS-1$
+							+ " gateway returns when the VPN is not" //$NON-NLS-1$
+							+ " connected." //$NON-NLS-1$
+					: "Bitbucket is unavailable, it may be starting up or in" //$NON-NLS-1$
+							+ " maintenance mode."; //$NON-NLS-1$
 		default:
 			return html
 					? "The response was an HTML page instead of JSON, which" //$NON-NLS-1$
@@ -868,6 +878,26 @@ public class BitbucketClient implements IPullRequestClient {
 		} catch (IOException e) {
 			return ""; //$NON-NLS-1$
 		}
+	}
+
+	/**
+	 * Shortens a response body for a message. Error pages produced by proxies
+	 * are HTML; their markup is dropped so that the sentence they contain stays
+	 * readable in the log.
+	 *
+	 * @param body
+	 *            the response body
+	 * @param contentType
+	 *            the response content type, may be null
+	 * @return the shortened body
+	 */
+	private static String summarize(String body, String contentType) {
+		String text = body;
+		if (contentType != null && contentType.startsWith("text/html")) { //$NON-NLS-1$
+			text = text.replaceAll("<[^>]*>", " ") //$NON-NLS-1$ //$NON-NLS-2$
+					.replaceAll("\\s+", " ").trim(); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+		return truncate(text);
 	}
 
 	private static String truncate(String text) {

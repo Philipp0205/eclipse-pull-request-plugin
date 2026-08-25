@@ -167,6 +167,30 @@ public class BitbucketConnectionTest {
 	}
 
 	@Test
+	public void testGatewayErrorKeepsTheTextOfTheHtmlPage() {
+		// What the Advantest gateway answers without a VPN connection
+		server.on(PROPERTIES_PATH, new Response(503, "Service Unavailable", //$NON-NLS-1$
+				"<html>\n  <head><title>503 Service Unavailable</title></head>" //$NON-NLS-1$
+						+ "\n  <body><h1>Service unavailable</h1>" //$NON-NLS-1$
+						+ "\n    <div>No server is available to handle this" //$NON-NLS-1$
+						+ " request.</div>" //$NON-NLS-1$
+						+ "\n    <div>You may want to activate your VPN to" //$NON-NLS-1$
+						+ " avoid this error.</div>\n  </body>\n</html>") //$NON-NLS-1$
+								.contentType("text/html")); //$NON-NLS-1$
+
+		try {
+			client().getCurrentUser();
+			throw new AssertionError("expected an IOException"); //$NON-NLS-1$
+		} catch (IOException e) {
+			assertThat(e.getMessage(), containsString("HTTP 503")); //$NON-NLS-1$
+			assertThat(e.getMessage(), containsString("VPN is not")); //$NON-NLS-1$
+			assertThat(e.getMessage(),
+					containsString("activate your VPN")); //$NON-NLS-1$
+			assertThat(e.getMessage(), not(containsString("<div>"))); //$NON-NLS-1$
+		}
+	}
+
+	@Test
 	public void testDiagnosticsPassForAWorkingServer() {
 		serveApplicationProperties("john.doe"); //$NON-NLS-1$
 		server.on(PROJECT_PATH,
