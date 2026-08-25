@@ -1,0 +1,45 @@
+---
+description: Pick the right git author identity for private vs. Advantest work repositories
+alwaysApply: true
+---
+
+# Git Commit Identity
+
+Never commit with an inherited identity. Machine defaults have leaked into this
+repository's history before (`root@EULT-PF3TPC11.adv.advantest.com`,
+`philipp@fedora.fritz.box`, `Cursor Agent <cursoragent@cursor.com>`), and so has
+the work address on private commits.
+
+## Decide from the remote, before the first commit
+
+```bash
+git remote -v            # which host and account owns this repository?
+git config user.name     # what would the next commit be attributed to?
+```
+
+| Remote | `user.name` | `user.email` |
+| --- | --- | --- |
+| `github.com/Philipp0205/...` and other personal remotes | `Philipp0205` | `36603238+Philipp0205@users.noreply.github.com` |
+| `*.advantest.com` (e.g. `socgit.advantest.com`) or the `philipp-kurrle_ADVNTST` GitHub account | `philipp-kurrle_ADVNTST` | `philipp.kurrle@advantest.com` |
+
+## Set it per repository, never globally
+
+A global identity is what causes the wrong account to sign the next clone.
+
+```bash
+# ❌ BAD - leaks into every other repository
+git config --global user.email philipp.kurrle@advantest.com
+
+# ✅ GOOD - private project, scoped to this clone
+git config user.name Philipp0205
+git config user.email 36603238+Philipp0205@users.noreply.github.com
+
+# ✅ GOOD - Advantest work project, scoped to this clone
+git config user.name philipp-kurrle_ADVNTST
+git config user.email philipp.kurrle@advantest.com
+```
+
+Verify with `git log -1 --format='%an <%ae>'` after committing.
+
+Do not rewrite existing commits to correct their author unless explicitly asked;
+fix the config and move on.
