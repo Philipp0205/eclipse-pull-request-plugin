@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pull Request Review &mdash; Eclipse update site</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 42rem; margin: 4rem auto; padding: 0 1rem; line-height: 1.6; }
+  code { background: #f4f4f5; padding: .15rem .35rem; border-radius: .25rem; }
+  .url { display: block; background: #f4f4f5; padding: .75rem 1rem; border-radius: .375rem; word-break: break-all; }
+  .note { border-left: 4px solid #d97706; padding-left: 1rem; color: #52525b; }
+  ol { padding-left: 1.25rem; }
+  li { margin: .35rem 0; }
+</style>
+</head>
+<body>
+<h1>Eclipse update site</h1>
+
+<p class="note">You are looking at an Eclipse <strong>p2 update site</strong>,
+not a web page. It is meant to be opened by Eclipse rather than by a
+browser, so copy the address below into Eclipse instead of browsing it
+here.</p>
+
+<h2>Install the plug-in</h2>
+
+<ol>
+  <li>In Eclipse, open <strong>Help &rarr; Install New Software&hellip;</strong></li>
+  <li>Click <strong>Add&hellip;</strong> next to the <em>Work with</em> field.</li>
+  <li>Paste this location and give it a name such as <em>Pull Request Review</em>:</li>
+</ol>
+
+<code class="url">https://philipp0205.github.io/eclipse-pull-request-plugin/p2/</code>
+
+<ol start="4">
+  <li>Select <strong>Pull Request Review</strong> from the list.</li>
+  <li>Click <strong>Next</strong>, accept the license, and finish the wizard.</li>
+  <li>Restart Eclipse when prompted.</li>
+</ol>
+
+<p>EGit must already be installed, because this site contains only the
+Pull Request Review plug-in and not the Eclipse platform itself.</p>
+
+<h2>If Eclipse cannot read the site</h2>
+
+<p>Eclipse caches update-site metadata, including failures. Remove the
+entry under <strong>Preferences &rarr; Install/Update &rarr; Available
+Software Sites</strong>, then add the address again rather than editing
+the old entry.</p>
+
+<p><a href="https://github.com/Philipp0205/eclipse-pull-request-plugin">Project source and documentation</a></p>
+</body>
+</html>
