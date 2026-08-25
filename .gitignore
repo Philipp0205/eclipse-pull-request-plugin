@@ -33,6 +33,10 @@ buildNumber.properties
 *.tar.gz
 *.rar
 
+# p2/ is the published update site served by GitHub Pages.
+!p2/**/*.jar
+!p2/**/*.zip
+
 # Logs
 *.log
 

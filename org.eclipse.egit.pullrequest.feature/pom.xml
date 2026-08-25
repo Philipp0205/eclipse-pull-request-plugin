@@ -21,8 +21,8 @@
     <version>7.6.0-SNAPSHOT</version>
   </parent>
 
-  <artifactId>org.eclipse.egit.pullrequest.target</artifactId>
-  <packaging>eclipse-target-definition</packaging>
+  <artifactId>org.eclipse.egit.pullrequest.feature</artifactId>
+  <packaging>eclipse-feature</packaging>
 
-  <name>Pull Request Review Target Platform</name>
+  <name>Pull Request Review Feature</name>
 </project>
