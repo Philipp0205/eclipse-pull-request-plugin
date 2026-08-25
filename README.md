@@ -151,10 +151,9 @@ To test an unreleased change, download that artifact from the workflow
 run and add the extracted folder as a local repository.
 
 ### Manual Installation
-1. Build the plugin using the instructions above
-2. The built plugin will be in `org.eclipse.egit.pullrequest/target/`
-3. Copy the JAR to your Eclipse `dropins/` folder
-4. Restart Eclipse
+Run `mvn clean verify`. The generated p2 repository is available at
+`org.eclipse.egit.pullrequest.repository/target/repository`, and its archive is
+`org.eclipse.egit.pullrequest.repository/target/org.eclipse.egit.pullrequest.repository-7.6.0-SNAPSHOT.zip`.
 
 ## Troubleshooting a connection
 

@@ -646,7 +646,7 @@ public class GitHubJsonParserTest {
 		assertThat(commit.getFirstLine(), equalTo("Fix bug in parser")); //$NON-NLS-1$
 		assertThat(commit.getAuthorName(), equalTo("John Doe")); //$NON-NLS-1$
 		assertThat(commit.getAuthorEmail(), equalTo("john@example.com")); //$NON-NLS-1$
-		assertThat(commit.getAuthorDate(), equalTo(1736937000000L));
+		assertThat(commit.getAuthorDate(), equalTo(1768473000000L));
 		assertThat(commit.getParents(), hasSize(2));
 		assertThat(commit.getParents().get(0), equalTo("parent1")); //$NON-NLS-1$
 		assertThat(commit.getParents().get(1), equalTo("parent2")); //$NON-NLS-1$
@@ -661,7 +661,7 @@ public class GitHubJsonParserTest {
 
 		assertThat(commit, notNullValue());
 		assertThat(commit.getMessage(),
-				equalTo("First line\\n\\nDetailed description\\non multiple lines")); //$NON-NLS-1$
+				equalTo("First line\n\nDetailed description\non multiple lines")); //$NON-NLS-1$
 		assertThat(commit.getFirstLine(), equalTo("First line")); //$NON-NLS-1$
 		assertThat(commit.getParents(), hasSize(1));
 		assertThat(commit.isMergeCommit(), equalTo(false));

@@ -47,6 +47,7 @@
       <plugin>
         <groupId>org.eclipse.tycho</groupId>
         <artifactId>tycho-surefire-plugin</artifactId>
+        <version>${tycho-version}</version>
         <configuration>
           <excludes>
             <!-- test mojo matches TestProject be default and treats it as PojoTest -->
@@ -55,15 +56,6 @@
           <argLine>${test.vmparams}</argLine>
           <useUIHarness>false</useUIHarness>
           <useUIThread>false</useUIThread>
-        </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-pmd-plugin</artifactId>
-        <configuration>
-          <excludes>
-            <exclude>**/*Test.java</exclude>
-          </excludes>
         </configuration>
       </plugin>
     </plugins>

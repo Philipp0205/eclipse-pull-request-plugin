@@ -175,15 +175,20 @@ class GitHubJsonParser {
 		int reviewComments = extractInt(json, "review_comments"); //$NON-NLS-1$
 		pr.setCommentCount(issueComments + reviewComments);
 
-		// Parse reviewers (requested_reviewers)
+		// Parse individual and team reviewers
+		List<PullRequest.PullRequestParticipant> reviewers = new ArrayList<>();
 		String requestedReviewersJson = extractArray(json,
 				"requested_reviewers"); //$NON-NLS-1$
 		if (requestedReviewersJson != null) {
-			List<PullRequest.PullRequestParticipant> reviewers = parseReviewers(
-					requestedReviewersJson);
-			if (!reviewers.isEmpty()) {
-				pr.setReviewers(reviewers);
-			}
+			reviewers.addAll(parseReviewers(requestedReviewersJson));
+		}
+		String requestedTeamsJson = extractArray(json,
+				"requested_teams"); //$NON-NLS-1$
+		if (requestedTeamsJson != null) {
+			reviewers.addAll(parseReviewers(requestedTeamsJson));
+		}
+		if (!reviewers.isEmpty()) {
+			pr.setReviewers(reviewers);
 		}
 
 		// Parse links
@@ -1104,9 +1109,10 @@ class GitHubJsonParser {
 		PullRequest.User user = new PullRequest.User();
 		user.setName(extractString(json, "login")); //$NON-NLS-1$
 
-		// For teams, use slug as name
+		// For teams, use slug as name. GitHub's requested_teams payload does
+		// not always include a type field.
 		String type = extractString(json, "type"); //$NON-NLS-1$
-		if ("Team".equals(type)) { //$NON-NLS-1$
+		if ("Team".equals(type) || user.getName() == null) { //$NON-NLS-1$
 			String slug = extractString(json, "slug"); //$NON-NLS-1$
 			if (slug != null) {
 				user.setName(slug);
@@ -1115,6 +1121,7 @@ class GitHubJsonParser {
 
 		user.setDisplayName(extractString(json, "name", //$NON-NLS-1$
 				extractString(json, "login"))); //$NON-NLS-1$
+		user.setEmailAddress(extractString(json, "email")); //$NON-NLS-1$
 		user.setAvatarUrl(extractString(json, "avatar_url")); //$NON-NLS-1$
 		reviewer.setUser(user);
 		reviewer.setRole("REVIEWER"); //$NON-NLS-1$
