@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<site>
+   <feature
+         id="org.eclipse.egit.pullrequest.feature"
+         version="0.0.0">
+      <category name="pull-request-review"/>
+   </feature>
+   <category-def
+         name="pull-request-review"
+         label="Pull Request Review">
+      <description>
+         Tools for reviewing GitHub and Bitbucket pull requests.
+      </description>
+   </category-def>
+</site>
