@@ -53,6 +53,8 @@
     <module>org.eclipse.egit.pullrequest.target</module>
     <module>org.eclipse.egit.pullrequest</module>
     <module>org.eclipse.egit.pullrequest.test</module>
+    <module>org.eclipse.egit.pullrequest.feature</module>
+    <module>org.eclipse.egit.pullrequest.repository</module>
   </modules>
 
   <repositories>

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feature
+      id="org.eclipse.egit.pullrequest.feature"
+      label="Pull Request Review"
+      version="7.6.0.qualifier"
+      provider-name="Eclipse EGit">
+
+   <description url="https://github.com/Philipp0205/eclipse-pull-request-plugin">
+      Review GitHub and Bitbucket pull requests from inside Eclipse.
+   </description>
+
+   <copyright>
+      Copyright (C) 2026, Philipp Hoenisch and others.
+   </copyright>
+
+   <license url="https://www.eclipse.org/legal/epl-2.0/">
+      This feature is provided under the Eclipse Public License 2.0.
+      https://www.eclipse.org/legal/epl-2.0/
+   </license>
+
+   <requires>
+      <import feature="org.eclipse.egit" version="6.0.0" match="compatible"/>
+   </requires>
+
+   <plugin
+         id="org.eclipse.egit.pullrequest"
+         download-size="0"
+         install-size="0"
+         version="0.0.0"
+         unpack="false"/>
+
+</feature>

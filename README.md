@@ -20,18 +20,18 @@ This plugin was extracted from [EGit](https://www.eclipse.org/egit/) to provide 
 ```
 eclipse-pullrequest-plugin/
 ├── pom.xml                                    # Parent POM with build configuration
+├── .github/workflows/p2-site.yml              # Build and publish the p2 site
+├── p2/                                        # Published update site (GitHub Pages)
 ├── org.eclipse.egit.pullrequest.target/       # Target platform definition
 │   └── pullrequest.target                     # Eclipse platform dependencies
 ├── org.eclipse.egit.pullrequest/              # Main plugin bundle
 │   ├── META-INF/MANIFEST.MF                   # OSGi bundle manifest
 │   ├── plugin.xml                             # Eclipse extension definitions
 │   ├── pom.xml                                # Module build configuration
-│   └── src/                                   # Source code (41 Java files)
-└── org.eclipse.egit.pullrequest.test/         # Test fragment bundle
-    ├── META-INF/MANIFEST.MF                   # Test fragment manifest
-    ├── fragment.xml                           # Fragment host configuration
-    ├── pom.xml                                # Test build configuration
-    └── src/                                   # Test source code (2 test classes)
+│   └── src/                                   # Source code
+├── org.eclipse.egit.pullrequest.test/         # Test fragment bundle
+├── org.eclipse.egit.pullrequest.feature/      # Installable feature
+└── org.eclipse.egit.pullrequest.repository/   # Tycho p2 repository module
 ```
 
 ## Build Requirements
@@ -66,13 +66,16 @@ Before building this plugin, you must build JGit and EGit to create their p2 rep
 
 #### Full build with tests:
 ```bash
-cd /home/philipp/git/eclipse-pullrequest-plugin
-mvn clean verify
+./mvnw clean verify
 ```
+
+The p2 update site is written to
+`org.eclipse.egit.pullrequest.repository/target/repository/`. Add that
+folder in Eclipse as a local repository to test a build before publishing.
 
 #### Build without tests:
 ```bash
-mvn clean verify -DskipTests
+./mvnw clean verify -DskipTests
 ```
 
 #### Run tests only:
@@ -114,8 +117,38 @@ Dependencies are resolved via p2 repositories defined in `pom.xml`:
 
 ## Installation
 
-### From Update Site (future)
-Not yet available - coming soon.
+### From Update Site
+
+In Eclipse, open **Help → Install New Software…**, add this update site,
+and select **Pull Request Review**:
+
+```text
+https://philipp0205.github.io/eclipse-pull-request-plugin/p2/
+```
+
+The `/p2/` suffix is required. The GitHub Pages root serves a landing
+page, not p2 metadata, so Eclipse cannot resolve it as a repository.
+
+EGit must already be installed; the update site contains this plugin
+only, not the Eclipse platform.
+
+The site lives in the `p2/` directory of `main` and is refreshed by the
+release workflow. Previously published bundles are kept, because Eclipse
+caches repository metadata and keeps requesting the exact version it
+resolved earlier. If Eclipse reports that it cannot download an older
+version, select the site under **Preferences → Install/Update →
+Available Software Sites** and click **Reload**.
+
+Enable GitHub Pages for this repository (**Settings → Pages**, deploy
+from `main` at `/`) so the committed `p2/` directory is served.
+
+Releases are published by pushing a `v*` tag or by running the
+**Build and publish p2 update site** workflow manually. Every push and
+pull request still builds the site and uploads it as the
+`p2-update-site` artifact.
+
+To test an unreleased change, download that artifact from the workflow
+run and add the extracted folder as a local repository.
 
 ### Manual Installation
 1. Build the plugin using the instructions above
