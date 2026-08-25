@@ -149,7 +149,7 @@ public class BitbucketClientTest {
 				baseUrl);
 
 		assertThat(comment, notNullValue());
-		assertThat(comment.getAuthorName(), equalTo("John Doe")); //$NON-NLS-1$
+		assertThat(comment.getAuthorDisplayName(), equalTo("John Doe")); //$NON-NLS-1$
 		assertThat(comment.getAuthorAvatarUrl(), equalTo(
 				"https://bitbucket.example.com/users/jdoe/avatar.png")); //$NON-NLS-1$
 	}
@@ -166,7 +166,7 @@ public class BitbucketClientTest {
 				baseUrl);
 
 		assertThat(comment, notNullValue());
-		assertThat(comment.getAuthorName(), equalTo("John Doe")); //$NON-NLS-1$
+		assertThat(comment.getAuthorDisplayName(), equalTo("John Doe")); //$NON-NLS-1$
 		// When slug is missing, avatar URL should fall back to using name
 		assertThat(comment.getAuthorAvatarUrl(), equalTo(
 				"https://bitbucket.example.com/users/jdoe/avatar.png")); //$NON-NLS-1$
@@ -175,15 +175,14 @@ public class BitbucketClientTest {
 	@Test
 	public void testParseCommentsArray() {
 		String baseUrl = "https://bitbucket.example.com"; //$NON-NLS-1$
-		String json = "{\"size\":2,\"limit\":25,\"isLastPage\":true," //$NON-NLS-1$
-				+ "\"values\":[" //$NON-NLS-1$
+		String json = "[" //$NON-NLS-1$
 				+ "{\"id\":1,\"version\":1,\"text\":\"First comment\"," //$NON-NLS-1$
 				+ "\"author\":{\"name\":\"jdoe\",\"displayName\":\"John Doe\",\"slug\":\"jdoe\"}," //$NON-NLS-1$
 				+ "\"createdDate\":1705318800000}," //$NON-NLS-1$
 				+ "{\"id\":2,\"version\":1,\"text\":\"Second comment\"," //$NON-NLS-1$
 				+ "\"author\":{\"name\":\"asmith\",\"displayName\":\"Alice Smith\",\"slug\":\"asmith\"}," //$NON-NLS-1$
 				+ "\"createdDate\":1705319100000}" //$NON-NLS-1$
-				+ "]}"; //$NON-NLS-1$
+				+ "]"; //$NON-NLS-1$
 
 		List<PullRequestComment> comments = BitbucketJsonParser
 				.parseCommentArray(json, baseUrl);
@@ -192,12 +191,13 @@ public class BitbucketClientTest {
 		assertThat(comments.size(), equalTo(2));
 
 		PullRequestComment first = comments.get(0);
-		assertThat(first.getAuthorName(), equalTo("John Doe")); //$NON-NLS-1$
+		assertThat(first.getAuthorDisplayName(), equalTo("John Doe")); //$NON-NLS-1$
 		assertThat(first.getAuthorAvatarUrl(), equalTo(
 				"https://bitbucket.example.com/users/jdoe/avatar.png")); //$NON-NLS-1$
 
 		PullRequestComment second = comments.get(1);
-		assertThat(second.getAuthorName(), equalTo("Alice Smith")); //$NON-NLS-1$
+		assertThat(second.getAuthorDisplayName(),
+				equalTo("Alice Smith")); //$NON-NLS-1$
 		assertThat(second.getAuthorAvatarUrl(), equalTo(
 				"https://bitbucket.example.com/users/asmith/avatar.png")); //$NON-NLS-1$
 	}
