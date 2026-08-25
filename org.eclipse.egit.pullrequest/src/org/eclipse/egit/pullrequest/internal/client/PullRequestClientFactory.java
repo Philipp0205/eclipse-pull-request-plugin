@@ -6,6 +6,7 @@ import org.eclipse.egit.pullrequest.Activator;
 import org.eclipse.egit.pullrequest.internal.PRPreferences;
 import org.eclipse.egit.pullrequest.internal.bitbucket.BitbucketClient;
 import org.eclipse.egit.pullrequest.internal.github.GitHubClient;
+import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 
 /**
  * Factory for creating pull request client instances based on configured
@@ -76,6 +77,21 @@ public class PullRequestClientFactory {
 			Activator.logWarning(
 					"The configuration for provider " + config.providerType //$NON-NLS-1$
 							+ " is incomplete: " + describe(config)); //$NON-NLS-1$
+		}
+		return client;
+	}
+
+	/**
+	 * Creates a client and selects the repository for a pull request.
+	 *
+	 * @param pullRequest
+	 *            pull request that subsequent client operations concern
+	 * @return the configured client, or null if not properly configured
+	 */
+	public static IPullRequestClient createClient(PullRequest pullRequest) {
+		IPullRequestClient client = createClient();
+		if (client != null) {
+			client.setActivePullRequest(pullRequest);
 		}
 		return client;
 	}

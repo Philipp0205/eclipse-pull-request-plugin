@@ -252,7 +252,7 @@ public class PullRequestCommitsView extends ViewPart {
 
 				try {
 					IPullRequestClient client = PullRequestClientFactory
-							.createClient();
+							.createClient(pr);
 					if (client == null) {
 						return new Status(IStatus.ERROR, Activator.PLUGIN_ID,
 								PRText.CommitsView_ErrorProviderNotConfigured);
