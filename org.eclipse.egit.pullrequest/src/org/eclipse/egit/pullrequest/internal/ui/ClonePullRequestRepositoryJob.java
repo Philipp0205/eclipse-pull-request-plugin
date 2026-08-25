@@ -20,6 +20,7 @@ import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IProjectDescription;
 import org.eclipse.core.resources.IWorkspace;
 import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
@@ -125,7 +126,7 @@ public class ClonePullRequestRepositoryJob extends Job {
 	}
 
 	private static void importProjects(File destination,
-			IProgressMonitor monitor) throws IOException {
+			IProgressMonitor monitor) throws IOException, CoreException {
 		IWorkspace workspace = ResourcesPlugin.getWorkspace();
 		List<java.nio.file.Path> projectFiles;
 		try (Stream<java.nio.file.Path> paths = Files
