@@ -60,7 +60,11 @@ public class BitbucketClient implements IPullRequestClient {
 
 	private static final int MAX_REPORTED_BODY = 400;
 
-	private final String serverUrl;
+	private final String configuredServerUrl;
+
+	private volatile String serverUrl;
+
+	private volatile boolean contextPathResolved;
 
 	private final String projectKey;
 
@@ -85,7 +89,8 @@ public class BitbucketClient implements IPullRequestClient {
 	public BitbucketClient(@NonNull String serverUrl,
 			@NonNull String projectKey, @NonNull String repositorySlug,
 			@NonNull String token) {
-		this.serverUrl = serverUrl.endsWith("/") ? serverUrl.substring(0, serverUrl.length() - 1) : serverUrl; //$NON-NLS-1$
+		this.serverUrl = trimTrailingSlash(serverUrl);
+		this.configuredServerUrl = this.serverUrl;
 		this.projectKey = projectKey;
 		this.repositorySlug = repositorySlug;
 		this.token = token;
@@ -687,7 +692,9 @@ public class BitbucketClient implements IPullRequestClient {
 	 */
 	private HttpURLConnection openConnection(String urlString, String method,
 			String accept) throws IOException {
-		URL url = new URL(urlString);
+		resolveContextPath();
+		String resolvedUrl = replaceConfiguredServerUrl(urlString);
+		URL url = new URL(resolvedUrl);
 		Proxy proxy = HttpProxySupport.select(url);
 		HttpURLConnection connection = (HttpURLConnection) (proxy == null
 				? url.openConnection()
@@ -697,9 +704,112 @@ public class BitbucketClient implements IPullRequestClient {
 		connection.setRequestProperty("Authorization", "Bearer " + token); //$NON-NLS-1$ //$NON-NLS-2$
 		connection.setConnectTimeout(DEFAULT_TIMEOUT);
 		connection.setReadTimeout(DEFAULT_TIMEOUT);
-		Activator.logDebug(method + ' ' + urlString
+		Activator.logDebug(method + ' ' + resolvedUrl
 				+ (proxy == null ? "" : " (via " + proxy + ')')); //$NON-NLS-1$ //$NON-NLS-2$
 		return connection;
+	}
+
+	private synchronized void resolveContextPath() {
+		if (contextPathResolved) {
+			return;
+		}
+		contextPathResolved = true;
+
+		Probe root = probeServerBase(configuredServerUrl);
+		if (root.status == HttpURLConnection.HTTP_OK
+				|| root.status == HttpURLConnection.HTTP_UNAUTHORIZED
+				|| root.status == HttpURLConnection.HTTP_FORBIDDEN) {
+			return;
+		}
+
+		String redirectedBase = contextBaseFromRedirect(root.location);
+		if (redirectedBase != null
+				&& isBitbucketApi(redirectedBase)) {
+			serverUrl = redirectedBase;
+			return;
+		}
+
+		String conventionalBase = configuredServerUrl + "/bitbucket"; //$NON-NLS-1$
+		if (isBitbucketApi(conventionalBase)) {
+			serverUrl = conventionalBase;
+			Activator.logInfo("Detected Bitbucket context path: " + serverUrl); //$NON-NLS-1$
+		}
+	}
+
+	private boolean isBitbucketApi(String baseUrl) {
+		Probe probe = probeServerBase(baseUrl);
+		return probe.status == HttpURLConnection.HTTP_OK
+				|| probe.status == HttpURLConnection.HTTP_UNAUTHORIZED
+				|| probe.status == HttpURLConnection.HTTP_FORBIDDEN;
+	}
+
+	private Probe probeServerBase(String baseUrl) {
+		Probe result = new Probe();
+		HttpURLConnection connection = null;
+		try {
+			URL url = new URL(baseUrl + API_BASE_PATH
+					+ "/application-properties"); //$NON-NLS-1$
+			Proxy proxy = HttpProxySupport.select(url);
+			connection = (HttpURLConnection) (proxy == null
+					? url.openConnection()
+					: url.openConnection(proxy));
+			connection.setInstanceFollowRedirects(false);
+			connection.setRequestMethod("GET"); //$NON-NLS-1$
+			connection.setRequestProperty("Accept", "application/json"); //$NON-NLS-1$ //$NON-NLS-2$
+			connection.setRequestProperty("Authorization", //$NON-NLS-1$
+					"Bearer " + token); //$NON-NLS-1$
+			connection.setConnectTimeout(PROBE_TIMEOUT);
+			connection.setReadTimeout(PROBE_TIMEOUT);
+			result.status = connection.getResponseCode();
+			result.location = connection.getHeaderField("Location"); //$NON-NLS-1$
+		} catch (IOException e) {
+			result.failure = e.getMessage();
+		} finally {
+			if (connection != null) {
+				connection.disconnect();
+			}
+		}
+		return result;
+	}
+
+	private String contextBaseFromRedirect(String location) {
+		if (location == null || location.isBlank()) {
+			return null;
+		}
+		try {
+			URI configured = URI.create(configuredServerUrl);
+			URI redirect = configured.resolve(location);
+			if (!configured.getHost().equalsIgnoreCase(redirect.getHost())) {
+				return null;
+			}
+			String path = redirect.getPath();
+			if (path == null || path.length() < 2) {
+				return null;
+			}
+			int secondSlash = path.indexOf('/', 1);
+			String context = secondSlash < 0 ? path
+					: path.substring(0, secondSlash);
+			return trimTrailingSlash(configuredServerUrl + context);
+		} catch (IllegalArgumentException e) {
+			return null;
+		}
+	}
+
+	private String replaceConfiguredServerUrl(String urlString) {
+		if (!serverUrl.equals(configuredServerUrl)
+				&& urlString.startsWith(configuredServerUrl)) {
+			return serverUrl
+					+ urlString.substring(configuredServerUrl.length());
+		}
+		return urlString;
+	}
+
+	private static String trimTrailingSlash(String url) {
+		String result = url.trim();
+		while (result.endsWith("/")) { //$NON-NLS-1$
+			result = result.substring(0, result.length() - 1);
+		}
+		return result;
 	}
 
 	/**

@@ -686,7 +686,11 @@ public class PullRequestOverviewView extends EditorPart {
 	}
 
 	private IPullRequestClient createClient() {
-		return PullRequestClientFactory.createClient();
+		IPullRequestClient result = PullRequestClientFactory.createClient();
+		if (result != null && currentPullRequest != null) {
+			result.setActivePullRequest(currentPullRequest);
+		}
+		return result;
 	}
 
 	private void checkoutSourceBranch() {

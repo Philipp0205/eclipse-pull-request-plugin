@@ -90,8 +90,7 @@ public class PullRequestClientFactory {
 	 */
 	private static String describe(ClientConfig config) {
 		if (config.providerType == PullRequestProviderType.GITHUB) {
-			return "owner=" + quote(config.githubOwner) + ", repository=" //$NON-NLS-1$ //$NON-NLS-2$
-					+ quote(config.githubRepo) + ", token=" //$NON-NLS-1$
+			return "token=" //$NON-NLS-1$
 					+ (isBlank(config.githubAccessToken) ? "missing" : "set"); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 		return "server URL=" + quote(config.bitbucketServerUrl) //$NON-NLS-1$
@@ -130,12 +129,10 @@ public class PullRequestClientFactory {
 					config.bitbucketAccessToken);
 
 		case GITHUB:
-			if (isBlank(config.githubOwner) || isBlank(config.githubRepo)
-					|| isBlank(config.githubAccessToken)) {
+			if (isBlank(config.githubAccessToken)) {
 				return null;
 			}
-			return new GitHubClient(config.githubOwner, config.githubRepo,
-					config.githubAccessToken);
+			return new GitHubClient(config.githubAccessToken);
 
 		default:
 			return null;

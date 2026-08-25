@@ -18,7 +18,19 @@ import org.eclipse.jgit.annotations.Nullable;
 public interface IPullRequestClient {
 
 	/**
-	 * Retrieves pull requests for the configured repository
+	 * Selects the repository associated with a pull request. Repository-scoped
+	 * providers may ignore this; providers that aggregate several repositories
+	 * use it to route subsequent operations.
+	 *
+	 * @param pullRequest
+	 *            the pull request that subsequent operations concern
+	 */
+	default void setActivePullRequest(PullRequest pullRequest) {
+		// Most provider clients are permanently scoped to one repository.
+	}
+
+	/**
+	 * Retrieves pull requests visible in the configured provider scope.
 	 *
 	 * @param state
 	 *            the PR state filter (e.g., "OPEN", "MERGED", "DECLINED" for

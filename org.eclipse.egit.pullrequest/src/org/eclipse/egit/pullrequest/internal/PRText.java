@@ -272,6 +272,27 @@ public class PRText extends NLS {
 	public static String PullRequestSynchronizeLauncher_NoProjectsMessage;
 
 	/** */
+	public static String CloneProject_Button;
+
+	/** */
+	public static String CloneProject_Cancel;
+
+	/** */
+	public static String CloneProject_JobName;
+
+	/** */
+	public static String CloneProject_ErrorTitle;
+
+	/** */
+	public static String CloneProject_Error;
+
+	/** */
+	public static String CloneProject_MissingUrl;
+
+	/** */
+	public static String CloneProject_DestinationExists;
+
+	/** */
 	public static String PreferencePage_DiagnosticsGroup;
 
 	/** */
