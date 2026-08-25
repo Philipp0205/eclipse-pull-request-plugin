@@ -75,6 +75,7 @@ public class PullRequestSynchronizeLauncher {
 		
 		if (client != null) {
 			try {
+				client.setActivePullRequest(pr);
 				List<PullRequestComment> comments = client
 						.getPullRequestComments(pr.getId());
 				context.setActivePullRequest(pr, client);
@@ -91,7 +92,8 @@ public class PullRequestSynchronizeLauncher {
 
 		Repository repo = RepositoryResolver.resolve(pr);
 		if (repo == null) {
-			showRepositoryNotFoundDialog();
+			showRepositoryNotFoundDialog(pr,
+					() -> launchForPullRequest(pr));
 			return;
 		}
 
@@ -132,6 +134,7 @@ public class PullRequestSynchronizeLauncher {
 		
 		if (client != null) {
 			try {
+				client.setActivePullRequest(pr);
 				List<PullRequestComment> comments = client
 						.getPullRequestComments(pr.getId());
 				context.setActivePullRequest(pr, client);
@@ -148,7 +151,8 @@ public class PullRequestSynchronizeLauncher {
 
 		Repository repo = RepositoryResolver.resolve(pr);
 		if (repo == null) {
-			showRepositoryNotFoundDialog();
+			showRepositoryNotFoundDialog(pr,
+					() -> launchForCommit(pr, commit));
 			return;
 		}
 
@@ -195,6 +199,7 @@ public class PullRequestSynchronizeLauncher {
 		
 		if (client != null) {
 			try {
+				client.setActivePullRequest(pr);
 				List<PullRequestComment> comments = client
 						.getPullRequestComments(pr.getId());
 				context.setActivePullRequest(pr, client);
@@ -211,7 +216,8 @@ public class PullRequestSynchronizeLauncher {
 
 		Repository repo = RepositoryResolver.resolve(pr);
 		if (repo == null) {
-			showRepositoryNotFoundDialog();
+			showRepositoryNotFoundDialog(pr,
+					() -> launchForCommitRange(pr, baseCommit, headCommit));
 			return;
 		}
 
@@ -514,13 +520,23 @@ public class PullRequestSynchronizeLauncher {
 	 * Shows an error dialog explaining that the repository is not cloned
 	 * locally.
 	 */
-	private static void showRepositoryNotFoundDialog() {
+	private static void showRepositoryNotFoundDialog(PullRequest pullRequest,
+			Runnable completion) {
 		Display.getDefault().asyncExec(() -> {
-			MessageDialog.openError(
-					PlatformUI.getWorkbench().getActiveWorkbenchWindow()
-							.getShell(),
+			org.eclipse.swt.widgets.Shell shell = PlatformUI.getWorkbench()
+					.getActiveWorkbenchWindow().getShell();
+			MessageDialog dialog = new MessageDialog(shell,
 					PRText.PullRequestSynchronizeLauncher_RepoNotFoundTitle,
-					PRText.PullRequestSynchronizeLauncher_RepoNotFoundMessage);
+					null,
+					PRText.PullRequestSynchronizeLauncher_RepoNotFoundMessage,
+					MessageDialog.INFORMATION,
+					new String[] { PRText.CloneProject_Button,
+							PRText.CloneProject_Cancel },
+					0);
+			if (dialog.open() == 0) {
+				new ClonePullRequestRepositoryJob(pullRequest, shell,
+						completion).schedule();
+			}
 		});
 	}
 }

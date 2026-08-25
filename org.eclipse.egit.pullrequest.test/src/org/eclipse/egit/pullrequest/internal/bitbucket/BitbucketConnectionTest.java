@@ -81,6 +81,18 @@ public class BitbucketConnectionTest {
 	}
 
 	@Test
+	public void testContextPathIsDetectedAutomatically() throws IOException {
+		String contextProperties = "/bitbucket" + PROPERTIES_PATH; //$NON-NLS-1$
+		server.on(contextProperties, new Response(200, "OK", //$NON-NLS-1$
+				"{\"version\":\"9.4.2\"}") //$NON-NLS-1$
+						.header("X-AUSERNAME", "john.doe")); //$NON-NLS-1$ //$NON-NLS-2$
+
+		assertThat(client().getCurrentUser(), equalTo("john.doe")); //$NON-NLS-1$
+		assertThat(server.requestedPaths(),
+				hasItem(equalTo(contextProperties)));
+	}
+
+	@Test
 	public void testCurrentUserIsUrlDecoded() throws IOException {
 		serveApplicationProperties("john.doe%40example.com"); //$NON-NLS-1$
 

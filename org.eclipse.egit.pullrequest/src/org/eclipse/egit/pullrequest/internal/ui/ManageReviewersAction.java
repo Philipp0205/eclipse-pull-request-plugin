@@ -75,6 +75,7 @@ public class ManageReviewersAction extends Action {
 					"Pull request provider not configured"); //$NON-NLS-1$
 			return;
 		}
+		client.setActivePullRequest(pullRequest);
 
 		ReviewerManagementDialog dialog = new ReviewerManagementDialog(shell,
 				pullRequest, client);

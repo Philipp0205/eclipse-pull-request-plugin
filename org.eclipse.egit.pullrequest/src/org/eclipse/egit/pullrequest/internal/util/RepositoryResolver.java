@@ -43,10 +43,9 @@ public class RepositoryResolver {
 					+ repoSlug.toLowerCase();
 		} else if ("GITHUB".equals(providerType)) { //$NON-NLS-1$
 			serverUrl = "github.com"; //$NON-NLS-1$
-			String owner = Activator.getDefault().getPreferenceStore()
-					.getString(PRPreferences.GITHUB_OWNER);
-			String repo = Activator.getDefault().getPreferenceStore()
-					.getString(PRPreferences.GITHUB_REPO);
+			PullRequest.Repository target = pr.getToRef().getRepository();
+			String owner = target.getProject().getKey();
+			String repo = target.getSlug();
 			// Build expected path fragment: /{owner}/{repo}
 			pathFragment = "/" + owner.toLowerCase() + "/" //$NON-NLS-1$ //$NON-NLS-2$
 					+ repo.toLowerCase();

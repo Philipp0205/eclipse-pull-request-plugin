@@ -6,6 +6,7 @@ import org.eclipse.egit.pullrequest.Activator;
 import org.eclipse.egit.pullrequest.internal.PRPreferences;
 import org.eclipse.egit.pullrequest.internal.bitbucket.BitbucketClient;
 import org.eclipse.egit.pullrequest.internal.github.GitHubClient;
+import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 
 /**
  * Factory for creating pull request client instances based on configured
@@ -81,6 +82,21 @@ public class PullRequestClientFactory {
 	}
 
 	/**
+	 * Creates a client and selects the repository for a pull request.
+	 *
+	 * @param pullRequest
+	 *            pull request that subsequent client operations concern
+	 * @return the configured client, or null if not properly configured
+	 */
+	public static IPullRequestClient createClient(PullRequest pullRequest) {
+		IPullRequestClient client = createClient();
+		if (client != null) {
+			client.setActivePullRequest(pullRequest);
+		}
+		return client;
+	}
+
+	/**
 	 * Describes which configuration values are present, without revealing the
 	 * access tokens.
 	 *
@@ -90,8 +106,7 @@ public class PullRequestClientFactory {
 	 */
 	private static String describe(ClientConfig config) {
 		if (config.providerType == PullRequestProviderType.GITHUB) {
-			return "owner=" + quote(config.githubOwner) + ", repository=" //$NON-NLS-1$ //$NON-NLS-2$
-					+ quote(config.githubRepo) + ", token=" //$NON-NLS-1$
+			return "token=" //$NON-NLS-1$
 					+ (isBlank(config.githubAccessToken) ? "missing" : "set"); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 		return "server URL=" + quote(config.bitbucketServerUrl) //$NON-NLS-1$
@@ -130,12 +145,10 @@ public class PullRequestClientFactory {
 					config.bitbucketAccessToken);
 
 		case GITHUB:
-			if (isBlank(config.githubOwner) || isBlank(config.githubRepo)
-					|| isBlank(config.githubAccessToken)) {
+			if (isBlank(config.githubAccessToken)) {
 				return null;
 			}
-			return new GitHubClient(config.githubOwner, config.githubRepo,
-					config.githubAccessToken);
+			return new GitHubClient(config.githubAccessToken);
 
 		default:
 			return null;

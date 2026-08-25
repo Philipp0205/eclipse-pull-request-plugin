@@ -9,6 +9,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.eclipse.egit.pullrequest.Activator;
 import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
@@ -22,6 +24,30 @@ import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
 class GitHubJsonParser {
 
 	private static final String ISO8601_FORMAT = "yyyy-MM-dd'T'HH:mm:ss'Z'"; //$NON-NLS-1$
+
+	private static final Pattern SEARCH_PULL_URL = Pattern.compile(
+			"\"pull_request\"\\s*:\\s*\\{[^}]*\"url\"\\s*:\\s*" //$NON-NLS-1$
+					+ "\"https://api\\.github\\.com([^\"?]+)\"", //$NON-NLS-1$
+			Pattern.DOTALL);
+
+	/**
+	 * Extracts REST pull request paths from a GitHub issue search response.
+	 *
+	 * @param json
+	 *            search response JSON
+	 * @return API paths for the pull requests in result order
+	 */
+	static List<String> parseSearchPullRequestPaths(String json) {
+		List<String> result = new ArrayList<>();
+		if (json == null || json.isBlank()) {
+			return result;
+		}
+		Matcher matcher = SEARCH_PULL_URL.matcher(json);
+		while (matcher.find()) {
+			result.add(matcher.group(1));
+		}
+		return result;
+	}
 
 	/**
 	 * Parses a list of pull requests from GitHub API JSON

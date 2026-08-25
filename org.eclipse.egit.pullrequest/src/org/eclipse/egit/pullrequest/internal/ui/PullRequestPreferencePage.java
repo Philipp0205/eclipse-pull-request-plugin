@@ -53,10 +53,6 @@ public class PullRequestPreferencePage extends PreferencePage
 
 	private Text bitbucketTokenText;
 
-	private Text githubOwnerText;
-
-	private Text githubRepoText;
-
 	private Text githubTokenText;
 
 	private Button showInlineCommentsCheckbox;
@@ -220,24 +216,6 @@ public class PullRequestPreferencePage extends PreferencePage
 		group.setLayout(new GridLayout(2, false));
 		GridDataFactory.fillDefaults().grab(true, false).applyTo(group);
 
-		// Owner
-		Label ownerLabel = new Label(group, SWT.NONE);
-		ownerLabel.setText("Repository &Owner:"); //$NON-NLS-1$
-
-		githubOwnerText = new Text(group, SWT.BORDER);
-		githubOwnerText.setToolTipText(
-				"GitHub user or organization (e.g., 'octocat' or 'eclipse')"); //$NON-NLS-1$
-		GridDataFactory.fillDefaults().grab(true, false)
-				.applyTo(githubOwnerText);
-
-		// Repository
-		Label repoLabel = new Label(group, SWT.NONE);
-		repoLabel.setText("Repository &Name:"); //$NON-NLS-1$
-
-		githubRepoText = new Text(group, SWT.BORDER);
-		githubRepoText.setToolTipText("GitHub repository name (e.g., 'egit')"); //$NON-NLS-1$
-		GridDataFactory.fillDefaults().grab(true, false).applyTo(githubRepoText);
-
 		// Access token
 		Label tokenLabel = new Label(group, SWT.NONE);
 		tokenLabel.setText("Personal Access &Token:"); //$NON-NLS-1$
@@ -362,8 +340,6 @@ public class PullRequestPreferencePage extends PreferencePage
 				.setText(store.getString(PRPreferences.BITBUCKET_ACCESS_TOKEN));
 
 		// Load GitHub values
-		githubOwnerText.setText(store.getString(PRPreferences.GITHUB_OWNER));
-		githubRepoText.setText(store.getString(PRPreferences.GITHUB_REPO));
 		githubTokenText
 				.setText(store.getString(PRPreferences.GITHUB_ACCESS_TOKEN));
 
@@ -388,8 +364,6 @@ public class PullRequestPreferencePage extends PreferencePage
 		bitbucketUsernameText.setText(""); //$NON-NLS-1$
 		bitbucketTokenText.setText(""); //$NON-NLS-1$
 
-		githubOwnerText.setText(""); //$NON-NLS-1$
-		githubRepoText.setText(""); //$NON-NLS-1$
 		githubTokenText.setText(""); //$NON-NLS-1$
 
 		showInlineCommentsCheckbox.setSelection(true);
@@ -424,10 +398,6 @@ public class PullRequestPreferencePage extends PreferencePage
 				bitbucketTokenText.getText().trim());
 
 		// Save GitHub values
-		store.setValue(PRPreferences.GITHUB_OWNER,
-				githubOwnerText.getText().trim());
-		store.setValue(PRPreferences.GITHUB_REPO,
-				githubRepoText.getText().trim());
 		store.setValue(PRPreferences.GITHUB_ACCESS_TOKEN,
 				githubTokenText.getText().trim());
 
@@ -458,8 +428,6 @@ public class PullRequestPreferencePage extends PreferencePage
 	private void testGitHubConnection() {
 		PullRequestClientFactory.ClientConfig config = new PullRequestClientFactory.ClientConfig();
 		config.providerType = PullRequestProviderType.GITHUB;
-		config.githubOwner = githubOwnerText.getText().trim();
-		config.githubRepo = githubRepoText.getText().trim();
 		config.githubAccessToken = githubTokenText.getText().trim();
 
 		runConnectionTest(config);

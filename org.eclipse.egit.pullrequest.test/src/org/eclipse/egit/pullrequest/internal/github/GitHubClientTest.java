@@ -12,7 +12,10 @@ package org.eclipse.egit.pullrequest.internal.github;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
+
+import java.util.List;
 
 import org.junit.Test;
 
@@ -26,6 +29,26 @@ public class GitHubClientTest {
 		GitHubClient client = new GitHubClient(
 				"test-owner", "test-repo", "test-token"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		assertThat(client, notNullValue());
+	}
+
+	@Test
+	public void testTokenOnlyClientConstruction() {
+		assertThat(new GitHubClient("test-token"), notNullValue()); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParsePullRequestPathsFromSearch() {
+		String json = "{\"total_count\":2,\"items\":[" //$NON-NLS-1$
+				+ "{\"pull_request\":{\"url\":\"https://api.github.com/repos/alice/one/pulls/7\"}}," //$NON-NLS-1$
+				+ "{\"pull_request\":{\"url\":\"https://api.github.com/repos/acme/two/pulls/12\"}}" //$NON-NLS-1$
+				+ "]}"; //$NON-NLS-1$
+
+		List<String> paths = GitHubJsonParser
+				.parseSearchPullRequestPaths(json);
+
+		assertThat(paths, hasSize(2));
+		assertThat(paths.get(0), equalTo("/repos/alice/one/pulls/7")); //$NON-NLS-1$
+		assertThat(paths.get(1), equalTo("/repos/acme/two/pulls/12")); //$NON-NLS-1$
 	}
 
 	@Test

@@ -7,6 +7,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,9 +36,9 @@ public class GitHubClient implements IPullRequestClient {
 
 	private static final int DEFAULT_TIMEOUT = 30000; // 30 seconds
 
-	private final String owner;
+	private String owner;
 
-	private final String repo;
+	private String repo;
 
 	private final String token;
 
@@ -62,6 +63,35 @@ public class GitHubClient implements IPullRequestClient {
 				.forProvider(PullRequestProviderType.GITHUB);
 	}
 
+	/**
+	 * Creates a token-scoped GitHub client that lists pull requests authored by
+	 * the authenticated user across all repositories visible to the token.
+	 *
+	 * @param token
+	 *            the GitHub access token
+	 */
+	public GitHubClient(@NonNull String token) {
+		this.owner = null;
+		this.repo = null;
+		this.token = token;
+		this.capabilities = PullRequestProviderCapabilities
+				.forProvider(PullRequestProviderType.GITHUB);
+	}
+
+	@Override
+	public void setActivePullRequest(PullRequest pullRequest) {
+		if (pullRequest == null || pullRequest.getToRef() == null
+				|| pullRequest.getToRef().getRepository() == null) {
+			return;
+		}
+		PullRequest.Repository repository = pullRequest.getToRef()
+				.getRepository();
+		if (repository.getProject() != null) {
+			owner = repository.getProject().getKey();
+		}
+		repo = repository.getSlug();
+	}
+
 	@Override
 	public @NonNull PullRequestProviderType getProviderType() {
 		return PullRequestProviderType.GITHUB;
@@ -77,6 +107,9 @@ public class GitHubClient implements IPullRequestClient {
 			@Nullable String authorUsername, @Nullable String reviewerUsername,
 			int limit, int start)
 			throws IOException {
+		if (owner == null || repo == null) {
+			return getUserPullRequests(state, authorUsername, limit, start);
+		}
 		StringBuilder urlBuilder = new StringBuilder();
 		urlBuilder.append("/repos/").append(owner).append("/").append(repo) //$NON-NLS-1$ //$NON-NLS-2$
 				.append("/pulls"); //$NON-NLS-1$
@@ -158,6 +191,39 @@ public class GitHubClient implements IPullRequestClient {
 		// For now, reviewer filter is not implemented
 
 		return pulls;
+	}
+
+	private List<PullRequest> getUserPullRequests(String state,
+			String authorUsername, int limit, int start) throws IOException {
+		String author = authorUsername == null || authorUsername.isBlank()
+				? "@me" : authorUsername; //$NON-NLS-1$
+		StringBuilder query = new StringBuilder("is:pr author:") //$NON-NLS-1$
+				.append(author);
+		if ("MERGED".equalsIgnoreCase(state)) { //$NON-NLS-1$
+			query.append(" is:merged"); //$NON-NLS-1$
+		} else if ("DECLINED".equalsIgnoreCase(state)) { //$NON-NLS-1$
+			query.append(" is:closed is:unmerged"); //$NON-NLS-1$
+		} else if (state == null || !"ALL".equalsIgnoreCase(state)) { //$NON-NLS-1$
+			query.append(" is:open"); //$NON-NLS-1$
+		}
+
+		int pageSize = Math.max(1, Math.min(limit, 100));
+		int page = start / pageSize + 1;
+		String path = "/search/issues?q=" //$NON-NLS-1$
+				+ URLEncoder.encode(query.toString(), StandardCharsets.UTF_8)
+				+ "&per_page=" + pageSize + "&page=" + page; //$NON-NLS-1$ //$NON-NLS-2$
+		String searchResult = doGet(path);
+		List<String> pullRequestPaths = GitHubJsonParser
+				.parseSearchPullRequestPaths(searchResult);
+		List<PullRequest> result = new ArrayList<>();
+		for (String pullRequestPath : pullRequestPaths) {
+			PullRequest pullRequest = GitHubJsonParser
+					.parseSinglePullRequest(doGet(pullRequestPath));
+			if (pullRequest != null) {
+				result.add(pullRequest);
+			}
+		}
+		return result;
 	}
 
 	@Override
@@ -732,13 +798,10 @@ public class GitHubClient implements IPullRequestClient {
 	@Override
 	public boolean testConnection() {
 		try {
-			// Try to get the repository info
-			String path = "/repos/" + owner + "/" + repo; //$NON-NLS-1$ //$NON-NLS-2$
-			doGet(path);
+			doGet("/user"); //$NON-NLS-1$
 			return true;
 		} catch (IOException e) {
-			Activator.logError("Cannot reach GitHub repository " + owner + '/' //$NON-NLS-1$
-					+ repo, e);
+			Activator.logError("Cannot authenticate with GitHub", e); //$NON-NLS-1$
 			return false;
 		}
 	}
