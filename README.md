@@ -114,14 +114,16 @@ Dependencies are resolved via p2 repositories defined in `pom.xml`:
 
 ## Installation
 
-### From Update Site (future)
-Not yet available - coming soon.
+### From Update Site
+1. In Eclipse, choose **Help > Install New Software...**
+2. Add this update site:
+   `https://raw.githubusercontent.com/Philipp0205/eclipse-pull-request-plugin/main/p2/`
+3. Select **Pull Request Review Support** and complete the installation.
 
 ### Manual Installation
-1. Build the plugin using the instructions above
-2. The built plugin will be in `org.eclipse.egit.pullrequest/target/`
-3. Copy the JAR to your Eclipse `dropins/` folder
-4. Restart Eclipse
+Run `mvn clean verify`. The generated p2 repository is available at
+`org.eclipse.egit.pullrequest.repository/target/repository`, and its archive is
+`org.eclipse.egit.pullrequest.repository/target/org.eclipse.egit.pullrequest.repository-7.6.0-SNAPSHOT.zip`.
 
 ## Architecture
 
