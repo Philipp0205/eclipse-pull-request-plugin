@@ -97,6 +97,39 @@ public class Activator extends AbstractUIPlugin {
 		log.log(new Status(IStatus.INFO, PLUGIN_ID, message));
 	}
 
+	/**
+	 * Log a message that is only of interest when diagnosing a problem.
+	 * <p>
+	 * Nothing is written unless the user enabled verbose logging on the pull
+	 * request preference page. Messages end up in the same place as all other
+	 * entries of this plug-in: the Error Log view and the workspace log file
+	 * reported by {@link Platform#getLogFileLocation()}.
+	 *
+	 * @param message
+	 *            the message
+	 */
+	public static void logDebug(String message) {
+		if (!isVerboseLoggingEnabled()) {
+			return;
+		}
+		ILog log = Platform.getLog(Activator.class);
+		log.log(new Status(IStatus.INFO, PLUGIN_ID, message));
+	}
+
+	/**
+	 * Tells whether verbose logging of provider requests is enabled.
+	 *
+	 * @return true if {@link #logDebug(String)} writes to the log
+	 */
+	public static boolean isVerboseLoggingEnabled() {
+		Activator activator = plugin;
+		if (activator == null) {
+			return false;
+		}
+		return activator.getPreferenceStore()
+				.getBoolean(PRPreferences.PULLREQUEST_VERBOSE_LOGGING);
+	}
+
 	@Override
 	public IPreferenceStore getPreferenceStore() {
 		IPreferenceStore store = super.getPreferenceStore();
