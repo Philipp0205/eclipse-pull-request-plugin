@@ -569,8 +569,12 @@ public class PullRequestListView extends ViewPart {
 
 					return Status.OK_STATUS;
 				} catch (IOException e) {
+					// An error status alone only shows up in the progress
+					// notification, which is easy to miss
+					Activator.logError("Failed to fetch pull requests", e); //$NON-NLS-1$
 					return new Status(IStatus.ERROR, Activator.PLUGIN_ID,
-							"Failed to fetch pull requests", e); //$NON-NLS-1$
+							"Failed to fetch pull requests: " //$NON-NLS-1$
+									+ e.getMessage(), e);
 				} finally {
 					monitor.done();
 				}

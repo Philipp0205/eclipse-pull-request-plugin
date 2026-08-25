@@ -2,6 +2,7 @@ package org.eclipse.egit.pullrequest.internal.client;
 
 import org.eclipse.core.runtime.preferences.IEclipsePreferences;
 import org.eclipse.core.runtime.preferences.InstanceScope;
+import org.eclipse.egit.pullrequest.Activator;
 import org.eclipse.egit.pullrequest.internal.PRPreferences;
 import org.eclipse.egit.pullrequest.internal.bitbucket.BitbucketClient;
 import org.eclipse.egit.pullrequest.internal.github.GitHubClient;
@@ -65,16 +66,43 @@ public class PullRequestClientFactory {
 	public static IPullRequestClient createClient() {
 		ClientConfig config = loadConfig();
 		if (config == null || config.providerType == null) {
-			System.err.println("PullRequestClientFactory: config is null or providerType is null"); //$NON-NLS-1$
+			Activator.logWarning(
+					"No pull request provider is configured."); //$NON-NLS-1$
 			return null;
 		}
 
 		IPullRequestClient client = createClient(config);
 		if (client == null) {
-			System.err.println("PullRequestClientFactory: createClient returned null for provider: " + config.providerType); //$NON-NLS-1$
-			System.err.println("  GitHub config - owner: '" + config.githubOwner + "', repo: '" + config.githubRepo + "', token: " + (config.githubAccessToken != null && !config.githubAccessToken.isEmpty() ? "<set>" : "<empty>")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
+			Activator.logWarning(
+					"The configuration for provider " + config.providerType //$NON-NLS-1$
+							+ " is incomplete: " + describe(config)); //$NON-NLS-1$
 		}
 		return client;
+	}
+
+	/**
+	 * Describes which configuration values are present, without revealing the
+	 * access tokens.
+	 *
+	 * @param config
+	 *            the configuration to describe
+	 * @return the description
+	 */
+	private static String describe(ClientConfig config) {
+		if (config.providerType == PullRequestProviderType.GITHUB) {
+			return "owner=" + quote(config.githubOwner) + ", repository=" //$NON-NLS-1$ //$NON-NLS-2$
+					+ quote(config.githubRepo) + ", token=" //$NON-NLS-1$
+					+ (isBlank(config.githubAccessToken) ? "missing" : "set"); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+		return "server URL=" + quote(config.bitbucketServerUrl) //$NON-NLS-1$
+				+ ", project key=" + quote(config.bitbucketProjectKey) //$NON-NLS-1$
+				+ ", repository slug=" + quote(config.bitbucketRepoSlug) //$NON-NLS-1$
+				+ ", token=" //$NON-NLS-1$
+				+ (isBlank(config.bitbucketAccessToken) ? "missing" : "set"); //$NON-NLS-1$ //$NON-NLS-2$
+	}
+
+	private static String quote(String value) {
+		return value == null ? "<null>" : '\'' + value + '\''; //$NON-NLS-1$
 	}
 
 	/**

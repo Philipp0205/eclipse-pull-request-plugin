@@ -737,6 +737,8 @@ public class GitHubClient implements IPullRequestClient {
 			doGet(path);
 			return true;
 		} catch (IOException e) {
+			Activator.logError("Cannot reach GitHub repository " + owner + '/' //$NON-NLS-1$
+					+ repo, e);
 			return false;
 		}
 	}
