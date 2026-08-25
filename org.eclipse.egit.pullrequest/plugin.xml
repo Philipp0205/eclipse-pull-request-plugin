@@ -15,7 +15,6 @@
    <extension
          point="org.eclipse.ui.preferencePages">
       <page
-            category="org.eclipse.egit.pullrequest.preferences"
             class="org.eclipse.egit.pullrequest.internal.ui.PullRequestPreferencePage"
             id="org.eclipse.egit.pullrequest.preferences.PullRequestPreferencePage"
             name="%PullRequestPreferencePage.name">
