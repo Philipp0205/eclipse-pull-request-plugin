@@ -40,7 +40,7 @@ jobs:
           -DverifyOnly=true
           -Dprofileproperties=org.eclipse.update.install.features=true
       - name: Upload p2 repository
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: p2-update-site
           path: org.eclipse.egit.pullrequest.repository/target/repository
