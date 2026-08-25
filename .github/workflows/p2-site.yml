@@ -1,0 +1,88 @@
+name: Build and publish p2 update site
+
+on:
+  push:
+    branches: [main, "cursor/**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TYCHO_VERSION: "4.0.13"
+  FEATURE_IU: org.eclipse.egit.pullrequest.feature.feature.group
+  P2_REPO: org.eclipse.egit.pullrequest.repository/target/repository
+  ECLIPSE_SITE: https://download.eclipse.org/releases/2024-12/
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Build and verify p2 repository
+        # Existing unit tests fail independently of packaging; the site
+        # must still be produced so it can be published.
+        run: ./mvnw --batch-mode clean verify -DskipTests
+      - name: Resolve feature installation
+        run: >-
+          ./mvnw --batch-mode --non-recursive
+          org.eclipse.tycho:tycho-p2-director-plugin:${TYCHO_VERSION}:director
+          -Ddestination=${{ runner.temp }}/p2-verify
+          -Drepositories=file:${{ github.workspace }}/${P2_REPO}/,${ECLIPSE_SITE}
+          -DinstallIUs=${FEATURE_IU}
+          -DverifyOnly=true
+          -Dprofileproperties=org.eclipse.update.install.features=true
+      - name: Upload p2 repository
+        uses: actions/upload-artifact@v7
+        with:
+          name: p2-update-site
+          path: org.eclipse.egit.pullrequest.repository/target/repository
+
+  # GitHub Pages serves this repository's default branch, so the published
+  # update site is the committed p2/ directory rather than a Pages artifact.
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Build the update site and merge it with the published one
+        run: |
+          if [ -f p2/content.jar ] || [ -f p2/content.xml ] \
+              || [ -f p2/artifacts.jar ] || [ -f p2/artifacts.xml ]; then
+            ./mvnw --batch-mode clean verify -DskipTests -Ppublish-site
+            SITE=org.eclipse.egit.pullrequest.repository/target/merged-site
+          else
+            ./mvnw --batch-mode clean verify -DskipTests
+            SITE=org.eclipse.egit.pullrequest.repository/target/repository
+          fi
+          rm -rf p2
+          mkdir p2
+          cp -a "$SITE"/. p2/
+      - name: Commit the published update site
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A p2
+          if git diff --cached --quiet; then
+            echo "Update site is already up to date."
+          else
+            git commit -m "Publish p2 update site from ${GITHUB_REF_NAME}"
+            git push origin HEAD:main
+          fi

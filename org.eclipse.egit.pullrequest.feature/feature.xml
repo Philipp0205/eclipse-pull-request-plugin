@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <feature
       id="org.eclipse.egit.pullrequest.feature"
-      label="Pull Request Review Support"
+      label="Pull Request Review"
       version="7.6.0.qualifier"
       provider-name="Eclipse EGit">
 
    <description url="https://github.com/Philipp0205/eclipse-pull-request-plugin">
-      Review GitHub and Bitbucket pull requests from Eclipse.
+      Review GitHub and Bitbucket pull requests from inside Eclipse.
    </description>
 
    <copyright>
@@ -14,12 +14,12 @@
    </copyright>
 
    <license url="https://www.eclipse.org/legal/epl-2.0/">
-      Eclipse Public License 2.0
+      This feature is provided under the Eclipse Public License 2.0.
+      https://www.eclipse.org/legal/epl-2.0/
    </license>
 
    <requires>
-      <import feature="org.eclipse.egit" version="6.0.0"
-            match="greaterOrEqual"/>
+      <import feature="org.eclipse.egit" version="6.0.0" match="greaterOrEqual"/>
    </requires>
 
    <plugin

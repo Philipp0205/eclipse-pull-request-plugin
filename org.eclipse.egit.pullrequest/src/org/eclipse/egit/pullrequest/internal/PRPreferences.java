@@ -54,6 +54,9 @@ public class PRPreferences {
 	/** Expand all comments by default preference */
 	public static final String PULLREQUEST_EXPAND_COMMENTS_BY_DEFAULT = "pullrequest_expand_comments_by_default"; //$NON-NLS-1$
 
+	/** Log every provider HTTP request to the Eclipse log */
+	public static final String PULLREQUEST_VERBOSE_LOGGING = "pullrequest_verbose_logging"; //$NON-NLS-1$
+
 	private PRPreferences() {
 		// No instantiation
 	}

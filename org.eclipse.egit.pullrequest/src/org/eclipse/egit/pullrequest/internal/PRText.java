@@ -271,6 +271,45 @@ public class PRText extends NLS {
 	/** */
 	public static String PullRequestSynchronizeLauncher_NoProjectsMessage;
 
+	/** */
+	public static String PreferencePage_DiagnosticsGroup;
+
+	/** */
+	public static String PreferencePage_VerboseLogging;
+
+	/** */
+	public static String PreferencePage_LogFileLabel;
+
+	/** */
+	public static String PreferencePage_LogHint;
+
+	/** */
+	public static String ConnectionTest_DialogTitle;
+
+	/** */
+	public static String ConnectionTest_TaskName;
+
+	/** */
+	public static String ConnectionTest_Success;
+
+	/** */
+	public static String ConnectionTest_Failure;
+
+	/** */
+	public static String ConnectionTest_CopyButton;
+
+	/** */
+	public static String ConnectionTest_CopiedTooltip;
+
+	/** */
+	public static String ConnectionTest_LogHint;
+
+	/** */
+	public static String ConnectionTest_MissingFieldsTitle;
+
+	/** */
+	public static String ConnectionTest_MissingFieldsMessage;
+
 	static {
 		initializeMessages("org.eclipse.egit.pullrequest.internal.prtext", //$NON-NLS-1$
 				PRText.class);

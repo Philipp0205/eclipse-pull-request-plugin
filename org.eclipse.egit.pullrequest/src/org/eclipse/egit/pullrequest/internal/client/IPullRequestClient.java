@@ -253,6 +253,57 @@ public interface IPullRequestClient {
 	boolean testConnection();
 
 	/**
+	 * Checks the connection step by step and reports what succeeded and what
+	 * failed.
+	 * <p>
+	 * Unlike {@link #testConnection()} this never throws and never hides the
+	 * cause of a failure. Providers should override it to check the individual
+	 * pieces of their configuration; the default implementation only exercises
+	 * the two calls every provider supports.
+	 *
+	 * @return the diagnostic report
+	 */
+	@NonNull
+	default ConnectionDiagnostics diagnoseConnection() {
+		ConnectionDiagnostics diagnostics = new ConnectionDiagnostics();
+		try {
+			String user = getCurrentUser();
+			diagnostics.add("Authentication", //$NON-NLS-1$
+					ConnectionDiagnostics.Outcome.OK,
+					"Authenticated as " + user); //$NON-NLS-1$
+		} catch (IOException | RuntimeException e) {
+			diagnostics.add("Authentication", //$NON-NLS-1$
+					ConnectionDiagnostics.Outcome.FAILED, describe(e));
+			return diagnostics;
+		}
+		try {
+			int count = getPullRequests(null, null, null, 1, 0).size();
+			diagnostics.add("Read pull requests", //$NON-NLS-1$
+					ConnectionDiagnostics.Outcome.OK,
+					"Repository returned " + count + " pull request(s)"); //$NON-NLS-1$ //$NON-NLS-2$
+		} catch (IOException | RuntimeException e) {
+			diagnostics.add("Read pull requests", //$NON-NLS-1$
+					ConnectionDiagnostics.Outcome.FAILED, describe(e));
+		}
+		return diagnostics;
+	}
+
+	/**
+	 * Formats an exception for a diagnostic report.
+	 *
+	 * @param e
+	 *            the exception
+	 * @return the message, falling back to the exception class name
+	 */
+	private static String describe(Throwable e) {
+		String message = e.getMessage();
+		if (message == null || message.isEmpty()) {
+			return e.getClass().getName();
+		}
+		return message;
+	}
+
+	/**
 	 * Gets the current authenticated user's information
 	 *
 	 * @return the username or login of the authenticated user

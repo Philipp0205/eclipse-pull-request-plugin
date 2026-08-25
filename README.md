@@ -20,18 +20,18 @@ This plugin was extracted from [EGit](https://www.eclipse.org/egit/) to provide 
 ```
 eclipse-pullrequest-plugin/
 ├── pom.xml                                    # Parent POM with build configuration
+├── .github/workflows/p2-site.yml              # Build and publish the p2 site
+├── p2/                                        # Published update site (GitHub Pages)
 ├── org.eclipse.egit.pullrequest.target/       # Target platform definition
-│   └── pullrequest.target                     # Eclipse platform dependencies
+│   └── org.eclipse.egit.pullrequest.target.target  # Eclipse platform dependencies
 ├── org.eclipse.egit.pullrequest/              # Main plugin bundle
 │   ├── META-INF/MANIFEST.MF                   # OSGi bundle manifest
 │   ├── plugin.xml                             # Eclipse extension definitions
 │   ├── pom.xml                                # Module build configuration
-│   └── src/                                   # Source code (41 Java files)
-└── org.eclipse.egit.pullrequest.test/         # Test fragment bundle
-    ├── META-INF/MANIFEST.MF                   # Test fragment manifest
-    ├── fragment.xml                           # Fragment host configuration
-    ├── pom.xml                                # Test build configuration
-    └── src/                                   # Test source code (2 test classes)
+│   └── src/                                   # Source code
+├── org.eclipse.egit.pullrequest.test/         # Test fragment bundle
+├── org.eclipse.egit.pullrequest.feature/      # Installable feature
+└── org.eclipse.egit.pullrequest.repository/   # Tycho p2 repository module
 ```
 
 ## Build Requirements
@@ -66,13 +66,16 @@ Before building this plugin, you must build JGit and EGit to create their p2 rep
 
 #### Full build with tests:
 ```bash
-cd /home/philipp/git/eclipse-pullrequest-plugin
-mvn clean verify
+./mvnw clean verify
 ```
+
+The p2 update site is written to
+`org.eclipse.egit.pullrequest.repository/target/repository/`. Add that
+folder in Eclipse as a local repository to test a build before publishing.
 
 #### Build without tests:
 ```bash
-mvn clean verify -DskipTests
+./mvnw clean verify -DskipTests
 ```
 
 #### Run tests only:
@@ -115,15 +118,124 @@ Dependencies are resolved via p2 repositories defined in `pom.xml`:
 ## Installation
 
 ### From Update Site
-1. In Eclipse, choose **Help > Install New Software...**
-2. Add this update site:
-   `https://raw.githubusercontent.com/Philipp0205/eclipse-pull-request-plugin/main/p2/`
-3. Select **Pull Request Review Support** and complete the installation.
+
+In Eclipse, open **Help → Install New Software…**, add this update site,
+and select **Pull Request Review**:
+
+```text
+https://philipp0205.github.io/eclipse-pull-request-plugin/p2/
+```
+
+The `/p2/` suffix is required. The GitHub Pages root serves a landing
+page, not p2 metadata, so Eclipse cannot resolve it as a repository.
+
+EGit must already be installed; the update site contains this plugin
+only, not the Eclipse platform.
+
+The site lives in the `p2/` directory of `main` and is refreshed by the
+release workflow. Previously published bundles are kept, because Eclipse
+caches repository metadata and keeps requesting the exact version it
+resolved earlier. If Eclipse reports that it cannot download an older
+version, select the site under **Preferences → Install/Update →
+Available Software Sites** and click **Reload**.
+
+Enable GitHub Pages for this repository (**Settings → Pages**, deploy
+from `main` at `/`) so the committed `p2/` directory is served.
+
+Releases are published by pushing a `v*` tag or by running the
+**Build and publish p2 update site** workflow manually. Every push and
+pull request still builds the site and uploads it as the
+`p2-update-site` artifact.
+
+To test an unreleased change, download that artifact from the workflow
+run and add the extracted folder as a local repository.
 
 ### Manual Installation
 Run `mvn clean verify`. The generated p2 repository is available at
 `org.eclipse.egit.pullrequest.repository/target/repository`, and its archive is
 `org.eclipse.egit.pullrequest.repository/target/org.eclipse.egit.pullrequest.repository-7.6.0-SNAPSHOT.zip`.
+
+## Troubleshooting a connection
+
+All connection problems are written to the Eclipse log. There are three ways to
+read them:
+
+1. **Error Log view** — `Window > Show View > Other... > General > Error Log`.
+   Double-click an entry to see the full message and stack trace.
+2. **Log file** — `<workspace>/.metadata/.log`. The exact path is shown in the
+   *Diagnostics* section of `Preferences > Pull Requests`, and can be tailed
+   from a terminal:
+   ```bash
+   tail -f <workspace>/.metadata/.log
+   ```
+3. **Console output** — start Eclipse with `-consoleLog` to have the same
+   entries printed to the terminal that launched it.
+
+### Test Connection
+
+`Preferences > Pull Requests > Test Connection` runs the checks one by one and
+shows which one fails, for example:
+
+```
+OK       Configuration
+         Server https://bitbucket.example.com
+         Project key PROJ
+         Repository slug my-repo
+         Access token set, 40 characters
+OK       Server URL
+         Scheme https, host bitbucket.example.com, port 443
+OK       Network route
+         direct connection (no Eclipse proxy applies to this host)
+OK       Name resolution
+         bitbucket.example.com resolves to 10.1.2.3
+OK       TCP connection
+         bitbucket.example.com:443 accepts connections
+FAILED   REST API
+         GET https://bitbucket.example.com/rest/api/1.0/application-properties
+         answered HTTP 401. Bitbucket rejected the personal access token. ...
+```
+
+Use *Copy Report* to put the whole report on the clipboard. The same report is
+written to the log.
+
+### Common causes
+
+| Failing step | Usual cause |
+| --- | --- |
+| Name resolution | Wrong host name, or the VPN to the corporate network is not connected |
+| TCP connection | A firewall blocks the port, or requests must go through a proxy that Eclipse does not know about (`Preferences > General > Network Connections`) |
+| REST API returns HTTP 401 | The access token is invalid or expired |
+| REST API succeeds but Authentication fails | The token never reaches Bitbucket, usually because a reverse proxy strips the `Authorization` header |
+| REST API answers HTML | Bitbucket runs under a context path, for example `https://host/bitbucket` |
+| Repository step fails | The project key or repository slug is wrong; both are case sensitive |
+| TLS handshake failure | The server certificate is issued by an internal CA that the JRE running Eclipse does not trust |
+
+### Checking the same thing from a terminal
+
+The plug-in calls the Bitbucket Data Center REST API, so `curl` reproduces its
+requests. The `X-AUSERNAME` header in the first response tells you whether the
+token was accepted; without it the request was handled anonymously.
+
+```bash
+# Is the token accepted? Look for X-AUSERNAME in the response headers.
+curl -i -H "Authorization: Bearer $TOKEN" \
+  https://bitbucket.example.com/rest/api/1.0/application-properties
+
+# Do the project key and repository slug match?
+curl -i -H "Authorization: Bearer $TOKEN" \
+  https://bitbucket.example.com/rest/api/1.0/projects/PROJ/repos/my-repo
+
+# Can pull requests be read?
+curl -i -H "Authorization: Bearer $TOKEN" \
+  "https://bitbucket.example.com/rest/api/1.0/projects/PROJ/repos/my-repo/pull-requests?limit=1"
+```
+
+### Verbose logging
+
+Enable *Log every provider request to the Eclipse log (verbose)* in the
+*Diagnostics* section of the preference page to record every REST request and
+its status. Access tokens are never logged. Turn it off again afterwards, as it
+makes the log noisy.
 
 ## Architecture
 

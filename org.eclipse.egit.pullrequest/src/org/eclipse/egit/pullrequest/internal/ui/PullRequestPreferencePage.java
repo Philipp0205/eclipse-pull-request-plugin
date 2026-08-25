@@ -1,12 +1,18 @@
 package org.eclipse.egit.pullrequest.internal.ui;
 
-import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 
-import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
-import org.eclipse.egit.pullrequest.internal.client.PullRequestClientFactory;
+import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.Platform;
 import org.eclipse.egit.pullrequest.Activator;
 import org.eclipse.egit.pullrequest.internal.PRPreferences;
+import org.eclipse.egit.pullrequest.internal.PRText;
+import org.eclipse.egit.pullrequest.internal.client.ConnectionDiagnostics;
+import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
+import org.eclipse.egit.pullrequest.internal.client.PullRequestClientFactory;
+import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderType;
 import org.eclipse.jface.dialogs.MessageDialog;
+import org.eclipse.jface.dialogs.ProgressMonitorDialog;
 import org.eclipse.jface.layout.GridDataFactory;
 import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.jface.preference.PreferencePage;
@@ -59,6 +65,8 @@ public class PullRequestPreferencePage extends PreferencePage
 
 	private Button expandCommentsByDefaultCheckbox;
 
+	private Button verboseLoggingCheckbox;
+
 	/**
 	 * Creates a new {@link PullRequestPreferencePage}
 	 */
@@ -93,6 +101,9 @@ public class PullRequestPreferencePage extends PreferencePage
 
 		// Display options
 		createDisplayOptions(composite);
+
+		// Diagnostics
+		createDiagnosticsOptions(composite);
 
 		// Load values
 		loadValues();
@@ -287,6 +298,32 @@ public class PullRequestPreferencePage extends PreferencePage
 				.applyTo(expandCommentsByDefaultCheckbox);
 	}
 
+	private void createDiagnosticsOptions(Composite parent) {
+		Group group = new Group(parent, SWT.NONE);
+		group.setText(PRText.PreferencePage_DiagnosticsGroup);
+		group.setLayout(new GridLayout(2, false));
+		GridDataFactory.fillDefaults().grab(true, false).applyTo(group);
+
+		verboseLoggingCheckbox = new Button(group, SWT.CHECK);
+		verboseLoggingCheckbox
+				.setText(PRText.PreferencePage_VerboseLogging);
+		GridDataFactory.fillDefaults().span(2, 1).grab(true, false)
+				.applyTo(verboseLoggingCheckbox);
+
+		Label logFileLabel = new Label(group, SWT.NONE);
+		logFileLabel.setText(PRText.PreferencePage_LogFileLabel);
+
+		// Read-only but selectable, so that the path can be copied
+		Text logFileText = new Text(group, SWT.READ_ONLY | SWT.BORDER);
+		logFileText.setText(Platform.getLogFileLocation().toOSString());
+		GridDataFactory.fillDefaults().grab(true, false).applyTo(logFileText);
+
+		Label hint = new Label(group, SWT.WRAP);
+		hint.setText(PRText.PreferencePage_LogHint);
+		GridDataFactory.fillDefaults().span(2, 1).hint(400, SWT.DEFAULT)
+				.indent(0, 5).applyTo(hint);
+	}
+
 	private void updateProviderVisibility() {
 		int index = providerCombo.getSelectionIndex();
 		boolean isBitbucket = index == 0;
@@ -337,6 +374,8 @@ public class PullRequestPreferencePage extends PreferencePage
 				.getBoolean(PRPreferences.PULLREQUEST_ANIMATE_INLINE_COMMENTS));
 		expandCommentsByDefaultCheckbox.setSelection(store
 				.getBoolean(PRPreferences.PULLREQUEST_EXPAND_COMMENTS_BY_DEFAULT));
+		verboseLoggingCheckbox.setSelection(
+				store.getBoolean(PRPreferences.PULLREQUEST_VERBOSE_LOGGING));
 	}
 
 	@Override
@@ -356,6 +395,7 @@ public class PullRequestPreferencePage extends PreferencePage
 		showInlineCommentsCheckbox.setSelection(true);
 		animateInlineCommentsCheckbox.setSelection(true);
 		expandCommentsByDefaultCheckbox.setSelection(false);
+		verboseLoggingCheckbox.setSelection(false);
 
 		updateProviderVisibility();
 
@@ -398,74 +438,73 @@ public class PullRequestPreferencePage extends PreferencePage
 				animateInlineCommentsCheckbox.getSelection());
 		store.setValue(PRPreferences.PULLREQUEST_EXPAND_COMMENTS_BY_DEFAULT,
 				expandCommentsByDefaultCheckbox.getSelection());
+		store.setValue(PRPreferences.PULLREQUEST_VERBOSE_LOGGING,
+				verboseLoggingCheckbox.getSelection());
 
 		return super.performOk();
 	}
 
 	private void testBitbucketConnection() {
-		// Create temporary config
 		PullRequestClientFactory.ClientConfig config = new PullRequestClientFactory.ClientConfig();
-		config.providerType = org.eclipse.egit.pullrequest.internal.client.PullRequestProviderType.BITBUCKET;
+		config.providerType = PullRequestProviderType.BITBUCKET;
 		config.bitbucketServerUrl = bitbucketServerUrlText.getText().trim();
 		config.bitbucketProjectKey = bitbucketProjectKeyText.getText().trim();
 		config.bitbucketRepoSlug = bitbucketRepoSlugText.getText().trim();
 		config.bitbucketAccessToken = bitbucketTokenText.getText().trim();
 
-		IPullRequestClient client = PullRequestClientFactory
-				.createClient(config);
-		if (client == null) {
-			MessageDialog.openError(getShell(), "Connection Test Failed", //$NON-NLS-1$
-					"Please fill in all required fields."); //$NON-NLS-1$
-			return;
-		}
-
-		try {
-			boolean success = client.testConnection();
-			if (success) {
-				String username = client.getCurrentUser();
-				MessageDialog.openInformation(getShell(),
-						"Connection Test Successful", //$NON-NLS-1$
-						"Successfully connected to Bitbucket as: " + username); //$NON-NLS-1$
-			} else {
-				MessageDialog.openError(getShell(), "Connection Test Failed", //$NON-NLS-1$
-						"Failed to connect to Bitbucket. Please check your settings."); //$NON-NLS-1$
-			}
-		} catch (IOException e) {
-			MessageDialog.openError(getShell(), "Connection Test Failed", //$NON-NLS-1$
-					"Error: " + e.getMessage()); //$NON-NLS-1$
-		}
+		runConnectionTest(config);
 	}
 
 	private void testGitHubConnection() {
-		// Create temporary config
 		PullRequestClientFactory.ClientConfig config = new PullRequestClientFactory.ClientConfig();
-		config.providerType = org.eclipse.egit.pullrequest.internal.client.PullRequestProviderType.GITHUB;
+		config.providerType = PullRequestProviderType.GITHUB;
 		config.githubOwner = githubOwnerText.getText().trim();
 		config.githubRepo = githubRepoText.getText().trim();
 		config.githubAccessToken = githubTokenText.getText().trim();
 
+		runConnectionTest(config);
+	}
+
+	/**
+	 * Runs the step by step connection check for the given configuration and
+	 * shows the resulting report. The check runs in a progress dialog because a
+	 * server that does not answer keeps it busy for several seconds.
+	 *
+	 * @param config
+	 *            the configuration to check
+	 */
+	private void runConnectionTest(
+			PullRequestClientFactory.ClientConfig config) {
 		IPullRequestClient client = PullRequestClientFactory
 				.createClient(config);
 		if (client == null) {
-			MessageDialog.openError(getShell(), "Connection Test Failed", //$NON-NLS-1$
-					"Please fill in all required fields."); //$NON-NLS-1$
+			MessageDialog.openError(getShell(),
+					PRText.ConnectionTest_MissingFieldsTitle,
+					PRText.ConnectionTest_MissingFieldsMessage);
 			return;
 		}
 
+		ConnectionDiagnostics[] result = new ConnectionDiagnostics[1];
 		try {
-			boolean success = client.testConnection();
-			if (success) {
-				String username = client.getCurrentUser();
-				MessageDialog.openInformation(getShell(),
-						"Connection Test Successful", //$NON-NLS-1$
-						"Successfully connected to GitHub as: " + username); //$NON-NLS-1$
-			} else {
-				MessageDialog.openError(getShell(), "Connection Test Failed", //$NON-NLS-1$
-						"Failed to connect to GitHub. Please check your settings."); //$NON-NLS-1$
-			}
-		} catch (IOException e) {
-			MessageDialog.openError(getShell(), "Connection Test Failed", //$NON-NLS-1$
-					"Error: " + e.getMessage()); //$NON-NLS-1$
+			new ProgressMonitorDialog(getShell()).run(true, false,
+					monitor -> {
+						monitor.beginTask(PRText.ConnectionTest_TaskName,
+								IProgressMonitor.UNKNOWN);
+						try {
+							result[0] = client.diagnoseConnection();
+						} finally {
+							monitor.done();
+						}
+					});
+		} catch (InvocationTargetException e) {
+			Activator.logError("Connection test failed unexpectedly", //$NON-NLS-1$
+					e.getCause());
+			return;
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return;
 		}
+
+		new ConnectionTestDialog(getShell(), result[0]).open();
 	}
 }

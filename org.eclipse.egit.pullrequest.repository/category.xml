@@ -1,15 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <site>
    <feature
+         url="features/org.eclipse.egit.pullrequest.feature_7.6.0.qualifier.jar"
          id="org.eclipse.egit.pullrequest.feature"
-         version="0.0.0">
-      <category name="pull-request-review"/>
+         version="7.6.0.qualifier">
+      <category name="pullrequest"/>
    </feature>
-   <category-def
-         name="pull-request-review"
-         label="Pull Request Review">
+   <category-def name="pullrequest" label="Pull Request Review">
       <description>
-         Tools for reviewing GitHub and Bitbucket pull requests.
+         Review GitHub and Bitbucket pull requests from inside Eclipse.
       </description>
    </category-def>
 </site>
