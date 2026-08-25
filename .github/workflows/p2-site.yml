@@ -2,7 +2,7 @@ name: Build and publish p2 update site
 
 on:
   push:
-    branches: [main]
+    branches: [main, "cursor/**"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
