@@ -139,13 +139,13 @@ resolved earlier. If Eclipse reports that it cannot download an older
 version, select the site under **Preferences → Install/Update →
 Available Software Sites** and click **Reload**.
 
-Enable GitHub Pages for this repository (**Settings → Pages**, deploy
-from `main` at `/`) so the committed `p2/` directory is served.
+GitHub Pages serves this repository from `main` at `/`
+(**Settings → Pages**), which is what makes the committed `p2/`
+directory reachable.
 
-Releases are published by pushing a `v*` tag or by running the
-**Build and publish p2 update site** workflow manually. Every push and
-pull request still builds the site and uploads it as the
-`p2-update-site` artifact.
+Every merge to `main` republishes the site, and a `v*` tag or a manual
+run of **Build and publish p2 update site** does the same. Pull requests
+only build the site and upload it as the `p2-update-site` artifact.
 
 To test an unreleased change, download that artifact from the workflow
 run and add the extracted folder as a local repository.

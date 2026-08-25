@@ -4,6 +4,8 @@ on:
   push:
     branches: [main, "cursor/**"]
     tags: ["v*"]
+    # The publish job commits back to p2/; do not rebuild for that commit.
+    paths-ignore: ["p2/**"]
   pull_request:
   workflow_dispatch:
 
@@ -27,9 +29,7 @@ jobs:
           java-version: "21"
           cache: maven
       - name: Build and verify p2 repository
-        # Existing unit tests fail independently of packaging; the site
-        # must still be produced so it can be published.
-        run: ./mvnw --batch-mode clean verify -DskipTests
+        run: ./mvnw --batch-mode clean verify
       - name: Resolve feature installation
         run: >-
           ./mvnw --batch-mode --non-recursive
@@ -48,7 +48,10 @@ jobs:
   # GitHub Pages serves this repository's default branch, so the published
   # update site is the committed p2/ directory rather than a Pages artifact.
   publish:
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: >-
+      github.ref == 'refs/heads/main'
+      || startsWith(github.ref, 'refs/tags/v')
+      || github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
     permissions:
