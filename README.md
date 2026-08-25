@@ -23,7 +23,7 @@ eclipse-pullrequest-plugin/
 ├── .github/workflows/p2-site.yml              # Build and publish the p2 site
 ├── p2/                                        # Published update site (GitHub Pages)
 ├── org.eclipse.egit.pullrequest.target/       # Target platform definition
-│   └── pullrequest.target                     # Eclipse platform dependencies
+│   └── org.eclipse.egit.pullrequest.target.target  # Eclipse platform dependencies
 ├── org.eclipse.egit.pullrequest/              # Main plugin bundle
 │   ├── META-INF/MANIFEST.MF                   # OSGi bundle manifest
 │   ├── plugin.xml                             # Eclipse extension definitions

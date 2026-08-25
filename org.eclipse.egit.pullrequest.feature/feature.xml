@@ -19,7 +19,7 @@
    </license>
 
    <requires>
-      <import feature="org.eclipse.egit" version="6.0.0" match="compatible"/>
+      <import feature="org.eclipse.egit" version="6.0.0" match="greaterOrEqual"/>
    </requires>
 
    <plugin
