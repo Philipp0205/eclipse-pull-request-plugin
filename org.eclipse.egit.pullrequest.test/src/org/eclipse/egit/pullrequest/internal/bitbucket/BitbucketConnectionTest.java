@@ -205,6 +205,8 @@ public class BitbucketConnectionTest {
 		assertThat(report.toReport(), report.isSuccessful(), is(true));
 		assertThat(step(report, "Authentication").getDetail(), //$NON-NLS-1$
 				containsString("john.doe")); //$NON-NLS-1$
+		assertThat(server.requestedPaths(),
+				not(hasItem(containsString("/bitbucket")))); //$NON-NLS-1$
 	}
 
 	@Test
@@ -260,6 +262,43 @@ public class BitbucketConnectionTest {
 		assertThat(report.isSuccessful(), is(false));
 		assertThat(step(report, "Server URL").getDetail(), //$NON-NLS-1$
 				containsString("https://")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testDiagnosticsFindsAContextPath() {
+		server.on(PROPERTIES_PATH,
+				new Response(404, "Not Found", "404 Not Found nginx") //$NON-NLS-1$ //$NON-NLS-2$
+						.contentType("text/html")); //$NON-NLS-1$
+		server.on("/bitbucket" + PROPERTIES_PATH, //$NON-NLS-1$
+				new Response(200, "OK", //$NON-NLS-1$
+						"{\"version\":\"9.4.2\",\"displayName\":\"Bitbucket\"}")); //$NON-NLS-1$
+
+		ConnectionDiagnostics report = client().diagnoseConnection();
+
+		assertThat(report.isSuccessful(), is(false));
+		assertThat(step(report, "REST API").getOutcome(), //$NON-NLS-1$
+				equalTo(Outcome.FAILED));
+		assertThat(step(report, "REST API").getDetail(), //$NON-NLS-1$
+				containsString("/bitbucket")); //$NON-NLS-1$
+		assertThat(step(report, "Context path").getOutcome(), //$NON-NLS-1$
+				equalTo(Outcome.WARNING));
+		assertThat(step(report, "Context path").getDetail(), //$NON-NLS-1$
+				containsString(server.url() + "/bitbucket")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testDiagnosticsDoesNotProbeWhenUrlHasAPath() {
+		server.on("/stash" + PROPERTIES_PATH, //$NON-NLS-1$
+				new Response(200, "OK", "{\"version\":\"9.4.2\"}")); //$NON-NLS-1$ //$NON-NLS-2$
+
+		BitbucketClient client = new BitbucketClient(server.url() + "/stash", //$NON-NLS-1$
+				"SOC", "smartest", "secret-token"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		client.diagnoseConnection();
+
+		assertThat(server.requestedPaths(),
+				not(hasItem(containsString("/bitbucket")))); //$NON-NLS-1$
+		assertThat(server.requestedPaths(),
+				not(hasItem(containsString("/git/")))); //$NON-NLS-1$
 	}
 
 	@Test

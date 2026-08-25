@@ -208,7 +208,7 @@ written to the log.
 | TCP connection | A firewall blocks the port, or requests must go through a proxy that Eclipse does not know about (`Preferences > General > Network Connections`) |
 | REST API returns HTTP 401 | The access token is invalid or expired |
 | REST API succeeds but Authentication fails | The token never reaches Bitbucket, usually because a reverse proxy strips the `Authorization` header |
-| REST API answers HTML | Bitbucket runs under a context path, for example `https://host/bitbucket` |
+| REST API answers HTML | Bitbucket runs under a context path. Test Connection probes `/bitbucket`, `/stash` and `/git` and reports the working Server URL when it finds one |
 | Repository step fails | The project key or repository slug is wrong; both are case sensitive |
 | TLS handshake failure | The server certificate is issued by an internal CA that the JRE running Eclipse does not trust |
 

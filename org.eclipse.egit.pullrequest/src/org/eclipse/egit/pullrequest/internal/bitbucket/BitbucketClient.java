@@ -20,6 +20,7 @@ import java.net.URLDecoder;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 import java.util.StringJoiner;
 
 import javax.net.ssl.SSLException;
@@ -53,6 +54,14 @@ public class BitbucketClient implements IPullRequestClient {
 	private static final String USERNAME_HEADER = "X-AUSERNAME"; //$NON-NLS-1$
 
 	private static final String WHOAMI_PATH = "/plugins/servlet/applinks/whoami"; //$NON-NLS-1$
+
+	/**
+	 * Context paths Bitbucket Data Center is often deployed under when a
+	 * reverse proxy occupies the host root. Used only when the configured
+	 * server URL has no path of its own.
+	 */
+	private static final String[] CONTEXT_PATHS = { "/bitbucket", //$NON-NLS-1$
+			"/stash", "/git" }; //$NON-NLS-1$ //$NON-NLS-2$
 
 	private static final int DEFAULT_TIMEOUT = 30000; // 30 seconds
 
@@ -457,7 +466,7 @@ public class BitbucketClient implements IPullRequestClient {
 		if (!checkTcpConnection(report, uri.getHost(), port, proxy)) {
 			return logReport(report);
 		}
-		if (!checkRestApi(report)) {
+		if (!checkRestApi(report, uri)) {
 			return logReport(report);
 		}
 		checkRepository(report);
@@ -520,7 +529,7 @@ public class BitbucketClient implements IPullRequestClient {
 		}
 	}
 
-	private boolean checkRestApi(ConnectionDiagnostics report) {
+	private boolean checkRestApi(ConnectionDiagnostics report, URI uri) {
 		String url = serverUrl + API_BASE_PATH + "/application-properties"; //$NON-NLS-1$
 		Probe probe = probe(url);
 		if (probe.failure != null) {
@@ -529,11 +538,27 @@ public class BitbucketClient implements IPullRequestClient {
 			return false;
 		}
 		if (probe.status != HttpURLConnection.HTTP_OK) {
-			report.add("REST API", Outcome.FAILED, //$NON-NLS-1$
-					"GET " + url + " answered HTTP " + probe.status + ". " //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-							+ statusHint(probe.status, probe.contentType,
-									probe.location)
-							+ bodySuffix(probe.body));
+			StringBuilder detail = new StringBuilder();
+			detail.append("GET ").append(url) //$NON-NLS-1$
+					.append(" answered HTTP ").append(probe.status) //$NON-NLS-1$
+					.append(". ") //$NON-NLS-1$
+					.append(statusHint(probe.status, probe.contentType,
+							probe.location))
+					.append(bodySuffix(probe.body));
+			String found = looksLikeMissingContextPath(probe)
+					? findContextPath(uri)
+					: null;
+			if (found != null) {
+				detail.append(" Bitbucket answered at ").append(found) //$NON-NLS-1$
+						.append(". Set the Server URL to that address."); //$NON-NLS-1$
+			}
+			report.add("REST API", Outcome.FAILED, detail.toString()); //$NON-NLS-1$
+			if (found != null) {
+				report.add("Context path", Outcome.WARNING, //$NON-NLS-1$
+						"The REST API is served from " + found //$NON-NLS-1$
+								+ ". Change the Server URL preference to" //$NON-NLS-1$
+								+ " include that context path."); //$NON-NLS-1$
+			}
 			return false;
 		}
 		report.add("REST API", Outcome.OK, //$NON-NLS-1$
@@ -561,6 +586,64 @@ public class BitbucketClient implements IPullRequestClient {
 						+ " proxy in front of the server strips the" //$NON-NLS-1$
 						+ " Authorization header."); //$NON-NLS-1$
 		return true;
+	}
+
+	/**
+	 * A 404, especially an HTML one from a reverse proxy, usually means the
+	 * REST API is not mounted at the host root.
+	 *
+	 * @param probe
+	 *            the failed application-properties request
+	 * @return true if probing common context paths is worthwhile
+	 */
+	private static boolean looksLikeMissingContextPath(Probe probe) {
+		return probe.status == HttpURLConnection.HTTP_NOT_FOUND;
+	}
+
+	/**
+	 * Tries well-known Bitbucket context paths when the configured URL has
+	 * none.
+	 *
+	 * @param uri
+	 *            the configured server URL
+	 * @return the working base URL, or null if none answered as Bitbucket
+	 */
+	private String findContextPath(URI uri) {
+		String path = uri.getPath();
+		if (path != null && !path.isEmpty() && !"/".equals(path)) { //$NON-NLS-1$
+			return null;
+		}
+		for (String context : CONTEXT_PATHS) {
+			String candidate = serverUrl + context + API_BASE_PATH
+					+ "/application-properties"; //$NON-NLS-1$
+			Probe probe = probe(candidate);
+			if (isBitbucketApi(probe)) {
+				return serverUrl + context;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * @param probe
+	 *            a request to application-properties
+	 * @return true if the response came from Bitbucket rather than a proxy
+	 */
+	private static boolean isBitbucketApi(Probe probe) {
+		if (probe.failure != null) {
+			return false;
+		}
+		if (probe.status == HttpURLConnection.HTTP_OK) {
+			return isJson(probe.contentType)
+					|| probe.body.startsWith("{"); //$NON-NLS-1$
+		}
+		// A rejected token still proves the REST API lives here
+		return probe.status == HttpURLConnection.HTTP_UNAUTHORIZED;
+	}
+
+	private static boolean isJson(String contentType) {
+		return contentType != null && contentType.toLowerCase(Locale.ROOT)
+				.contains("json"); //$NON-NLS-1$
 	}
 
 	private void checkRepository(ConnectionDiagnostics report) {

@@ -147,7 +147,9 @@ public class PullRequestPreferencePage extends PreferencePage
 
 		bitbucketServerUrlText = new Text(group, SWT.BORDER);
 		bitbucketServerUrlText.setToolTipText(
-				"Bitbucket Data Center server URL (e.g., https://bitbucket.example.com)"); //$NON-NLS-1$
+				"Bitbucket Data Center base URL, including any context path" //$NON-NLS-1$
+						+ " (e.g. https://bitbucket.example.com or" //$NON-NLS-1$
+						+ " https://git.example.com/bitbucket)"); //$NON-NLS-1$
 		GridDataFactory.fillDefaults().grab(true, false)
 				.applyTo(bitbucketServerUrlText);
 
