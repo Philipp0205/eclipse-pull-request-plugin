@@ -78,6 +78,9 @@ jobs:
           rm -rf p2
           mkdir p2
           cp -a "$SITE"/. p2/
+          # Browsers get install instructions; p2 clients ignore index.html
+          # because they request content.jar and artifacts.jar by name.
+          cp site/p2-index.html p2/index.html
       - name: Commit the published update site
         run: |
           git config user.name 'github-actions[bot]'
