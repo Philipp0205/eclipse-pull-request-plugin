@@ -128,6 +128,8 @@ https://philipp0205.github.io/eclipse-pull-request-plugin/p2/
 
 The `/p2/` suffix is required. The GitHub Pages root serves a landing
 page, not p2 metadata, so Eclipse cannot resolve it as a repository.
+Opening the `/p2/` address in a browser shows these install
+instructions instead of p2 metadata, which Eclipse ignores.
 
 EGit must already be installed; the update site contains this plugin
 only, not the Eclipse platform.
