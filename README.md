@@ -71,8 +71,11 @@ Before building this plugin, you must build JGit and EGit to create their p2 rep
 ```
 
 The p2 update site is written to
-`org.eclipse.egit.pullrequest.repository/target/repository/`. Add that
-folder in Eclipse as a local repository to test a build before publishing.
+`org.eclipse.egit.pullrequest.repository/target/repository/`. That
+folder is a complete Equinox p2 repository (`p2.index`, `content.xml`,
+`artifacts.xml`, and the compressed `.jar` / `.xz` variants) plus a
+classic `site.xml`. Add the folder in Eclipse as a local repository to
+test a build before publishing.
 
 #### Build without tests:
 ```bash
