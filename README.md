@@ -10,7 +10,8 @@ This plugin was extracted from [EGit](https://www.eclipse.org/egit/) to provide 
 
 - View Pull Request overview with metadata (title, description, status, reviewers)
 - Browse changed files in a Pull Request
-- View inline comments and review threads
+- Browse changes with Eclipse Team Synchronize and EGit compare
+- View and manage inline comments in the stock compare editor
 - Navigate between review comments
 - Support for both GitHub and Bitbucket APIs
 - Integration with Eclipse Compare framework for side-by-side diff viewing
@@ -248,26 +249,20 @@ makes the log noisy.
 
 ```
 org.eclipse.egit.pullrequest/
-├── internal.model/              # Data models
-│   ├── BitbucketChange.java
-│   ├── PullRequestChangedFile.java
-│   ├── PullRequestComment.java
-│   └── PullRequestMetadata.java
+├── internal.model/              # Provider-agnostic PR models
 ├── internal.bitbucket/          # Bitbucket API client
-│   ├── BitbucketClient.java
-│   └── BitbucketJsonParser.java
 ├── internal.github/             # GitHub API client
-│   ├── GitHubClient.java
-│   └── GitHubJsonParser.java
-├── internal.pullrequestclient/  # Abstraction layer
-│   ├── IPullRequestClient.java
-│   └── PullRequestClientFactory.java
-└── internal.ui/                 # UI components
-    ├── PullRequestOverviewView.java
-    ├── PullRequestChangedFilesView.java
-    ├── InlineCommentTextMergeViewer.java
-    └── ... (15 more UI classes)
+├── internal.client/             # Provider abstraction
+└── internal.ui/                 # Eclipse and EGit integration
+    ├── PullRequestSynchronizeLauncher.java
+    ├── PullRequestOpenInCompareAction.java
+    ├── CompareCommentOverlayBinder.java
+    └── CommentOverlayInstaller.java
 ```
+
+Changed files and file comparisons use Eclipse Team Synchronize and EGit's
+stock compare inputs. The plugin decorates that flow with pull request comment
+counts, inline comment painting, and review actions.
 
 ### Provider Architecture
 

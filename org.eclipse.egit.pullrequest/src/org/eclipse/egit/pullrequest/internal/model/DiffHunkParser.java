@@ -106,6 +106,7 @@ public final class DiffHunkParser {
 		String[] lines = patch.split("\n"); //$NON-NLS-1$
 		int oldLine = 0;
 		int newLine = 0;
+		boolean inHunk = false;
 
 		for (String line : lines) {
 			if (line.startsWith("@@")) { //$NON-NLS-1$
@@ -115,7 +116,11 @@ public final class DiffHunkParser {
 				if (header != null) {
 					oldLine = header[0];
 					newLine = header[1];
+					inHunk = true;
 				}
+			} else if (!inHunk
+					|| line.startsWith("\\ No newline")) { //$NON-NLS-1$
+				// Ignore file headers and informational patch lines.
 			} else if (line.startsWith("-")) { //$NON-NLS-1$
 				// Removed line: valid on LEFT side only
 				leftLines.add(Integer.valueOf(oldLine));

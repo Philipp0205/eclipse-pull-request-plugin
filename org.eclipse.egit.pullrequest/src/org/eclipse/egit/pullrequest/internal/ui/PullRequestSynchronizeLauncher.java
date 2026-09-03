@@ -2,6 +2,7 @@ package org.eclipse.egit.pullrequest.internal.ui;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -325,8 +326,8 @@ public class PullRequestSynchronizeLauncher {
 	 * <p>
 	 * This method replicates the logic from
 	 * {@code GitModelSynchronize.launch()} but adds a custom action
-	 * contributor to override the default open action with one that opens
-	 * our {@link PullRequestCompareEditorInput} with inline comment overlays.
+	 * contributor that adds pull request comment overlays to the stock
+	 * Synchronize compare editor.
 	 * </p>
 	 *
 	 * @param repo
@@ -374,6 +375,8 @@ public class PullRequestSynchronizeLauncher {
 		String srcRev = baseCommit != null ? baseCommit.getName()
 				: "^tree"; //$NON-NLS-1$
 		String dstRev = headCommit.getName();
+
+		PullRequestContext.getInstance().setComparison(repo, srcRev, dstRev);
 
 		GitSynchronizeData data = new GitSynchronizeData(repo, srcRev, dstRev,
 				false);
@@ -525,10 +528,17 @@ public class PullRequestSynchronizeLauncher {
 		Display.getDefault().asyncExec(() -> {
 			org.eclipse.swt.widgets.Shell shell = PlatformUI.getWorkbench()
 					.getActiveWorkbenchWindow().getShell();
+			String description = RepositoryResolver
+					.describeRepository(pullRequest);
+			if (description == null || description.isEmpty()) {
+				description = PRText.PullRequestSynchronizeLauncher_UnknownRepository;
+			}
 			MessageDialog dialog = new MessageDialog(shell,
 					PRText.PullRequestSynchronizeLauncher_RepoNotFoundTitle,
 					null,
-					PRText.PullRequestSynchronizeLauncher_RepoNotFoundMessage,
+					MessageFormat.format(
+							PRText.PullRequestSynchronizeLauncher_RepoNotFoundMessage,
+							description),
 					MessageDialog.INFORMATION,
 					new String[] { PRText.CloneProject_Button,
 							PRText.CloneProject_Cancel },

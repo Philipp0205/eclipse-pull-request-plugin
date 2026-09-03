@@ -447,37 +447,6 @@ public class GitHubClient implements IPullRequestClient {
 	}
 
 	@Override
-	public byte[] getFileContent(@NonNull String commitId,
-			@NonNull String path) throws IOException {
-		// GitHub API for getting file content at specific commit
-		String apiPath = "/repos/" + owner + "/" + repo + "/contents/" + path //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-				+ "?ref=" + commitId; //$NON-NLS-1$
-
-		HttpURLConnection conn = null;
-		try {
-			conn = createConnection(apiPath, "GET"); //$NON-NLS-1$
-
-			int responseCode = conn.getResponseCode();
-			if (responseCode == 404) {
-				// File doesn't exist at this commit (likely deleted)
-				return new byte[0];
-			}
-			if (responseCode != 200) {
-				throw new IOException(
-						"Failed to get file content: HTTP " + responseCode); //$NON-NLS-1$
-			}
-
-			String json = readResponse(conn);
-			return GitHubJsonParser.parseFileContent(json);
-
-		} finally {
-			if (conn != null) {
-				conn.disconnect();
-			}
-		}
-	}
-
-	@Override
 	public @NonNull PullRequestComment addComment(long pullRequestId,
 			@NonNull String text, long parentCommentId)
 			throws IOException {

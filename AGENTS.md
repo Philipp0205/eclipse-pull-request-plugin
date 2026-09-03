@@ -151,6 +151,17 @@ eclipse-pullrequest-plugin/
 ├── pom.xml                                    # Parent POM
 ├── org.eclipse.egit.pullrequest.target/       # Target platform
 ├── org.eclipse.egit.pullrequest/              # Main plugin
+│   ├── src/org/eclipse/egit/pullrequest/
+│   │   ├── Activator.java                     # Bundle activator
+│   │   └── internal/
+│   │       ├── model/                         # Data models
+│   │       ├── client/                        # Abstraction layer
+│   │       ├── bitbucket/                     # Bitbucket provider
+│   │       ├── github/                        # GitHub provider
+│   │       └── ui/                            # Synchronize/compare integration
+│   ├── META-INF/MANIFEST.MF                   # OSGi bundle manifest
+│   ├── plugin.xml                             # Extension points
+│   └── plugin.properties                      # Externalized strings
 ├── org.eclipse.egit.pullrequest.test/         # Test fragment
 ├── org.eclipse.egit.pullrequest.feature/      # Installable feature
 └── org.eclipse.egit.pullrequest.repository/   # Update site / p2 repository
@@ -164,9 +175,15 @@ eclipse-pullrequest-plugin/
 - `client`: Provider abstraction and factory pattern
 - `bitbucket`: Bitbucket Data Center API client implementation
 - `github`: GitHub API client implementation with OAuth device flow
-- `ui`: Eclipse views, editors, perspectives, and UI components
+- `ui`: Eclipse views plus EGit Synchronize and compare comment integration
 
 ## Eclipse/OSGi Patterns
+
+### Pull Request Comparison
+- Use EGit's `GitModelSynchronizeParticipant` for changed files
+- Let the stock EGit compare action create file comparison inputs
+- Add pull request comments with `CompareCommentOverlayBinder` and
+  `CommentOverlayInstaller`; do not fetch file content through provider APIs
 
 ### Bundle Manifest (META-INF/MANIFEST.MF)
 - Declare all exported packages in `Export-Package`
