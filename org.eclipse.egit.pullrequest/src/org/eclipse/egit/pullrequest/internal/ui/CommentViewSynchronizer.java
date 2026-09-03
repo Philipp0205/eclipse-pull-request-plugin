@@ -13,14 +13,14 @@ import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
 import org.eclipse.swt.widgets.Display;
 
 /**
- * Synchronizes pull request comments across Eclipse views
- * (Changed Files View) and the compare editor.
+ * Synchronizes pull request comments across the Synchronize view and the
+ * compare editor.
  *
  * <p>
  * This class handles:
  * <ul>
  * <li>Fetching fresh comments from the API after an action</li>
- * <li>Refreshing the Changed Files View</li>
+ * <li>Refreshing Synchronize view decorators</li>
  * <li>Filtering comments for the current file</li>
  * </ul>
  * </p>
@@ -68,9 +68,9 @@ final class CommentViewSynchronizer {
 	}
 
 	/**
-	 * Refreshes all views after a comment action completes. Fetches
-	 * fresh comments from the API and updates the Changed Files View
-	 * and compare editor.
+	 * Refreshes all views after a comment action completes. Fetches fresh
+	 * comments from the API and updates Synchronize decorators and the compare
+	 * editor.
 	 *
 	 * @param pr
 	 *            the pull request

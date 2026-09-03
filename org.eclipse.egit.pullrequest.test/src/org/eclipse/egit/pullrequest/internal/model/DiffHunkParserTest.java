@@ -11,6 +11,7 @@
 package org.eclipse.egit.pullrequest.internal.model;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
@@ -43,6 +44,24 @@ public class DiffHunkParserTest {
 		assertThat(result, notNullValue());
 		assertThat(result.getLeftLines(), hasSize(0));
 		assertThat(result.getRightLines(), hasSize(0));
+	}
+
+	@Test
+	public void testIgnoresFullGitPatchHeaders() {
+		String patch = "diff --git a/file.txt b/file.txt\n" //$NON-NLS-1$
+				+ "index 1111111..2222222 100644\n" //$NON-NLS-1$
+				+ "--- a/file.txt\n" //$NON-NLS-1$
+				+ "+++ b/file.txt\n" //$NON-NLS-1$
+				+ "@@ -1,2 +1,2 @@\n" //$NON-NLS-1$
+				+ " context\n" //$NON-NLS-1$
+				+ "-old\n" //$NON-NLS-1$
+				+ "+new\n" //$NON-NLS-1$
+				+ "\\ No newline at end of file"; //$NON-NLS-1$
+
+		DiffLines result = DiffHunkParser.parse(patch);
+
+		assertThat(result.getLeftLines(), containsInAnyOrder(1, 2));
+		assertThat(result.getRightLines(), containsInAnyOrder(1, 2));
 	}
 
 	@Test

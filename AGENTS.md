@@ -158,7 +158,7 @@ eclipse-pullrequest-plugin/
 │   │       ├── client/                        # Abstraction layer (4 files)
 │   │       ├── bitbucket/                     # Bitbucket provider (2 files)
 │   │       ├── github/                        # GitHub provider (3 files)
-│   │       └── ui/                            # Eclipse UI (21 files)
+│   │       └── ui/                            # Synchronize/compare integration
 │   ├── META-INF/MANIFEST.MF                   # OSGi bundle manifest
 │   ├── plugin.xml                             # Extension points
 │   └── plugin.properties                      # Externalized strings
@@ -173,9 +173,15 @@ eclipse-pullrequest-plugin/
 - `client`: Provider abstraction and factory pattern
 - `bitbucket`: Bitbucket Data Center API client implementation
 - `github`: GitHub API client implementation with OAuth device flow
-- `ui`: Eclipse views, editors, perspectives, and UI components
+- `ui`: Eclipse views plus EGit Synchronize and compare comment integration
 
 ## Eclipse/OSGi Patterns
+
+### Pull Request Comparison
+- Use EGit's `GitModelSynchronizeParticipant` for changed files
+- Let the stock EGit compare action create file comparison inputs
+- Add pull request comments with `CompareCommentOverlayBinder` and
+  `CommentOverlayInstaller`; do not fetch file content through provider APIs
 
 ### Bundle Manifest (META-INF/MANIFEST.MF)
 - Declare all exported packages in `Export-Package`

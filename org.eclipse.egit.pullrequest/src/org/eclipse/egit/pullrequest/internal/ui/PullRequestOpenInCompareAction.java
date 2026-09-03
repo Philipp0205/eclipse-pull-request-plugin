@@ -1,33 +1,31 @@
 package org.eclipse.egit.pullrequest.internal.ui;
 
-import java.util.List;
-import java.util.stream.Collectors;
+import java.io.IOException;
 
-import org.eclipse.compare.CompareUI;
 import org.eclipse.compare.IResourceProvider;
-import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.Adapters;
-import org.eclipse.core.runtime.IPath;
+import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.Status;
+import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.egit.core.project.RepositoryMapping;
 import org.eclipse.egit.pullrequest.Activator;
-import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
+import org.eclipse.egit.pullrequest.internal.model.DiffHunkParser;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
-import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+import org.eclipse.egit.ui.internal.synchronize.model.GitModelBlob;
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jgit.lib.Repository;
-import org.eclipse.swt.widgets.Display;
 import org.eclipse.team.ui.synchronize.ISynchronizePageConfiguration;
 
 /**
- * Opens a compare editor with pull request comment overlay when files are
- * double-clicked in the Synchronize view.
+ * Adds pull request comment overlays after the stock Synchronize open action.
  * <p>
- * This action is registered as the {@code P_OPEN_ACTION} for the pull request
- * synchronize participant, overriding Eclipse's default compare editor to
- * inject inline comment overlays.
+ * EGit remains responsible for creating and opening its compare input. This
+ * action only resolves the selected path and binds comments to the resulting
+ * text merge viewer.
  */
 @SuppressWarnings("restriction")
 public class PullRequestOpenInCompareAction extends Action {
@@ -42,14 +40,17 @@ public class PullRequestOpenInCompareAction extends Action {
 	 * @param configuration     the synchronize page configuration
 	 * @param defaultOpenAction the default Eclipse open action (fallback)
 	 */
-	public PullRequestOpenInCompareAction(ISynchronizePageConfiguration configuration, Action defaultOpenAction) {
+	public PullRequestOpenInCompareAction(
+			ISynchronizePageConfiguration configuration,
+			Action defaultOpenAction) {
 		this.configuration = configuration;
 		this.defaultOpenAction = defaultOpenAction;
 	}
 
 	@Override
 	public void run() {
-		ISelection selection = configuration.getSite().getSelectionProvider().getSelection();
+		ISelection selection = configuration.getSite()
+				.getSelectionProvider().getSelection();
 		if (!(selection instanceof IStructuredSelection)) {
 			return;
 		}
@@ -59,27 +60,35 @@ public class PullRequestOpenInCompareAction extends Action {
 			return;
 		}
 
-		// Get the first selected element
-		Object element = sel.getFirstElement();
-
-		// Try to resolve to a file. The Synchronize view uses
-		// GitModelBlob elements (which implement IResourceProvider)
-		// rather than plain IResource objects in the Git ChangeSet
-		// model.
-		IFile file = resolveFile(element);
-		if (file == null) {
-			// Not a file - fall back to default action
-			if (defaultOpenAction != null) {
-				defaultOpenAction.run();
-			}
+		if (sel.size() != 1) {
+			runDefaultAction();
 			return;
 		}
 
-		// Open our custom compare editor with comments
-		openPullRequestCompareEditor(file);
+		Object element = sel.getFirstElement();
+		PullRequestContext context = PullRequestContext.getInstance();
+		PullRequest activePR = context.getActivePullRequest();
+		String filePath = resolveRepositoryRelativePath(element, context);
+		if (activePR == null || filePath == null) {
+			runDefaultAction();
+			return;
+		}
+
+		runDefaultAction();
+		scheduleOverlay(filePath, context);
 	}
 
-	private IFile resolveFile(Object element) {
+	private String resolveRepositoryRelativePath(Object element,
+			PullRequestContext context) {
+		Repository repository = context.getRepository();
+		if (element instanceof GitModelBlob && repository != null) {
+			GitModelBlob blob = (GitModelBlob) element;
+			if (blob.getLocation() != null) {
+				return Repository.stripWorkDir(repository.getWorkTree(),
+						blob.getLocation().toFile());
+			}
+		}
+
 		IResource resource = null;
 
 		if (element instanceof IResource) {
@@ -90,94 +99,48 @@ public class PullRequestOpenInCompareAction extends Action {
 			resource = Adapters.adapt(element, IResource.class);
 		}
 
-		if (resource instanceof IFile) {
-			return (IFile) resource;
+		if (resource != null) {
+			RepositoryMapping mapping = RepositoryMapping
+					.getMapping(resource);
+			if (mapping != null) {
+				return mapping.getRepoRelativePath(resource);
+			}
 		}
 		return null;
 	}
 
-	private void openPullRequestCompareEditor(IFile file) {
-		PullRequestContext context = PullRequestContext.getInstance();
-		PullRequest activePR = context.getActivePullRequest();
-
-		if (activePR == null) {
-			// No active PR - fall back to default
-			if (defaultOpenAction != null) {
-				defaultOpenAction.run();
+	private void scheduleOverlay(String filePath,
+			PullRequestContext context) {
+		Job job = new Job("Calculating pull request diff lines") { //$NON-NLS-1$
+			@Override
+			protected IStatus run(IProgressMonitor monitor) {
+				DiffHunkParser.DiffLines diffLines =
+						DiffHunkParser.parse(null);
+				try {
+					Repository repository = context.getRepository();
+					String base = context.getBaseRevision();
+					String head = context.getHeadRevision();
+					if (repository != null && base != null && head != null) {
+						diffLines = LocalDiffLineCalculator.calculate(
+								repository, base, head, filePath);
+					}
+				} catch (IOException e) {
+					Activator.logWarning(
+							"Failed to calculate local comment lines: " //$NON-NLS-1$
+									+ e.getMessage());
+				}
+				CompareCommentOverlayBinder.bindAfterOpen(filePath,
+						diffLines);
+				return Status.OK_STATUS;
 			}
-			return;
-		}
-
-		// Get repository-relative path
-		String repoRelativePath = getRepositoryRelativePath(file);
-		if (repoRelativePath == null) {
-			if (defaultOpenAction != null) {
-				defaultOpenAction.run();
-			}
-			return;
-		}
-
-		// Get the client from context
-		IPullRequestClient client = context.getClient();
-		if (client == null) {
-			Activator.logWarning("No PR client available for compare editor"); //$NON-NLS-1$
-			if (defaultOpenAction != null) {
-				defaultOpenAction.run();
-			}
-			return;
-		}
-
-		// Create a PullRequestChangedFile model
-		PullRequestChangedFile changedFile = createChangedFileFromResource(file, repoRelativePath);
-
-		// Filter comments for this file
-		List<PullRequestComment> allComments = context.getComments();
-		List<PullRequestComment> fileComments = allComments.stream()
-				.filter(comment -> repoRelativePath.equals(comment.getPath())).collect(Collectors.toList());
-
-		// Open the compare editor on the UI thread
-		Display.getDefault().asyncExec(() -> {
-			PullRequestCompareEditorInput input = new PullRequestCompareEditorInput(client, activePR, changedFile);
-			input.setComments(fileComments);
-			CompareUI.openCompareEditor(input, true);
-		});
+		};
+		job.setSystem(true);
+		job.schedule();
 	}
 
-	private String getRepositoryRelativePath(IFile file) {
-		RepositoryMapping mapping = RepositoryMapping.getMapping(file);
-		if (mapping == null) {
-			return null;
+	private void runDefaultAction() {
+		if (defaultOpenAction != null) {
+			defaultOpenAction.run();
 		}
-
-		Repository repository = mapping.getRepository();
-		if (repository == null) {
-			return null;
-		}
-
-		IPath workTreePath = new org.eclipse.core.runtime.Path(repository.getWorkTree().getAbsolutePath());
-		IPath filePath = file.getLocation();
-		if (filePath == null) {
-			return null;
-		}
-
-		if (workTreePath.isPrefixOf(filePath)) {
-			IPath relativePath = filePath.makeRelativeTo(workTreePath);
-			return relativePath.toPortableString();
-		}
-
-		return null;
-	}
-
-	private PullRequestChangedFile createChangedFileFromResource(IFile file, String repoRelativePath) {
-		PullRequestChangedFile changedFile = new PullRequestChangedFile(repoRelativePath, file.getName(),
-				PullRequestChangedFile.ChangeType.MODIFIED, null);
-
-		// Set the repository
-		RepositoryMapping mapping = RepositoryMapping.getMapping(file);
-		if (mapping != null) {
-			changedFile.setRepository(mapping.getRepository());
-		}
-
-		return changedFile;
 	}
 }
