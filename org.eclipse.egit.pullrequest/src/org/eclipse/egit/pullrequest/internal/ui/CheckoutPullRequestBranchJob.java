@@ -182,8 +182,10 @@ public class CheckoutPullRequestBranchJob extends Job {
 		try {
 			URIish forkUri = new URIish(cloneUrl);
 
-			String remoteName = forkRepo.getProject().getKey().toLowerCase()
-					+ "-" + forkRepo.getSlug(); //$NON-NLS-1$
+			String projectKey = key(forkRepo);
+			String remoteName = projectKey != null
+					? projectKey.toLowerCase() + "-" + forkRepo.getSlug() //$NON-NLS-1$
+					: forkRepo.getSlug();
 			RemoteConfig remoteConfig = new RemoteConfig(repo.getConfig(),
 					remoteName);
 			remoteConfig.addURI(forkUri);
