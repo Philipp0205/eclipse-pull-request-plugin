@@ -2,6 +2,7 @@ package org.eclipse.egit.pullrequest.internal.ui;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -525,10 +526,17 @@ public class PullRequestSynchronizeLauncher {
 		Display.getDefault().asyncExec(() -> {
 			org.eclipse.swt.widgets.Shell shell = PlatformUI.getWorkbench()
 					.getActiveWorkbenchWindow().getShell();
+			String description = RepositoryResolver
+					.describeRepository(pullRequest);
+			if (description == null || description.isEmpty()) {
+				description = PRText.PullRequestSynchronizeLauncher_UnknownRepository;
+			}
 			MessageDialog dialog = new MessageDialog(shell,
 					PRText.PullRequestSynchronizeLauncher_RepoNotFoundTitle,
 					null,
-					PRText.PullRequestSynchronizeLauncher_RepoNotFoundMessage,
+					MessageFormat.format(
+							PRText.PullRequestSynchronizeLauncher_RepoNotFoundMessage,
+							description),
 					MessageDialog.INFORMATION,
 					new String[] { PRText.CloneProject_Button,
 							PRText.CloneProject_Cancel },

@@ -1,7 +1,8 @@
 package org.eclipse.egit.pullrequest.internal.util;
 
 import java.io.IOException;
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.SubMonitor;
@@ -31,6 +32,8 @@ public class PullRequestRefResolver {
 	private final Repository repository;
 
 	private final PullRequest pullRequest;
+
+	private String remoteName;
 
 	/**
 	 * Creates a new ref resolver for the given repository and pull request.
@@ -98,12 +101,35 @@ public class PullRequestRefResolver {
 	 * Gets the base ref name (target branch) for the pull request.
 	 *
 	 * @return the base ref name in the form
-	 *         {@code refs/remotes/origin/<branch>}
+	 *         {@code refs/remotes/<remote>/<branch>}
 	 */
 	private String getBaseRefName() {
 		String targetBranch = pullRequest.getToRef().getDisplayId();
-		return Constants.R_REMOTES + Constants.DEFAULT_REMOTE_NAME + "/" //$NON-NLS-1$
+		return Constants.R_REMOTES + getRemoteName() + "/" //$NON-NLS-1$
 				+ targetBranch;
+	}
+
+	/**
+	 * Determines the remote that points at the pull request's target
+	 * repository.
+	 * <p>
+	 * Clones do not necessarily name that remote {@code origin}, for instance
+	 * when the repository was cloned from a mirror or added as a second
+	 * remote, so the remote URLs are matched against the pull request's
+	 * repository.
+	 *
+	 * @return the remote name, {@code origin} if no remote matches
+	 */
+	private String getRemoteName() {
+		if (remoteName == null) {
+			String matched = RepositoryResolver.findRemoteName(repository,
+					pullRequest.getToRef() != null
+							? pullRequest.getToRef().getRepository()
+							: null);
+			remoteName = matched != null ? matched
+					: Constants.DEFAULT_REMOTE_NAME;
+		}
+		return remoteName;
 	}
 
 	/**
@@ -127,7 +153,7 @@ public class PullRequestRefResolver {
 		} else {
 			// Fallback: try source branch ref
 			String sourceBranch = pullRequest.getFromRef().getDisplayId();
-			return Constants.R_REMOTES + Constants.DEFAULT_REMOTE_NAME + "/" //$NON-NLS-1$
+			return Constants.R_REMOTES + getRemoteName() + "/" //$NON-NLS-1$
 					+ sourceBranch;
 		}
 	}
@@ -148,42 +174,51 @@ public class PullRequestRefResolver {
 
 			long prId = pullRequest.getId();
 
-			RefSpec refSpec;
+			List<RefSpec> refSpecs = new ArrayList<>();
 			if ("GITHUB".equals(providerType)) { //$NON-NLS-1$
 				// GitHub: fetch +refs/pull/<id>/head:refs/pull/<id>/head
-				refSpec = new RefSpec(
+				refSpecs.add(new RefSpec(
 						"+refs/pull/" + prId + "/head:refs/pull/" + prId //$NON-NLS-1$ //$NON-NLS-2$
-								+ "/head"); //$NON-NLS-1$
+								+ "/head")); //$NON-NLS-1$
 			} else if ("BITBUCKET".equals(providerType)) { //$NON-NLS-1$
 				// Bitbucket: fetch
 				// +refs/pull-requests/<id>/from:refs/pull-requests/<id>/from
-				refSpec = new RefSpec(
+				refSpecs.add(new RefSpec(
 						"+refs/pull-requests/" + prId //$NON-NLS-1$
 								+ "/from:refs/pull-requests/" + prId //$NON-NLS-1$
-								+ "/from"); //$NON-NLS-1$
+								+ "/from")); //$NON-NLS-1$
 			} else {
 				return;
 			}
 
-			// Find origin remote
-			RemoteConfig originRemote = null;
+			String targetBranch = pullRequest.getToRef().getDisplayId();
+			if (targetBranch != null && !targetBranch.isEmpty()) {
+				// The target branch may never have been fetched into this
+				// clone, so update its remote-tracking ref as well.
+				refSpecs.add(new RefSpec("+" + Constants.R_HEADS //$NON-NLS-1$
+						+ targetBranch + ":" + Constants.R_REMOTES //$NON-NLS-1$
+						+ getRemoteName() + "/" + targetBranch)); //$NON-NLS-1$
+			}
+
+			RemoteConfig remoteConfig = null;
 			for (RemoteConfig remote : RemoteConfig
 					.getAllRemoteConfigs(repository.getConfig())) {
-				if (Constants.DEFAULT_REMOTE_NAME.equals(remote.getName())) {
-					originRemote = remote;
+				if (getRemoteName().equals(remote.getName())) {
+					remoteConfig = remote;
 					break;
 				}
 			}
 
-			if (originRemote == null || originRemote.getURIs().isEmpty()) {
-				Activator.logError(
-						"No origin remote found in repository", null); //$NON-NLS-1$
+			if (remoteConfig == null || remoteConfig.getURIs().isEmpty()) {
+				Activator.logError("No remote '" + getRemoteName() //$NON-NLS-1$
+						+ "' found in repository " //$NON-NLS-1$
+						+ repository.getDirectory(), null);
 				return;
 			}
 
-		URIish uri = originRemote.getURIs().get(0);
+		URIish uri = remoteConfig.getURIs().get(0);
 		FetchOperation fetchOp = new FetchOperation(repository, uri,
-				Collections.singletonList(refSpec), 30, false);
+				refSpecs, 30, false);
 		fetchOp.run(monitor);
 		} catch (Exception e) {
 			throw new IOException("Failed to fetch PR refs", e); //$NON-NLS-1$

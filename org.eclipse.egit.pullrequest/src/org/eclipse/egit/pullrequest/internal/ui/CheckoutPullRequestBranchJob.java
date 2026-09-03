@@ -16,6 +16,7 @@ import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.util.RepositoryResolver;
 import org.eclipse.egit.ui.internal.branch.BranchOperationUI;
 import org.eclipse.jface.dialogs.MessageDialog;
+import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.transport.RefSpec;
 import org.eclipse.jgit.transport.RemoteConfig;
@@ -103,35 +104,67 @@ public class CheckoutPullRequestBranchJob extends Job {
 	}
 
 	/**
-	 * Determines which remote to use for the pull request. For same-repo PRs,
-	 * uses "origin". For fork PRs, would need to add/find a fork remote.
+	 * Determines which remote to use for the pull request. The remote whose
+	 * URL points at the pull request's source repository is preferred; for
+	 * pull requests from a fork a remote is added when none exists yet.
 	 *
 	 * @param repo
 	 *            the repository
 	 * @return the remote name, or null if not found
 	 */
 	private String determineRemote(Repository repo) {
-		// Check if fromRef and toRef repositories match (same-repo PR)
 		PullRequest.Repository fromRepo = pullRequest.getFromRef()
 				.getRepository();
 		PullRequest.Repository toRepo = pullRequest.getToRef()
 				.getRepository();
 
-		boolean isSameRepo = fromRepo.getSlug().equals(toRepo.getSlug())
-				&& fromRepo.getProject().getKey()
-						.equals(toRepo.getProject().getKey());
+		boolean isSameRepo = isSameRepository(fromRepo, toRepo);
 
-		if (isSameRepo) {
-			// Same-repo PR: use origin
-			return "origin"; //$NON-NLS-1$
-		} else {
-			// Fork PR: need to add/find fork remote
-			return findOrAddForkRemote(repo, fromRepo);
+		String remoteName = RepositoryResolver.findRemoteName(repo,
+				isSameRepo ? toRepo : fromRepo);
+		if (remoteName != null) {
+			return remoteName;
 		}
+		if (isSameRepo) {
+			// The clone was matched by some other remote; origin is still the
+			// most likely name for the branch to be fetched from.
+			return Constants.DEFAULT_REMOTE_NAME;
+		}
+		return addForkRemote(repo, fromRepo);
 	}
 
 	/**
-	 * Finds or adds a remote for a fork repository
+	 * Compares two provider repositories by project key and slug, ignoring
+	 * case as the provider is not consistent about it.
+	 *
+	 * @param first
+	 *            the first repository
+	 * @param second
+	 *            the second repository
+	 * @return true if both denote the same hosted repository
+	 */
+	private static boolean isSameRepository(PullRequest.Repository first,
+			PullRequest.Repository second) {
+		if (first == null || second == null) {
+			return false;
+		}
+		return equalsIgnoreCase(first.getSlug(), second.getSlug())
+				&& equalsIgnoreCase(key(first), key(second));
+	}
+
+	private static String key(PullRequest.Repository repository) {
+		return repository.getProject() != null
+				? repository.getProject().getKey()
+				: null;
+	}
+
+	private static boolean equalsIgnoreCase(String first, String second) {
+		return first != null ? first.equalsIgnoreCase(second)
+				: second == null;
+	}
+
+	/**
+	 * Adds a remote for a fork repository
 	 *
 	 * @param repo
 	 *            the local repository
@@ -139,7 +172,7 @@ public class CheckoutPullRequestBranchJob extends Job {
 	 *            the fork repository
 	 * @return the remote name, or null if failed
 	 */
-	private String findOrAddForkRemote(Repository repo,
+	private String addForkRemote(Repository repo,
 			PullRequest.Repository forkRepo) {
 		String cloneUrl = forkRepo.getCloneUrl();
 		if (cloneUrl == null) {
@@ -149,17 +182,6 @@ public class CheckoutPullRequestBranchJob extends Job {
 		try {
 			URIish forkUri = new URIish(cloneUrl);
 
-			// Check if a remote with this URL already exists
-			for (RemoteConfig remote : RemoteConfig
-					.getAllRemoteConfigs(repo.getConfig())) {
-				for (URIish uri : remote.getURIs()) {
-					if (uri.toString().equals(forkUri.toString())) {
-						return remote.getName();
-					}
-				}
-			}
-
-			// Add new remote for fork
 			String remoteName = forkRepo.getProject().getKey().toLowerCase()
 					+ "-" + forkRepo.getSlug(); //$NON-NLS-1$
 			RemoteConfig remoteConfig = new RemoteConfig(repo.getConfig(),

@@ -266,6 +266,9 @@ public class PRText extends NLS {
 	public static String PullRequestSynchronizeLauncher_RepoNotFoundMessage;
 
 	/** */
+	public static String PullRequestSynchronizeLauncher_UnknownRepository;
+
+	/** */
 	public static String PullRequestSynchronizeLauncher_WarningTitle;
 
 	/** */
