@@ -25,6 +25,10 @@
   <packaging>eclipse-repository</packaging>
 
   <name>Pull Request Review Update Site</name>
+  <description>
+    Tycho p2 repository and Eclipse update site for the Pull Request
+    Review feature.
+  </description>
 
   <build>
     <plugins>
@@ -36,7 +40,30 @@
           <includeAllDependencies>false</includeAllDependencies>
           <createArtifactRepository>true</createArtifactRepository>
           <compress>true</compress>
+          <xzCompress>true</xzCompress>
+          <repositoryName>Pull Request Review</repositoryName>
         </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.5.0</version>
+        <executions>
+          <execution>
+            <id>finalize-p2-repository</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>bash</executable>
+              <arguments>
+                <argument>${project.basedir}/finalize-p2-repository.sh</argument>
+                <argument>${project.build.directory}/repository</argument>
+              </arguments>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

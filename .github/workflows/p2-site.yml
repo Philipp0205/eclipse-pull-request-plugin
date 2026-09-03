@@ -30,6 +30,17 @@ jobs:
           cache: maven
       - name: Build and verify p2 repository
         run: ./mvnw --batch-mode clean verify
+      - name: Assert p2 repository metadata
+        run: |
+          test -f "$P2_REPO/p2.index"
+          test -f "$P2_REPO/content.jar"
+          test -f "$P2_REPO/artifacts.jar"
+          test -f "$P2_REPO/content.xml"
+          test -f "$P2_REPO/artifacts.xml"
+          test -f "$P2_REPO/site.xml"
+          grep -q 'org.eclipse.egit.pullrequest.feature' "$P2_REPO/content.xml"
+          test -n "$(find "$P2_REPO/features" -name 'org.eclipse.egit.pullrequest.feature_*.jar')"
+          test -n "$(find "$P2_REPO/plugins" -name 'org.eclipse.egit.pullrequest_*.jar')"
       - name: Resolve feature installation
         run: >-
           ./mvnw --batch-mode --non-recursive
@@ -78,9 +89,12 @@ jobs:
           rm -rf p2
           mkdir p2
           cp -a "$SITE"/. p2/
+          org.eclipse.egit.pullrequest.repository/finalize-p2-repository.sh p2
           # Browsers get install instructions; p2 clients ignore index.html
-          # because they request content.jar and artifacts.jar by name.
-          cp site/p2-index.html p2/index.html
+          # because they request content.xml / content.jar by name.
+          test -f p2/p2.index
+          test -f p2/content.xml
+          test -f p2/artifacts.xml
       - name: Commit the published update site
         run: |
           git config user.name 'github-actions[bot]'

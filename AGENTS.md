@@ -150,22 +150,13 @@ ALL source files must include EPL-2.0 header:
 eclipse-pullrequest-plugin/
 ├── pom.xml                                    # Parent POM
 ├── org.eclipse.egit.pullrequest.target/       # Target platform
-├── org.eclipse.egit.pullrequest/              # Main plugin (37 Java files)
-│   ├── src/org/eclipse/egit/pullrequest/
-│   │   ├── Activator.java                     # Bundle activator
-│   │   └── internal/
-│   │       ├── model/                         # Data models (4 files)
-│   │       ├── client/                        # Abstraction layer (4 files)
-│   │       ├── bitbucket/                     # Bitbucket provider (2 files)
-│   │       ├── github/                        # GitHub provider (3 files)
-│   │       └── ui/                            # Eclipse UI (21 files)
-│   ├── META-INF/MANIFEST.MF                   # OSGi bundle manifest
-│   ├── plugin.xml                             # Extension points
-│   └── plugin.properties                      # Externalized strings
-└── org.eclipse.egit.pullrequest.test/         # Test fragment (2 test files)
-    └── src/org/eclipse/egit/pullrequest/internal/
-        ├── bitbucket/BitbucketClientTest.java
-        └── github/GitHubJsonParserTest.java
+├── org.eclipse.egit.pullrequest/              # Main plugin
+├── org.eclipse.egit.pullrequest.test/         # Test fragment
+├── org.eclipse.egit.pullrequest.feature/      # Installable feature
+└── org.eclipse.egit.pullrequest.repository/   # Update site / p2 repository
+    ├── category.xml                           # p2 categories (Tycho)
+    ├── site.xml                               # Classic Eclipse update site
+    └── finalize-p2-repository.sh              # p2.index + uncompressed XML
 ```
 
 ### Key Packages

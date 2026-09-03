@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <site>
-   <description url="https://github.com/Philipp0205/eclipse-pull-request-plugin">
+   <description url="https://philipp0205.github.io/eclipse-pull-request-plugin/p2/">
       Pull Request Review update site.
    </description>
-   <feature id="org.eclipse.egit.pullrequest.feature" version="0.0.0">
+   <feature
+         url="features/org.eclipse.egit.pullrequest.feature_7.6.0.qualifier.jar"
+         id="org.eclipse.egit.pullrequest.feature"
+         version="7.6.0.qualifier">
       <category name="pullrequest"/>
    </feature>
    <category-def name="pullrequest" label="Pull Request Review">
