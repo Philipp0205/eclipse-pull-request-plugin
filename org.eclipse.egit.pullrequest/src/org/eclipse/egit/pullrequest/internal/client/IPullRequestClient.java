@@ -92,21 +92,6 @@ public interface IPullRequestClient {
 			throws IOException;
 
 	/**
-	 * Retrieves raw file content at a specific commit
-	 *
-	 * @param commitId
-	 *            the commit SHA or branch name
-	 * @param path
-	 *            the file path
-	 * @return raw file content as byte array
-	 * @throws IOException
-	 *             if the request fails
-	 */
-	@NonNull
-	byte[] getFileContent(@NonNull String commitId, @NonNull String path)
-			throws IOException;
-
-	/**
 	 * Adds a comment to a pull request
 	 *
 	 * @param pullRequestId

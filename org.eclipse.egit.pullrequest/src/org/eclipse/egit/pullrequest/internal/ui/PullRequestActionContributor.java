@@ -11,8 +11,8 @@ import org.eclipse.ui.IWorkbenchSite;
 /**
  * Action contributor for the pull request synchronize participant.
  * <p>
- * This class overrides the default "open" action in the Synchronize view to
- * provide custom pull request compare editors with inline comment overlays.
+ * This class decorates the default "open" action in the Synchronize view so
+ * the stock EGit compare editor receives inline comment overlays.
  */
 @SuppressWarnings("restriction")
 public class PullRequestActionContributor extends SynchronizePageActionGroup {
@@ -21,8 +21,8 @@ public class PullRequestActionContributor extends SynchronizePageActionGroup {
 	public void initialize(ISynchronizePageConfiguration configuration) {
 		super.initialize(configuration);
 
-		// Override the default open action (double-click/Enter on files)
-		// to use our custom PR compare editor with comment overlay
+		// Decorate the default open action (double-click/Enter on files)
+		// with the pull request comment overlay.
 		IWorkbenchSite ws = configuration.getSite().getWorkbenchSite();
 		if (ws instanceof IViewSite) {
 			Object oldAction = configuration.getProperty(P_OPEN_ACTION);

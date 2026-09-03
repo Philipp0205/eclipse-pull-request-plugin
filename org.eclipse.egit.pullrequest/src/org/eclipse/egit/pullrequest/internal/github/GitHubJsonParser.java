@@ -3,7 +3,6 @@ package org.eclipse.egit.pullrequest.internal.github;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -712,30 +711,6 @@ class GitHubJsonParser {
 		}
 
 		return roots;
-	}
-
-	/**
-	 * Parses file content from GitHub API JSON response
-	 *
-	 * @param json
-	 *            the JSON response
-	 * @return the decoded file content
-	 */
-	static byte[] parseFileContent(String json) {
-		// GitHub returns file content base64-encoded in the "content" field
-		String content = extractString(json, "content"); //$NON-NLS-1$
-		if (content == null || content.isEmpty()) {
-			return new byte[0];
-		}
-
-		// Remove whitespace/newlines that GitHub adds
-		content = content.replaceAll("\\s+", ""); //$NON-NLS-1$ //$NON-NLS-2$
-
-		try {
-			return Base64.getDecoder().decode(content);
-		} catch (IllegalArgumentException e) {
-			return new byte[0];
-		}
 	}
 
 	/**

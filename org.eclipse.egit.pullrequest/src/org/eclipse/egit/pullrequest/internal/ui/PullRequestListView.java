@@ -608,8 +608,8 @@ public class PullRequestListView extends ViewPart {
 	}
 
 	/**
-	 * Loads a pull request by opening the PR Overview editor and
-	 * PullRequestChangedFilesView.
+	 * Loads a pull request by opening the PR Overview editor and launching the
+	 * Synchronize view.
 	 *
 	 * @param pr
 	 *            the pull request to load

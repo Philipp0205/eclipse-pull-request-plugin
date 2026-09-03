@@ -7,6 +7,7 @@ import java.util.List;
 import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
+import org.eclipse.jgit.lib.Repository;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.ui.PlatformUI;
 
@@ -30,6 +31,12 @@ public class PullRequestContext {
 	private IPullRequestClient client;
 
 	private List<PullRequestComment> comments = Collections.emptyList();
+
+	private Repository repository;
+
+	private String baseRevision;
+
+	private String headRevision;
 
 	private PullRequestContext() {
 		// Singleton
@@ -87,6 +94,50 @@ public class PullRequestContext {
 	 */
 	public IPullRequestClient getClient() {
 		return client;
+	}
+
+	/**
+	 * Sets the local Git comparison backing the active Synchronize view.
+	 *
+	 * @param repository
+	 *            the local repository
+	 * @param baseRevision
+	 *            the base revision
+	 * @param headRevision
+	 *            the head revision
+	 */
+	public void setComparison(Repository repository, String baseRevision,
+			String headRevision) {
+		this.repository = repository;
+		this.baseRevision = baseRevision;
+		this.headRevision = headRevision;
+	}
+
+	/**
+	 * Gets the repository backing the active Synchronize view.
+	 *
+	 * @return the repository, or {@code null}
+	 */
+	public Repository getRepository() {
+		return repository;
+	}
+
+	/**
+	 * Gets the base revision backing the active Synchronize view.
+	 *
+	 * @return the base revision, or {@code null}
+	 */
+	public String getBaseRevision() {
+		return baseRevision;
+	}
+
+	/**
+	 * Gets the head revision backing the active Synchronize view.
+	 *
+	 * @return the head revision, or {@code null}
+	 */
+	public String getHeadRevision() {
+		return headRevision;
 	}
 
 	/**

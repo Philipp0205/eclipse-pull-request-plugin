@@ -181,17 +181,6 @@ public class BitbucketClient implements IPullRequestClient {
 
 	@Override
 	@NonNull
-	public byte[] getFileContent(@NonNull String commitId, @NonNull String path)
-			throws IOException {
-		String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
-				+ "/repos/" + repositorySlug //$NON-NLS-1$
-				+ "/raw/" + path + "?at=" + commitId; //$NON-NLS-1$ //$NON-NLS-2$
-
-		return executeGetBinary(url);
-	}
-
-	@Override
-	@NonNull
 	public PullRequestComment addComment(long pullRequestId,
 			@NonNull String text, long parentCommentId) throws IOException {
 		String url = serverUrl + API_BASE_PATH + "/projects/" + projectKey //$NON-NLS-1$
@@ -1121,36 +1110,6 @@ public class BitbucketClient implements IPullRequestClient {
 				response.append(line);
 			}
 			return response.toString();
-		}
-	}
-
-	private byte[] executeGetBinary(String urlString) throws IOException {
-		HttpURLConnection connection = openConnection(urlString, "GET", "*/*"); //$NON-NLS-1$ //$NON-NLS-2$
-		try {
-			int status = responseCode(connection, "GET", urlString); //$NON-NLS-1$
-			if (status == HttpURLConnection.HTTP_OK) {
-				return readBinaryResponse(connection.getInputStream());
-			}
-			if (status == HttpURLConnection.HTTP_NOT_FOUND) {
-				// Files that were added or deleted do not exist on one side
-				Activator.logDebug("GET " + urlString //$NON-NLS-1$
-						+ " -> HTTP 404, treated as empty content"); //$NON-NLS-1$
-				return new byte[0];
-			}
-			throw httpFailure("GET", urlString, connection, status); //$NON-NLS-1$
-		} finally {
-			connection.disconnect();
-		}
-	}
-
-	private byte[] readBinaryResponse(InputStream inputStream)
-			throws IOException {
-		if (inputStream == null) {
-			return new byte[0];
-		}
-
-		try (InputStream in = inputStream) {
-			return in.readAllBytes();
 		}
 	}
 

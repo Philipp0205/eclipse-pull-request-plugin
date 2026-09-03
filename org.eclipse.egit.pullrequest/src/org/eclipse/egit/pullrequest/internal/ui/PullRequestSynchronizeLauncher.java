@@ -326,8 +326,8 @@ public class PullRequestSynchronizeLauncher {
 	 * <p>
 	 * This method replicates the logic from
 	 * {@code GitModelSynchronize.launch()} but adds a custom action
-	 * contributor to override the default open action with one that opens
-	 * our {@link PullRequestCompareEditorInput} with inline comment overlays.
+	 * contributor that adds pull request comment overlays to the stock
+	 * Synchronize compare editor.
 	 * </p>
 	 *
 	 * @param repo
@@ -375,6 +375,8 @@ public class PullRequestSynchronizeLauncher {
 		String srcRev = baseCommit != null ? baseCommit.getName()
 				: "^tree"; //$NON-NLS-1$
 		String dstRev = headCommit.getName();
+
+		PullRequestContext.getInstance().setComparison(repo, srcRev, dstRev);
 
 		GitSynchronizeData data = new GitSynchronizeData(repo, srcRev, dstRev,
 				false);
