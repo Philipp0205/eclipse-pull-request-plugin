@@ -64,6 +64,7 @@ public class LocalDiffLineCalculatorTest {
 		return git.commit().setMessage(message)
 				.setAuthor("Test User", "test@example.com") //$NON-NLS-1$ //$NON-NLS-2$
 				.setCommitter("Test User", "test@example.com") //$NON-NLS-1$ //$NON-NLS-2$
+				.setSign(false)
 				.call();
 	}
 }
