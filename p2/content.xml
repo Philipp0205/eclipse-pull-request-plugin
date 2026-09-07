@@ -2,10 +2,10 @@
 <?metadataRepository version='1.2.0'?>
 <repository name='' type='org.eclipse.equinox.internal.p2.metadata.repository.LocalMetadataRepository' version='1'>
   <properties size='2'>
-    <property name='p2.timestamp' value='1788779545836'/>
+    <property name='p2.timestamp' value='1788783215766'/>
     <property name='p2.compressed' value='true'/>
   </properties>
-  <units size='29'>
+  <units size='33'>
     <unit id='org.eclipse.egit.pullrequest' version='7.6.0.202608251240' generation='2'>
       <update id='org.eclipse.egit.pullrequest' range='[0.0.0,7.6.0.202608251240)' severity='0'/>
       <properties size='9'>
@@ -91,6 +91,45 @@
           </instruction>
         </instructions>
       </touchpointData>
+    </unit>
+    <unit id='org.eclipse.egit.pullrequest.feature.feature.group' version='7.6.0.202609071213' singleton='false'>
+      <update id='org.eclipse.egit.pullrequest.feature.feature.group' range='[0.0.0,7.6.0.202609071213)' severity='0'/>
+      <properties size='9'>
+        <property name='org.eclipse.equinox.p2.name' value='Pull Request Review'/>
+        <property name='org.eclipse.equinox.p2.description' value='Review GitHub and Bitbucket pull requests from inside Eclipse.'/>
+        <property name='org.eclipse.equinox.p2.description.url' value='https://github.com/Philipp0205/eclipse-pull-request-plugin'/>
+        <property name='org.eclipse.equinox.p2.provider' value='Eclipse EGit'/>
+        <property name='org.eclipse.equinox.p2.type.group' value='true'/>
+        <property name='maven-groupId' value='org.eclipse.egit.pullrequest'/>
+        <property name='maven-artifactId' value='org.eclipse.egit.pullrequest.feature'/>
+        <property name='maven-version' value='7.6.0-SNAPSHOT'/>
+        <property name='maven-type' value='eclipse-feature'/>
+      </properties>
+      <provides size='1'>
+        <provided namespace='org.eclipse.equinox.p2.iu' name='org.eclipse.egit.pullrequest.feature.feature.group' version='7.6.0.202609071213'/>
+      </provides>
+      <requires size='3'>
+        <required namespace='org.eclipse.equinox.p2.iu' name='org.eclipse.egit.feature.group' range='6.0.0'>
+          <filter>
+            (!(org.eclipse.equinox.p2.exclude.import=true))
+          </filter>
+        </required>
+        <required namespace='org.eclipse.equinox.p2.iu' name='org.eclipse.egit.pullrequest' range='[7.6.0.202609071213,7.6.0.202609071213]'/>
+        <required namespace='org.eclipse.equinox.p2.iu' name='org.eclipse.egit.pullrequest.feature.feature.jar' range='[7.6.0.202609071213,7.6.0.202609071213]'>
+          <filter>
+            (org.eclipse.update.install.features=true)
+          </filter>
+        </required>
+      </requires>
+      <touchpoint id='null' version='0.0.0'/>
+      <licenses size='1'>
+        <license uri='https://www.eclipse.org/legal/epl-2.0/' url='https://www.eclipse.org/legal/epl-2.0/'>
+          This feature is provided under the Eclipse Public License 2.0.&#xA;      https://www.eclipse.org/legal/epl-2.0/
+        </license>
+      </licenses>
+      <copyright>
+        Copyright (C) 2026, Philipp Hoenisch and others.
+      </copyright>
     </unit>
     <unit id='org.eclipse.egit.pullrequest.feature.feature.group' version='7.6.0.202609071112' singleton='false'>
       <update id='org.eclipse.egit.pullrequest.feature.feature.group' range='[0.0.0,7.6.0.202609071112)' severity='0'/>
@@ -636,6 +675,95 @@
       </requires>
       <touchpoint id='null' version='0.0.0'/>
     </unit>
+    <unit id='org.eclipse.egit.pullrequest' version='7.6.0.202609071213' generation='2'>
+      <update id='org.eclipse.egit.pullrequest' range='[0.0.0,7.6.0.202609071213)' severity='0'/>
+      <properties size='9'>
+        <property name='df_LT.Bundle-Name' value='Pull Request Review Support'/>
+        <property name='df_LT.Bundle-Vendor' value='Eclipse EGit'/>
+        <property name='org.eclipse.equinox.p2.name' value='%Bundle-Name'/>
+        <property name='org.eclipse.equinox.p2.provider' value='%Bundle-Vendor'/>
+        <property name='org.eclipse.equinox.p2.bundle.localization' value='plugin'/>
+        <property name='maven-groupId' value='org.eclipse.egit.pullrequest'/>
+        <property name='maven-artifactId' value='org.eclipse.egit.pullrequest'/>
+        <property name='maven-version' value='7.6.0-SNAPSHOT'/>
+        <property name='maven-type' value='eclipse-plugin'/>
+      </properties>
+      <provides size='5'>
+        <provided namespace='org.eclipse.equinox.p2.iu' name='org.eclipse.egit.pullrequest' version='7.6.0.202609071213'/>
+        <provided namespace='osgi.bundle' name='org.eclipse.egit.pullrequest' version='7.6.0.202609071213'/>
+        <provided namespace='osgi.identity' name='org.eclipse.egit.pullrequest' version='7.6.0.202609071213'>
+          <properties size='1'>
+            <property name='type' value='osgi.bundle'/>
+          </properties>
+        </provided>
+        <provided namespace='org.eclipse.equinox.p2.eclipse.type' name='bundle' version='1.0.0'/>
+        <provided namespace='org.eclipse.equinox.p2.localization' name='df_LT' version='1.0.0'/>
+      </provides>
+      <requires size='43'>
+        <required namespace='osgi.bundle' name='org.eclipse.core.runtime' range='[3.20.0,4.0.0)'/>
+        <required namespace='osgi.bundle' name='org.eclipse.core.resources' range='[3.13.0,4.0.0)'/>
+        <required namespace='osgi.bundle' name='org.eclipse.core.net' range='[1.4.0,2.0.0)'/>
+        <required namespace='osgi.bundle' name='org.eclipse.egit.core' range='[6.0.0,8.0.0)'/>
+        <required namespace='osgi.bundle' name='org.eclipse.egit.ui' range='[6.0.0,8.0.0)'/>
+        <required namespace='osgi.bundle' name='org.eclipse.ui' range='[3.100.0,4.0.0)'/>
+        <required namespace='osgi.bundle' name='org.eclipse.ui.workbench' range='[3.100.0,4.0.0)'/>
+        <required namespace='osgi.bundle' name='org.eclipse.jface' range='[3.10.0,4.0.0)'/>
+        <required namespace='osgi.bundle' name='org.eclipse.compare' range='[3.5.0,4.0.0)'/>
+        <required namespace='osgi.bundle' name='org.eclipse.ui.forms' range='[3.5.0,4.0.0)'/>
+        <required namespace='osgi.bundle' name='org.eclipse.jface.text' range='[3.10.0,4.0.0)'/>
+        <required namespace='osgi.bundle' name='org.eclipse.ui.editors' range='[3.10.0,4.0.0)'/>
+        <required namespace='osgi.bundle' name='org.eclipse.ui.ide' range='[3.10.0,4.0.0)'/>
+        <required namespace='osgi.bundle' name='org.eclipse.team.core' range='[3.8.0,4.0.0)'/>
+        <required namespace='osgi.bundle' name='org.eclipse.team.ui' range='[3.8.0,4.0.0)'/>
+        <required namespace='osgi.bundle' name='org.eclipse.jdt.core' range='[3.40.0,4.0.0)' optional='true' greedy='false'/>
+        <required namespace='osgi.bundle' name='org.eclipse.jdt.ui' range='[3.33.0,4.0.0)' optional='true' greedy='false'/>
+        <required namespace='java.package' name='org.eclipse.core.resources.mapping' range='0.0.0'/>
+        <required namespace='java.package' name='org.eclipse.egit.core' range='[6.0.0,8.0.0)'/>
+        <required namespace='java.package' name='org.eclipse.egit.core.internal.util' range='[6.0.0,8.0.0)'/>
+        <required namespace='java.package' name='org.eclipse.egit.core.op' range='[6.0.0,8.0.0)'/>
+        <required namespace='java.package' name='org.eclipse.egit.core.synchronize' range='[6.0.0,8.0.0)'/>
+        <required namespace='java.package' name='org.eclipse.egit.core.synchronize.dto' range='[6.0.0,8.0.0)'/>
+        <required namespace='java.package' name='org.eclipse.egit.ui' range='[6.0.0,8.0.0)'/>
+        <required namespace='java.package' name='org.eclipse.egit.ui.internal' range='[6.0.0,8.0.0)'/>
+        <required namespace='java.package' name='org.eclipse.egit.ui.internal.branch' range='[6.0.0,8.0.0)'/>
+        <required namespace='java.package' name='org.eclipse.egit.ui.internal.commit' range='[6.0.0,8.0.0)'/>
+        <required namespace='java.package' name='org.eclipse.egit.ui.internal.synchronize' range='[6.0.0,8.0.0)'/>
+        <required namespace='java.package' name='org.eclipse.egit.ui.internal.synchronize.model' range='[6.0.0,8.0.0)'/>
+        <required namespace='java.package' name='org.eclipse.jgit.annotations' range='[6.0.0,8.0.0)'/>
+        <required namespace='java.package' name='org.eclipse.jgit.api' range='[6.0.0,8.0.0)'/>
+        <required namespace='java.package' name='org.eclipse.jgit.diff' range='[6.0.0,8.0.0)'/>
+        <required namespace='java.package' name='org.eclipse.jgit.lib' range='[6.0.0,8.0.0)'/>
+        <required namespace='java.package' name='org.eclipse.jgit.revwalk' range='[6.0.0,8.0.0)'/>
+        <required namespace='java.package' name='org.eclipse.jgit.transport' range='[6.0.0,8.0.0)'/>
+        <required namespace='java.package' name='org.eclipse.jgit.treewalk' range='[6.0.0,8.0.0)'/>
+        <required namespace='java.package' name='org.eclipse.team.core.subscribers' range='0.0.0'/>
+        <required namespace='java.package' name='org.eclipse.team.ui.synchronize' range='0.0.0'/>
+        <required namespace='java.package' name='org.eclipse.ui' range='0.0.0'/>
+        <required namespace='java.package' name='org.eclipse.ui.forms.widgets' range='0.0.0'/>
+        <required namespace='java.package' name='org.eclipse.ui.model' range='0.0.0'/>
+        <requiredProperties namespace='osgi.ee' match='(&amp;(osgi.ee=JavaSE)(version=21))'>
+          <description>
+            org.eclipse.egit.pullrequest
+          </description>
+        </requiredProperties>
+        <required namespace='org.eclipse.equinox.p2.iu' name='org.eclipse.egit.pullrequest.source' range='[7.6.0.202609071213,7.6.0.202609071213]' optional='true'>
+          <filter>
+            (org.eclipse.update.install.sources=true)
+          </filter>
+        </required>
+      </requires>
+      <artifacts size='1'>
+        <artifact classifier='osgi.bundle' id='org.eclipse.egit.pullrequest' version='7.6.0.202609071213'/>
+      </artifacts>
+      <touchpoint id='org.eclipse.equinox.p2.osgi' version='1.0.0'/>
+      <touchpointData size='1'>
+        <instructions size='1'>
+          <instruction key='manifest'>
+            Bundle-SymbolicName: org.eclipse.egit.pullrequest;singleton:=true&#xA;Bundle-Version: 7.6.0.202609071213
+          </instruction>
+        </instructions>
+      </touchpointData>
+    </unit>
     <unit id='org.eclipse.egit.pullrequest.feature.feature.group' version='7.6.0.202609031401' singleton='false'>
       <update id='org.eclipse.egit.pullrequest.feature.feature.group' range='[0.0.0,7.6.0.202609031401)' severity='0'/>
       <properties size='9'>
@@ -992,6 +1120,20 @@
       <copyright>
         Copyright (C) 2026, Philipp Hoenisch and others.
       </copyright>
+    </unit>
+    <unit id='202609071213.pullrequest' version='1.0.0.7D7A-cLV7c67737E3K3G5759'>
+      <properties size='3'>
+        <property name='org.eclipse.equinox.p2.name' value='Pull Request Review'/>
+        <property name='org.eclipse.equinox.p2.description' value='Review GitHub and Bitbucket pull requests from inside Eclipse.'/>
+        <property name='org.eclipse.equinox.p2.type.category' value='true'/>
+      </properties>
+      <provides size='1'>
+        <provided namespace='org.eclipse.equinox.p2.iu' name='202609071213.pullrequest' version='1.0.0.7D7A-cLV7c67737E3K3G5759'/>
+      </provides>
+      <requires size='1'>
+        <required namespace='org.eclipse.equinox.p2.iu' name='org.eclipse.egit.pullrequest.feature.feature.group' range='[7.6.0.202609071213,7.6.0.202609071213]'/>
+      </requires>
+      <touchpoint id='null' version='0.0.0'/>
     </unit>
     <unit id='org.eclipse.egit.pullrequest.feature.feature.jar' version='7.6.0.202608251444'>
       <properties size='8'>
@@ -1429,6 +1571,45 @@
       </filter>
       <artifacts size='1'>
         <artifact classifier='org.eclipse.update.feature' id='org.eclipse.egit.pullrequest.feature' version='7.6.0.202609071112'/>
+      </artifacts>
+      <touchpoint id='org.eclipse.equinox.p2.osgi' version='1.0.0'/>
+      <touchpointData size='1'>
+        <instructions size='1'>
+          <instruction key='zipped'>
+            true
+          </instruction>
+        </instructions>
+      </touchpointData>
+      <licenses size='1'>
+        <license uri='https://www.eclipse.org/legal/epl-2.0/' url='https://www.eclipse.org/legal/epl-2.0/'>
+          This feature is provided under the Eclipse Public License 2.0.&#xA;      https://www.eclipse.org/legal/epl-2.0/
+        </license>
+      </licenses>
+      <copyright>
+        Copyright (C) 2026, Philipp Hoenisch and others.
+      </copyright>
+    </unit>
+    <unit id='org.eclipse.egit.pullrequest.feature.feature.jar' version='7.6.0.202609071213'>
+      <properties size='8'>
+        <property name='org.eclipse.equinox.p2.name' value='Pull Request Review'/>
+        <property name='org.eclipse.equinox.p2.description' value='Review GitHub and Bitbucket pull requests from inside Eclipse.'/>
+        <property name='org.eclipse.equinox.p2.description.url' value='https://github.com/Philipp0205/eclipse-pull-request-plugin'/>
+        <property name='org.eclipse.equinox.p2.provider' value='Eclipse EGit'/>
+        <property name='maven-groupId' value='org.eclipse.egit.pullrequest'/>
+        <property name='maven-artifactId' value='org.eclipse.egit.pullrequest.feature'/>
+        <property name='maven-version' value='7.6.0-SNAPSHOT'/>
+        <property name='maven-type' value='eclipse-feature'/>
+      </properties>
+      <provides size='3'>
+        <provided namespace='org.eclipse.equinox.p2.iu' name='org.eclipse.egit.pullrequest.feature.feature.jar' version='7.6.0.202609071213'/>
+        <provided namespace='org.eclipse.equinox.p2.eclipse.type' name='feature' version='1.0.0'/>
+        <provided namespace='org.eclipse.update.feature' name='org.eclipse.egit.pullrequest.feature' version='7.6.0.202609071213'/>
+      </provides>
+      <filter>
+        (org.eclipse.update.install.features=true)
+      </filter>
+      <artifacts size='1'>
+        <artifact classifier='org.eclipse.update.feature' id='org.eclipse.egit.pullrequest.feature' version='7.6.0.202609071213'/>
       </artifacts>
       <touchpoint id='org.eclipse.equinox.p2.osgi' version='1.0.0'/>
       <touchpointData size='1'>
