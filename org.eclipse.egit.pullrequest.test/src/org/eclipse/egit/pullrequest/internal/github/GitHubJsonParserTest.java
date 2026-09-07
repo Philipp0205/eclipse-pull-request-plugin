@@ -30,6 +30,30 @@ import org.junit.Test;
 public class GitHubJsonParserTest {
 
 	@Test
+	public void testParseOrganizationLogins() {
+		String json = "[{\"login\":\"acme\",\"id\":1}," //$NON-NLS-1$
+				+ "{\"login\":\"friends\",\"id\":2}]"; //$NON-NLS-1$
+
+		assertThat(GitHubJsonParser.parseLogins(json), hasSize(2));
+		assertThat(GitHubJsonParser.parseLogins(json).get(0),
+				equalTo("acme")); //$NON-NLS-1$
+		assertThat(GitHubJsonParser.parseLogins(json).get(1),
+				equalTo("friends")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseRepositoryFullNamesIgnoresNestedOwner() {
+		String json = "[{\"full_name\":\"bob/tool\",\"owner\":{\"login\":\"bob\"}}," //$NON-NLS-1$
+				+ "{\"full_name\":\"acme/app\",\"owner\":{\"login\":\"acme\"}}]"; //$NON-NLS-1$
+
+		List<String> names = GitHubJsonParser.parseRepositoryFullNames(json);
+
+		assertThat(names, hasSize(2));
+		assertThat(names.get(0), equalTo("bob/tool")); //$NON-NLS-1$
+		assertThat(names.get(1), equalTo("acme/app")); //$NON-NLS-1$
+	}
+
+	@Test
 	public void testParseInlineComment() {
 		String json = "{\"id\":123,\"body\":\"Fix this issue\",\"created_at\":\"2026-01-15T10:00:00Z\"," //$NON-NLS-1$
 				+ "\"updated_at\":\"2026-01-15T10:05:00Z\",\"path\":\"src/Main.java\"," //$NON-NLS-1$

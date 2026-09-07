@@ -10,6 +10,8 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -64,8 +66,8 @@ public class GitHubClient implements IPullRequestClient {
 	}
 
 	/**
-	 * Creates a token-scoped GitHub client that lists pull requests authored by
-	 * the authenticated user across all repositories visible to the token.
+	 * Creates a token-scoped GitHub client that lists pull requests from every
+	 * repository the authenticated user owns or belongs to.
 	 *
 	 * @param token
 	 *            the GitHub access token
@@ -195,26 +197,38 @@ public class GitHubClient implements IPullRequestClient {
 
 	private List<PullRequest> getUserPullRequests(String state,
 			String authorUsername, int limit, int start) throws IOException {
-		String author = authorUsername == null || authorUsername.isBlank()
-				? "@me" : authorUsername; //$NON-NLS-1$
-		StringBuilder query = new StringBuilder("is:pr author:") //$NON-NLS-1$
-				.append(author);
-		if ("MERGED".equalsIgnoreCase(state)) { //$NON-NLS-1$
-			query.append(" is:merged"); //$NON-NLS-1$
-		} else if ("DECLINED".equalsIgnoreCase(state)) { //$NON-NLS-1$
-			query.append(" is:closed is:unmerged"); //$NON-NLS-1$
-		} else if (state == null || !"ALL".equalsIgnoreCase(state)) { //$NON-NLS-1$
-			query.append(" is:open"); //$NON-NLS-1$
+		List<String> queries = GitHubSearchQueries
+				.accessiblePullRequestQueries(getCurrentUser(),
+						listOrganizationLogins(),
+						listCollaboratorRepositories(), state,
+						authorUsername);
+
+		int needed = Math.max(1, start + Math.max(1, limit));
+		int pageSize = Math.min(100, needed);
+		LinkedHashSet<String> pullRequestPaths = new LinkedHashSet<>();
+		for (String query : queries) {
+			int collected = 0;
+			int page = 1;
+			while (collected < needed) {
+				String path = "/search/issues?q=" //$NON-NLS-1$
+						+ URLEncoder.encode(query, StandardCharsets.UTF_8)
+						+ "&per_page=" + pageSize //$NON-NLS-1$
+						+ "&page=" + page //$NON-NLS-1$
+						+ "&sort=updated&order=desc"; //$NON-NLS-1$
+				List<String> pagePaths = GitHubJsonParser
+						.parseSearchPullRequestPaths(doGet(path));
+				if (pagePaths.isEmpty()) {
+					break;
+				}
+				pullRequestPaths.addAll(pagePaths);
+				collected += pagePaths.size();
+				if (pagePaths.size() < pageSize) {
+					break;
+				}
+				page++;
+			}
 		}
 
-		int pageSize = Math.max(1, Math.min(limit, 100));
-		int page = start / pageSize + 1;
-		String path = "/search/issues?q=" //$NON-NLS-1$
-				+ URLEncoder.encode(query.toString(), StandardCharsets.UTF_8)
-				+ "&per_page=" + pageSize + "&page=" + page; //$NON-NLS-1$ //$NON-NLS-2$
-		String searchResult = doGet(path);
-		List<String> pullRequestPaths = GitHubJsonParser
-				.parseSearchPullRequestPaths(searchResult);
 		List<PullRequest> result = new ArrayList<>();
 		for (String pullRequestPath : pullRequestPaths) {
 			PullRequest pullRequest = GitHubJsonParser
@@ -223,7 +237,28 @@ public class GitHubClient implements IPullRequestClient {
 				result.add(pullRequest);
 			}
 		}
-		return result;
+		result.sort(Comparator.comparing(PullRequest::getUpdatedDate,
+				Comparator.nullsLast(Comparator.reverseOrder())));
+		int from = Math.min(Math.max(0, start), result.size());
+		int to = Math.min(from + Math.max(0, limit), result.size());
+		return new ArrayList<>(result.subList(from, to));
+	}
+
+	private List<String> listOrganizationLogins() throws IOException {
+		List<String> logins = new ArrayList<>();
+		for (String page : doGetAllPages("/user/orgs?per_page=100")) { //$NON-NLS-1$
+			logins.addAll(GitHubJsonParser.parseLogins(page));
+		}
+		return logins;
+	}
+
+	private List<String> listCollaboratorRepositories() throws IOException {
+		List<String> fullNames = new ArrayList<>();
+		for (String page : doGetAllPages(
+				"/user/repos?affiliation=collaborator&per_page=100")) { //$NON-NLS-1$
+			fullNames.addAll(GitHubJsonParser.parseRepositoryFullNames(page));
+		}
+		return fullNames;
 	}
 
 	@Override

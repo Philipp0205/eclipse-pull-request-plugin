@@ -134,8 +134,13 @@ public class PullRequestListView extends ViewPart {
 	}
 
 	private void initializeAuthorFilterFromPreferences() {
-		// Try to set author from preferences
-		String username = Activator.getDefault().getPreferenceStore().getString(PRPreferences.BITBUCKET_USERNAME);
+		String provider = Activator.getDefault().getPreferenceStore()
+				.getString(PRPreferences.PULLREQUEST_PROVIDER_TYPE);
+		if ("GITHUB".equals(provider)) { //$NON-NLS-1$
+			return;
+		}
+		String username = Activator.getDefault().getPreferenceStore()
+				.getString(PRPreferences.BITBUCKET_USERNAME);
 		if (username != null && !username.isEmpty()) {
 			currentAuthorFilter = username;
 		}
@@ -148,6 +153,16 @@ public class PullRequestListView extends ViewPart {
 			@Override
 			protected String getTextForPullRequest(PullRequest pr) {
 				return String.valueOf(pr.getId());
+			}
+		});
+
+		// Repository Column
+		TableViewerColumn repositoryColumn = createColumn(layout,
+				"Repository", 20, SWT.LEFT); //$NON-NLS-1$
+		repositoryColumn.setLabelProvider(new PullRequestLabelProvider() {
+			@Override
+			protected String getTextForPullRequest(PullRequest pr) {
+				return repositoryLabel(pr);
 			}
 		});
 
@@ -273,6 +288,23 @@ public class PullRequestListView extends ViewPart {
 		 * @return the text to display
 		 */
 		protected abstract String getTextForPullRequest(PullRequest pr);
+	}
+
+	private static String repositoryLabel(PullRequest pr) {
+		if (pr.getToRef() == null || pr.getToRef().getRepository() == null) {
+			return ""; //$NON-NLS-1$
+		}
+		PullRequest.Repository repository = pr.getToRef().getRepository();
+		if (repository.getName() != null && !repository.getName().isEmpty()) {
+			return repository.getName();
+		}
+		if (repository.getProject() != null
+				&& repository.getProject().getKey() != null
+				&& repository.getSlug() != null) {
+			return repository.getProject().getKey() + "/" //$NON-NLS-1$
+					+ repository.getSlug();
+		}
+		return repository.getSlug() != null ? repository.getSlug() : ""; //$NON-NLS-1$
 	}
 
 	private TableViewerColumn createColumn(TableColumnLayout layout, String text, int weight, int style) {
