@@ -42,6 +42,12 @@ public class PRPreferences {
 	/** GitHub access token */
 	public static final String GITHUB_ACCESS_TOKEN = "github_access_token"; //$NON-NLS-1$
 
+	/**
+	 * Owners and repositories whose pull requests to list, separated by
+	 * commas or whitespace. Empty means everything the token can reach.
+	 */
+	public static final String GITHUB_SEARCH_SCOPES = "github_search_scopes"; //$NON-NLS-1$
+
 	/** Sash weights for changes view */
 	public static final String PULLREQUEST_CHANGES_SASH_WEIGHTS = "pullrequest_changes_sash_weights"; //$NON-NLS-1$
 

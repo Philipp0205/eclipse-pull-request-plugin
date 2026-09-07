@@ -55,6 +55,8 @@ public class PullRequestPreferencePage extends PreferencePage
 
 	private Text githubTokenText;
 
+	private Text githubSearchScopesText;
+
 	private Button showInlineCommentsCheckbox;
 
 	private Button animateInlineCommentsCheckbox;
@@ -233,12 +235,33 @@ public class PullRequestPreferencePage extends PreferencePage
 					+ "(classic) that has the 'repo' and 'read:org' " //$NON-NLS-1$
 					+ "scopes:\n" //$NON-NLS-1$
 					+ "https://github.com/settings/tokens\n\n" //$NON-NLS-1$
-					+ "The plugin lists pull requests from every repository " //$NON-NLS-1$
-					+ "you own or belong to. Organizations that enforce " //$NON-NLS-1$
-					+ "SAML single sign-on are only searched once the token " //$NON-NLS-1$
-					+ "is authorized for them."); //$NON-NLS-1$
+					+ "The pull requests you see are the ones the token's " //$NON-NLS-1$
+					+ "own account can see. Use Test Connection to check " //$NON-NLS-1$
+					+ "which account that is."); //$NON-NLS-1$
 	GridDataFactory.fillDefaults().span(2, 1).hint(400, SWT.DEFAULT)
 			.indent(0, 5).applyTo(infoLabel);
+
+	// Search scopes
+	Label scopesLabel = new Label(group, SWT.NONE);
+	scopesLabel.setText("&Search only:"); //$NON-NLS-1$
+
+	githubSearchScopesText = new Text(group, SWT.BORDER);
+	githubSearchScopesText.setToolTipText(
+			"Owners and repositories to list pull requests from"); //$NON-NLS-1$
+	GridDataFactory.fillDefaults().grab(true, false)
+			.applyTo(githubSearchScopesText);
+
+	Label scopesInfoLabel = new Label(group, SWT.WRAP);
+	scopesInfoLabel.setText(
+			"Owners and repositories separated by commas, for example " //$NON-NLS-1$
+					+ "'my-user, my-org, someone/their-repo'. A bare name " //$NON-NLS-1$
+					+ "covers everything that user or organization owns.\n" //$NON-NLS-1$
+					+ "Leave empty to search every repository the token " //$NON-NLS-1$
+					+ "can reach. Naming the owners you care about makes " //$NON-NLS-1$
+					+ "refreshing much faster and avoids running into the " //$NON-NLS-1$
+					+ "GitHub API rate limit."); //$NON-NLS-1$
+	GridDataFactory.fillDefaults().span(2, 1).hint(400, SWT.DEFAULT)
+			.indent(0, 5).applyTo(scopesInfoLabel);
 
 	// Test connection button
 		Button testButton = new Button(group, SWT.PUSH);
@@ -349,6 +372,8 @@ public class PullRequestPreferencePage extends PreferencePage
 		// Load GitHub values
 		githubTokenText
 				.setText(store.getString(PRPreferences.GITHUB_ACCESS_TOKEN));
+		githubSearchScopesText
+				.setText(store.getString(PRPreferences.GITHUB_SEARCH_SCOPES));
 
 		// Load display options
 		showInlineCommentsCheckbox.setSelection(store
@@ -372,6 +397,7 @@ public class PullRequestPreferencePage extends PreferencePage
 		bitbucketTokenText.setText(""); //$NON-NLS-1$
 
 		githubTokenText.setText(""); //$NON-NLS-1$
+		githubSearchScopesText.setText(""); //$NON-NLS-1$
 
 		showInlineCommentsCheckbox.setSelection(true);
 		animateInlineCommentsCheckbox.setSelection(true);
@@ -407,6 +433,8 @@ public class PullRequestPreferencePage extends PreferencePage
 		// Save GitHub values
 		store.setValue(PRPreferences.GITHUB_ACCESS_TOKEN,
 				githubTokenText.getText().trim());
+		store.setValue(PRPreferences.GITHUB_SEARCH_SCOPES,
+				githubSearchScopesText.getText().trim());
 
 		// Save display options
 		store.setValue(PRPreferences.PULLREQUEST_SHOW_INLINE_COMMENTS,
@@ -436,6 +464,7 @@ public class PullRequestPreferencePage extends PreferencePage
 		PullRequestClientFactory.ClientConfig config = new PullRequestClientFactory.ClientConfig();
 		config.providerType = PullRequestProviderType.GITHUB;
 		config.githubAccessToken = githubTokenText.getText().trim();
+		config.githubSearchScopes = githubSearchScopesText.getText().trim();
 
 		runConnectionTest(config);
 	}

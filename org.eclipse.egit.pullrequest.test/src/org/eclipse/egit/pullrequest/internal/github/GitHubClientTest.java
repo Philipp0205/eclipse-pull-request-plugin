@@ -21,6 +21,7 @@ import static org.hamcrest.Matchers.notNullValue;
 import java.util.Arrays;
 import java.util.List;
 
+import org.eclipse.egit.pullrequest.internal.github.GitHubSearchQueries.Query;
 import org.junit.Test;
 
 /**
@@ -42,32 +43,37 @@ public class GitHubClientTest {
 
 	@Test
 	public void testAccessibleSearchCoversOwnedOrgsAndForeignRepos() {
-		List<String> queries = GitHubSearchQueries
+		List<Query> queries = GitHubSearchQueries
 				.accessiblePullRequestQueries("alice", //$NON-NLS-1$
 						Arrays.asList("acme", "friends"), //$NON-NLS-1$ //$NON-NLS-2$
 						Arrays.asList("alice/notes", "acme/app", //$NON-NLS-1$ //$NON-NLS-2$
 								"bob/tool"), //$NON-NLS-1$
 						null, null);
 
-		assertThat(queries, contains("is:pr user:alice is:open", //$NON-NLS-1$
-				"is:pr org:acme is:open", //$NON-NLS-1$
-				"is:pr org:friends is:open", //$NON-NLS-1$
-				"is:pr repo:bob/tool is:open")); //$NON-NLS-1$
+		assertThat(queries, hasSize(1));
+		assertThat(queries.get(0).getText(),
+				equalTo("is:pr user:alice org:acme org:friends " //$NON-NLS-1$
+						+ "repo:bob/tool is:open")); //$NON-NLS-1$
+		assertThat(queries.get(0).getScopes(),
+				contains("user:alice", "org:acme", "org:friends", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+						"repo:bob/tool")); //$NON-NLS-1$
 	}
 
 	@Test
 	public void testAccessibleSearchAppliesAuthorFilterOnlyWhenSet() {
-		List<String> allAuthors = GitHubSearchQueries
+		List<Query> allAuthors = GitHubSearchQueries
 				.accessiblePullRequestQueries("alice", null, null, //$NON-NLS-1$
 						"OPEN", null); //$NON-NLS-1$
-		List<String> oneAuthor = GitHubSearchQueries
+		List<Query> oneAuthor = GitHubSearchQueries
 				.accessiblePullRequestQueries("alice", null, null, //$NON-NLS-1$
 						"OPEN", "carol"); //$NON-NLS-1$ //$NON-NLS-2$
 
-		assertThat(allAuthors, contains("is:pr user:alice is:open")); //$NON-NLS-1$
-		assertThat(allAuthors.get(0), not(containsString("author:"))); //$NON-NLS-1$
-		assertThat(oneAuthor,
-				contains("is:pr user:alice author:carol is:open")); //$NON-NLS-1$
+		assertThat(allAuthors.get(0).getText(),
+				equalTo("is:pr user:alice is:open")); //$NON-NLS-1$
+		assertThat(allAuthors.get(0).getText(),
+				not(containsString("author:"))); //$NON-NLS-1$
+		assertThat(oneAuthor.get(0).getText(),
+				equalTo("is:pr user:alice author:carol is:open")); //$NON-NLS-1$
 	}
 
 	@Test
@@ -86,16 +92,37 @@ public class GitHubClientTest {
 	@Test
 	public void testParsePullRequestPathsFromSearch() {
 		String json = "{\"total_count\":2,\"items\":[" //$NON-NLS-1$
-				+ "{\"pull_request\":{\"url\":\"https://api.github.com/repos/alice/one/pulls/7\"}}," //$NON-NLS-1$
-				+ "{\"pull_request\":{\"url\":\"https://api.github.com/repos/acme/two/pulls/12\"}}" //$NON-NLS-1$
+				+ "{\"updated_at\":\"2026-09-02T10:00:00Z\",\"pull_request\":" //$NON-NLS-1$
+				+ "{\"url\":\"https://api.github.com/repos/alice/one/pulls/7\"}}," //$NON-NLS-1$
+				+ "{\"updated_at\":\"2026-09-01T10:00:00Z\",\"pull_request\":" //$NON-NLS-1$
+				+ "{\"url\":\"https://api.github.com/repos/acme/two/pulls/12\"}}" //$NON-NLS-1$
 				+ "]}"; //$NON-NLS-1$
 
-		List<String> paths = GitHubJsonParser
-				.parseSearchPullRequestPaths(json);
+		List<GitHubSearchHit> hits = GitHubJsonParser.parseSearchHits(json);
 
-		assertThat(paths, hasSize(2));
-		assertThat(paths.get(0), equalTo("/repos/alice/one/pulls/7")); //$NON-NLS-1$
-		assertThat(paths.get(1), equalTo("/repos/acme/two/pulls/12")); //$NON-NLS-1$
+		assertThat(hits, hasSize(2));
+		assertThat(hits.get(0).path(),
+				equalTo("/repos/alice/one/pulls/7")); //$NON-NLS-1$
+		assertThat(hits.get(1).path(),
+				equalTo("/repos/acme/two/pulls/12")); //$NON-NLS-1$
+		assertThat(hits.get(0).updated(), notNullValue());
+		assertThat(hits.get(0).updated()
+				.after(hits.get(1).updated()), equalTo(true));
+	}
+
+	@Test
+	public void testSearchResultsThatAreNotPullRequestsAreIgnored() {
+		String json = "{\"total_count\":2,\"items\":[" //$NON-NLS-1$
+				+ "{\"number\":3,\"title\":\"a plain issue\"}," //$NON-NLS-1$
+				+ "{\"updated_at\":\"2026-09-01T10:00:00Z\",\"pull_request\":" //$NON-NLS-1$
+				+ "{\"url\":\"https://api.github.com/repos/acme/two/pulls/12\"}}" //$NON-NLS-1$
+				+ "]}"; //$NON-NLS-1$
+
+		List<GitHubSearchHit> hits = GitHubJsonParser.parseSearchHits(json);
+
+		assertThat(hits, hasSize(1));
+		assertThat(hits.get(0).path(),
+				equalTo("/repos/acme/two/pulls/12")); //$NON-NLS-1$
 	}
 
 	@Test

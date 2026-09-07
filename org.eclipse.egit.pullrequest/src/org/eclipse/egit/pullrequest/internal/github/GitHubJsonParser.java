@@ -24,28 +24,44 @@ class GitHubJsonParser {
 
 	private static final String ISO8601_FORMAT = "yyyy-MM-dd'T'HH:mm:ss'Z'"; //$NON-NLS-1$
 
-	private static final Pattern SEARCH_PULL_URL = Pattern.compile(
-			"\"pull_request\"\\s*:\\s*\\{[^}]*\"url\"\\s*:\\s*" //$NON-NLS-1$
-					+ "\"https?://[^\"]+?(/repos/[^\"?]+)\"", //$NON-NLS-1$
-			Pattern.DOTALL);
+	private static final Pattern PULL_REQUEST_PATH = Pattern
+			.compile("https?://[^\"]+?(/repos/[^\"?]+)"); //$NON-NLS-1$
 
 	/**
-	 * Extracts REST pull request paths from a GitHub issue search response.
+	 * Extracts the pull requests of a GitHub issue search response.
 	 *
 	 * @param json
 	 *            search response JSON
-	 * @return API paths for the pull requests in result order
+	 * @return the pull requests in result order, without the issues the
+	 *         response may also contain
 	 */
-	static List<String> parseSearchPullRequestPaths(String json) {
-		List<String> result = new ArrayList<>();
-		if (json == null || json.isBlank()) {
+	static List<GitHubSearchHit> parseSearchHits(String json) {
+		List<GitHubSearchHit> result = new ArrayList<>();
+		String items = extractArray(json, "items"); //$NON-NLS-1$
+		if (items == null) {
 			return result;
 		}
-		Matcher matcher = SEARCH_PULL_URL.matcher(json);
-		while (matcher.find()) {
-			result.add(matcher.group(1));
+		for (String item : splitTopLevelObjects(items)) {
+			String pullRequest = extractObject(item, "pull_request"); //$NON-NLS-1$
+			if (pullRequest == null) {
+				continue;
+			}
+			String path = pullRequestPath(
+					extractString(pullRequest, "url")); //$NON-NLS-1$
+			if (path != null) {
+				result.add(new GitHubSearchHit(path,
+						extractDate(item, "updated_at"))); //$NON-NLS-1$
+			}
 		}
 		return result;
+	}
+
+	private static String pullRequestPath(String url) {
+		if (url == null) {
+			return null;
+		}
+		Matcher matcher = PULL_REQUEST_PATH.matcher(url);
+		return matcher.matches() ? matcher.group(1) : null;
 	}
 
 	/**
@@ -956,7 +972,7 @@ class GitHubJsonParser {
 		return json.substring(startIndex, endIndex);
 	}
 
-	private static Date extractDate(String json, String key) {
+	static Date extractDate(String json, String key) {
 		String dateStr = extractString(json, key);
 		if (dateStr == null) {
 			return null;

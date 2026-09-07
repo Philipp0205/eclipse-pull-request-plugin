@@ -17,6 +17,7 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
@@ -27,9 +28,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * Minimal HTTP server on the loopback interface that answers canned responses,
  * used to exercise {@link GitHubClient} without talking to github.com.
  * <p>
- * Responses are registered either for a request path or for a fragment of the
- * query string, so that the different searches sent to
- * {@code /search/issues} can be answered individually.
+ * Responses are registered per request path, and searches additionally per
+ * decoded search query, so that the individual queries the client sends to
+ * {@code /search/issues} can be answered and counted separately.
  */
 class StubGitHubServer implements AutoCloseable {
 
@@ -49,13 +50,19 @@ class StubGitHubServer implements AutoCloseable {
 		}
 	}
 
+	private static final String SEARCH_PATH = "/search/issues"; //$NON-NLS-1$
+
 	private final ServerSocket serverSocket;
 
 	private final Map<String, Response> byPath = new ConcurrentHashMap<>();
 
-	private final Map<String, Response> byQuery = new ConcurrentHashMap<>();
+	private final Map<String, Response> bySearch = new ConcurrentHashMap<>();
 
-	private final List<String> requestedTargets = new CopyOnWriteArrayList<>();
+	private volatile Response anySearch;
+
+	private final List<String> requestedPaths = new CopyOnWriteArrayList<>();
+
+	private final List<String> searchQueries = new CopyOnWriteArrayList<>();
 
 	private volatile boolean running = true;
 
@@ -88,23 +95,40 @@ class StubGitHubServer implements AutoCloseable {
 	}
 
 	/**
-	 * Registers the response for every request whose target contains the given
-	 * fragment. Checked before the path responses.
+	 * Registers the response for one search query.
 	 *
-	 * @param fragment
-	 *            a fragment of the encoded request target
+	 * @param query
+	 *            the decoded value of the {@code q} parameter
 	 * @param response
 	 *            the response to send
 	 */
-	void onQueryContaining(String fragment, Response response) {
-		byQuery.put(fragment, response);
+	void onSearch(String query, Response response) {
+		bySearch.put(query, response);
 	}
 
 	/**
-	 * @return the request targets that were received, in order
+	 * Registers the response for every search that has no exact match.
+	 *
+	 * @param response
+	 *            the response to send
 	 */
-	List<String> requestedTargets() {
-		return requestedTargets;
+	void onAnySearch(Response response) {
+		anySearch = response;
+	}
+
+	/**
+	 * @return the paths that were requested, in order, without their query
+	 *         strings
+	 */
+	List<String> requestedPaths() {
+		return requestedPaths;
+	}
+
+	/**
+	 * @return the decoded search queries that were sent, in order
+	 */
+	List<String> searchQueries() {
+		return searchQueries;
 	}
 
 	@Override
@@ -136,24 +160,46 @@ class StubGitHubServer implements AutoCloseable {
 		}
 		String[] parts = requestLine.split(" "); //$NON-NLS-1$
 		String target = parts.length > 1 ? parts[1] : ""; //$NON-NLS-1$
-		requestedTargets.add(target);
 		write(client.getOutputStream(), responseFor(target));
 	}
 
 	private Response responseFor(String target) {
-		for (Map.Entry<String, Response> entry : byQuery.entrySet()) {
-			if (target.contains(entry.getKey())) {
-				return entry.getValue();
+		int mark = target.indexOf('?');
+		String path = mark < 0 ? target : target.substring(0, mark);
+		String query = mark < 0 ? "" : target.substring(mark + 1); //$NON-NLS-1$
+		requestedPaths.add(path);
+
+		if (SEARCH_PATH.equals(path)) {
+			String search = decodeParameter(query, "q"); //$NON-NLS-1$
+			searchQueries.add(search);
+			Response response = bySearch.get(search);
+			if (response == null) {
+				response = anySearch;
 			}
+			if (response != null) {
+				return response;
+			}
+			return new Response(200, "OK", //$NON-NLS-1$
+					"{\"total_count\":0,\"items\":[]}"); //$NON-NLS-1$
 		}
-		int query = target.indexOf('?');
-		String path = query < 0 ? target : target.substring(0, query);
+
 		Response response = byPath.get(path);
 		if (response != null) {
 			return response;
 		}
 		return new Response(404, "Not Found", //$NON-NLS-1$
 				"{\"message\":\"Not Found\"}"); //$NON-NLS-1$
+	}
+
+	private static String decodeParameter(String query, String name) {
+		for (String pair : query.split("&")) { //$NON-NLS-1$
+			int equals = pair.indexOf('=');
+			if (equals > 0 && pair.substring(0, equals).equals(name)) {
+				return URLDecoder.decode(pair.substring(equals + 1),
+						StandardCharsets.UTF_8);
+			}
+		}
+		return ""; //$NON-NLS-1$
 	}
 
 	private void write(OutputStream out, Response response)

@@ -57,6 +57,12 @@ public class PullRequestClientFactory {
 		 * GitHub access token
 		 */
 		public String githubAccessToken;
+
+		/**
+		 * Owners and repositories whose pull requests to list, separated by
+		 * commas or whitespace. Empty means everything the token can reach.
+		 */
+		public String githubSearchScopes;
 	}
 
 	/**
@@ -148,7 +154,8 @@ public class PullRequestClientFactory {
 			if (isBlank(config.githubAccessToken)) {
 				return null;
 			}
-			return new GitHubClient(config.githubAccessToken);
+			return new GitHubClient(config.githubAccessToken,
+					config.githubSearchScopes);
 
 		default:
 			return null;
@@ -185,6 +192,8 @@ public class PullRequestClientFactory {
 		config.githubOwner = prefs.get(PRPreferences.GITHUB_OWNER, ""); //$NON-NLS-1$
 		config.githubRepo = prefs.get(PRPreferences.GITHUB_REPO, ""); //$NON-NLS-1$
 		config.githubAccessToken = prefs.get(PRPreferences.GITHUB_ACCESS_TOKEN, ""); //$NON-NLS-1$
+		config.githubSearchScopes = prefs
+				.get(PRPreferences.GITHUB_SEARCH_SCOPES, ""); //$NON-NLS-1$
 
 		return config;
 	}

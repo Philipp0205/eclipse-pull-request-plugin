@@ -22,12 +22,14 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.eclipse.egit.pullrequest.internal.github.GitHubPullRequestSearch.PageReader;
 import org.eclipse.egit.pullrequest.internal.github.GitHubPullRequestSearch.Result;
+import org.eclipse.egit.pullrequest.internal.github.GitHubSearchQueries.Query;
 import org.junit.Test;
 
 /**
@@ -42,20 +44,29 @@ public class GitHubPullRequestSearchTest {
 			+ "resources do not exist or you do not have permission to " //$NON-NLS-1$
 			+ "view them.\"}]}"; //$NON-NLS-1$
 
+	private static final String RATE_LIMITED = "GitHub API request failed: " //$NON-NLS-1$
+			+ "HTTP 403 - {\"message\":\"API rate limit exceeded for user " //$NON-NLS-1$
+			+ "ID 201185819.\"}"; //$NON-NLS-1$
+
 	private final List<String> requestedQueries = new ArrayList<>();
 
 	/**
-	 * A reader that answers each query from a canned list of paths and fails
-	 * every query that was registered as rejected.
+	 * A reader that answers each query from canned results and fails every
+	 * query that was registered as failing.
 	 */
 	private class StubReader implements PageReader {
 
-		private final Map<String, List<String>> results = new HashMap<>();
+		private final Map<String, List<GitHubSearchHit>> results =
+				new HashMap<>();
 
 		private final Map<String, IOException> failures = new HashMap<>();
 
 		StubReader returning(String query, String... paths) {
-			results.put(query, Arrays.asList(paths));
+			List<GitHubSearchHit> hits = new ArrayList<>();
+			for (String path : paths) {
+				hits.add(new GitHubSearchHit(path, new Date(0)));
+			}
+			results.put(query, hits);
 			return this;
 		}
 
@@ -65,8 +76,8 @@ public class GitHubPullRequestSearchTest {
 		}
 
 		@Override
-		public List<String> read(String query, int page, int pageSize)
-				throws IOException {
+		public List<GitHubSearchHit> read(String query, int page,
+				int pageSize) throws IOException {
 			requestedQueries.add(query);
 			IOException failure = failures.get(query);
 			if (failure != null) {
@@ -79,8 +90,20 @@ public class GitHubPullRequestSearchTest {
 		}
 	}
 
+	private static Query query(String... scopes) {
+		return new Query(Arrays.asList(scopes), null, null);
+	}
+
+	private static List<String> paths(Result result) {
+		List<String> paths = new ArrayList<>();
+		for (GitHubSearchHit hit : result.getHits()) {
+			paths.add(hit.path());
+		}
+		return paths;
+	}
+
 	@Test
-	public void testRejectedScopeIsSkippedAndOthersStillReturnResults()
+	public void testRefusedScopeIsSkippedAndOthersStillReturnResults()
 			throws Exception {
 		StubReader reader = new StubReader()
 				.returning("is:pr user:alice is:open", //$NON-NLS-1$
@@ -90,42 +113,75 @@ public class GitHubPullRequestSearchTest {
 						"/repos/bob/tool/pulls/9"); //$NON-NLS-1$
 
 		Result result = GitHubPullRequestSearch.run(
-				Arrays.asList("is:pr user:alice is:open", //$NON-NLS-1$
-						"is:pr org:acme is:open", //$NON-NLS-1$
-						"is:pr repo:bob/tool is:open"), //$NON-NLS-1$
+				Arrays.asList(query("user:alice"), query("org:acme"), //$NON-NLS-1$ //$NON-NLS-2$
+						query("repo:bob/tool")), //$NON-NLS-1$
 				1, 1, reader);
 
-		assertThat(result.getPullRequestPaths(),
-				contains("/repos/alice/notes/pulls/1", //$NON-NLS-1$
-						"/repos/bob/tool/pulls/9")); //$NON-NLS-1$
+		assertThat(paths(result), contains("/repos/alice/notes/pulls/1", //$NON-NLS-1$
+				"/repos/bob/tool/pulls/9")); //$NON-NLS-1$
 		assertThat(result.getUnsearchableScopes(), contains("org:acme")); //$NON-NLS-1$
 	}
 
 	@Test
-	public void testRejectedScopeDoesNotStopLaterQueries() throws Exception {
+	public void testRefusedScopeDoesNotStopLaterQueries() throws Exception {
 		StubReader reader = new StubReader()
 				.failingWith("is:pr user:alice is:open", VALIDATION_FAILED) //$NON-NLS-1$
 				.returning("is:pr org:acme is:open", //$NON-NLS-1$
 						"/repos/acme/app/pulls/3"); //$NON-NLS-1$
 
 		GitHubPullRequestSearch.run(
-				Arrays.asList("is:pr user:alice is:open", //$NON-NLS-1$
-						"is:pr org:acme is:open"), //$NON-NLS-1$
+				Arrays.asList(query("user:alice"), query("org:acme")), //$NON-NLS-1$ //$NON-NLS-2$
 				1, 1, reader);
 
 		assertThat(requestedQueries, hasSize(2));
 	}
 
 	@Test
-	public void testAllScopesRejectedFailsWithActionableMessage() {
+	public void testRefusedBatchIsRetriedScopeByScope() throws Exception {
+		StubReader reader = new StubReader()
+				.failingWith(
+						"is:pr user:alice org:acme repo:bob/tool is:open", //$NON-NLS-1$
+						VALIDATION_FAILED)
+				.returning("is:pr user:alice is:open", //$NON-NLS-1$
+						"/repos/alice/notes/pulls/1") //$NON-NLS-1$
+				.failingWith("is:pr org:acme is:open", VALIDATION_FAILED) //$NON-NLS-1$
+				.returning("is:pr repo:bob/tool is:open", //$NON-NLS-1$
+						"/repos/bob/tool/pulls/9"); //$NON-NLS-1$
+
+		Result result = GitHubPullRequestSearch.run(
+				Arrays.asList(
+						query("user:alice", "org:acme", "repo:bob/tool")), //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				1, 1, reader);
+
+		assertThat(paths(result), contains("/repos/alice/notes/pulls/1", //$NON-NLS-1$
+				"/repos/bob/tool/pulls/9")); //$NON-NLS-1$
+		assertThat(result.getUnsearchableScopes(), contains("org:acme")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testBatchIsSentAsOneRequestWhenGitHubAcceptsIt()
+			throws Exception {
+		StubReader reader = new StubReader().returning(
+				"is:pr user:alice org:acme is:open", //$NON-NLS-1$
+				"/repos/alice/notes/pulls/1"); //$NON-NLS-1$
+
+		GitHubPullRequestSearch.run(
+				Arrays.asList(query("user:alice", "org:acme")), //$NON-NLS-1$ //$NON-NLS-2$
+				1, 1, reader);
+
+		assertThat(requestedQueries,
+				contains("is:pr user:alice org:acme is:open")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testAllScopesRefusedFailsWithActionableMessage() {
 		StubReader reader = new StubReader()
 				.failingWith("is:pr user:alice is:open", VALIDATION_FAILED) //$NON-NLS-1$
 				.failingWith("is:pr org:acme is:open", VALIDATION_FAILED); //$NON-NLS-1$
 
 		try {
 			GitHubPullRequestSearch.run(
-					Arrays.asList("is:pr user:alice is:open", //$NON-NLS-1$
-							"is:pr org:acme is:open"), //$NON-NLS-1$
+					Arrays.asList(query("user:alice"), query("org:acme")), //$NON-NLS-1$ //$NON-NLS-2$
 					1, 1, reader);
 			fail("Expected the search to fail"); //$NON-NLS-1$
 		} catch (IOException e) {
@@ -138,7 +194,27 @@ public class GitHubPullRequestSearchTest {
 	}
 
 	@Test
-	public void testFailuresOtherThanRejectedScopesArePropagated() {
+	public void testRateLimitAbortsTheSearchWithAdvice() {
+		StubReader reader = new StubReader()
+				.failingWith("is:pr user:alice is:open", RATE_LIMITED) //$NON-NLS-1$
+				.returning("is:pr org:acme is:open", //$NON-NLS-1$
+						"/repos/acme/app/pulls/3"); //$NON-NLS-1$
+
+		try {
+			GitHubPullRequestSearch.run(
+					Arrays.asList(query("user:alice"), query("org:acme")), //$NON-NLS-1$ //$NON-NLS-2$
+					1, 1, reader);
+			fail("Expected the search to fail"); //$NON-NLS-1$
+		} catch (IOException e) {
+			assertThat(e.getMessage(), containsString("rate limit")); //$NON-NLS-1$
+			assertThat(e.getMessage(),
+					containsString("preference page")); //$NON-NLS-1$
+		}
+		assertThat(requestedQueries, hasSize(1));
+	}
+
+	@Test
+	public void testFailuresOtherThanRefusedScopesArePropagated() {
 		StubReader reader = new StubReader()
 				.returning("is:pr user:alice is:open", //$NON-NLS-1$
 						"/repos/alice/notes/pulls/1") //$NON-NLS-1$
@@ -147,8 +223,7 @@ public class GitHubPullRequestSearchTest {
 
 		try {
 			GitHubPullRequestSearch.run(
-					Arrays.asList("is:pr user:alice is:open", //$NON-NLS-1$
-							"is:pr org:acme is:open"), //$NON-NLS-1$
+					Arrays.asList(query("user:alice"), query("org:acme")), //$NON-NLS-1$ //$NON-NLS-2$
 					1, 1, reader);
 			fail("Expected the search to fail"); //$NON-NLS-1$
 		} catch (IOException e) {
@@ -166,11 +241,11 @@ public class GitHubPullRequestSearchTest {
 						"/repos/alice/notes/pulls/1"); //$NON-NLS-1$
 
 		Result result = GitHubPullRequestSearch.run(
-				Arrays.asList("is:pr user:alice is:open", //$NON-NLS-1$
-						"is:pr repo:alice/notes is:open"), //$NON-NLS-1$
+				Arrays.asList(query("user:alice"), //$NON-NLS-1$
+						query("repo:alice/notes")), //$NON-NLS-1$
 				1, 1, reader);
 
-		assertThat(result.getPullRequestPaths(),
+		assertThat(paths(result),
 				contains("/repos/alice/notes/pulls/1")); //$NON-NLS-1$
 	}
 
@@ -181,36 +256,39 @@ public class GitHubPullRequestSearchTest {
 				"is:pr user:alice is:open", "/repos/alice/notes/pulls/1"); //$NON-NLS-1$ //$NON-NLS-2$
 
 		Result result = GitHubPullRequestSearch.run(
-				Arrays.asList("is:pr user:alice is:open"), 1, 1, reader); //$NON-NLS-1$
+				Arrays.asList(query("user:alice")), 1, 1, reader); //$NON-NLS-1$
 
 		assertThat(result.getUnsearchableScopes(), empty());
 	}
 
 	@Test
-	public void testValidationFailureIsRecognizedAsUnsearchableScope() {
+	public void testValidationFailureIsRecognizedAsRefusedScope() {
 		assertThat(
-				GitHubPullRequestSearch.isUnsearchableScope(
+				GitHubPullRequestSearch.isRefusedScope(
 						new IOException(VALIDATION_FAILED)),
 				equalTo(true));
 		assertThat(
-				GitHubPullRequestSearch.isUnsearchableScope(new IOException(
+				GitHubPullRequestSearch.isRefusedScope(new IOException(
 						"GitHub API request failed: HTTP 401 - Bad token")), //$NON-NLS-1$
 				equalTo(false));
-		assertThat(GitHubPullRequestSearch
-				.isUnsearchableScope(new IOException()), equalTo(false));
+		assertThat(
+				GitHubPullRequestSearch.isRefusedScope(new IOException()),
+				equalTo(false));
 	}
 
 	@Test
-	public void testScopeOfExtractsTheOwnerQualifier() {
-		assertThat(GitHubSearchQueries.scopeOf("is:pr user:alice is:open"), //$NON-NLS-1$
-				equalTo("user:alice")); //$NON-NLS-1$
+	public void testRateLimitIsRecognizedButPlainForbiddenIsNot() {
 		assertThat(
-				GitHubSearchQueries.scopeOf(
-						"is:pr org:acme author:carol is:merged"), //$NON-NLS-1$
-				equalTo("org:acme")); //$NON-NLS-1$
-		assertThat(GitHubSearchQueries
-				.scopeOf("is:pr repo:bob/tool is:closed is:unmerged"), //$NON-NLS-1$
-				equalTo("repo:bob/tool")); //$NON-NLS-1$
-		assertThat(GitHubSearchQueries.scopeOf("is:pr"), equalTo("is:pr")); //$NON-NLS-1$ //$NON-NLS-2$
+				GitHubPullRequestSearch
+						.isRateLimited(new IOException(RATE_LIMITED)),
+				equalTo(true));
+		assertThat(GitHubPullRequestSearch.isRateLimited(new IOException(
+				"GitHub API request failed: HTTP 403 - " //$NON-NLS-1$
+						+ "{\"message\":\"Resource not accessible\"}")), //$NON-NLS-1$
+				equalTo(false));
+		assertThat(
+				GitHubPullRequestSearch
+						.isRateLimited(new IOException(VALIDATION_FAILED)),
+				equalTo(false));
 	}
 }

@@ -48,6 +48,12 @@ public class GitHubClient implements IPullRequestClient {
 	private final PullRequestProviderCapabilities capabilities;
 
 	/**
+	 * Owners and repositories to search, as configured by the user. Empty
+	 * means every scope the authenticated user can reach.
+	 */
+	private final List<String> searchScopes;
+
+	/**
 	 * Owner scopes the last token-scoped listing had to skip because GitHub
 	 * refused to search them. Reported by {@link #diagnoseConnection()}.
 	 */
@@ -65,7 +71,7 @@ public class GitHubClient implements IPullRequestClient {
 	 */
 	public GitHubClient(@NonNull String owner, @NonNull String repo,
 			@NonNull String token) {
-		this(owner, repo, token, API_BASE_URL);
+		this(owner, repo, token, API_BASE_URL, List.of());
 	}
 
 	/**
@@ -76,7 +82,30 @@ public class GitHubClient implements IPullRequestClient {
 	 *            the GitHub access token
 	 */
 	public GitHubClient(@NonNull String token) {
-		this(null, null, token, API_BASE_URL);
+		this(null, null, token, API_BASE_URL, List.of());
+	}
+
+	/**
+	 * Creates a token-scoped GitHub client that only searches the given
+	 * owners and repositories.
+	 * <p>
+	 * Restricting the scopes is what makes the listing predictable for a
+	 * token that can reach hundreds of repositories: it decides which pull
+	 * requests appear, and it keeps the number of search requests small
+	 * enough to stay within the API rate limit.
+	 *
+	 * @param token
+	 *            the GitHub access token
+	 * @param searchScopes
+	 *            owners and repositories separated by commas or whitespace,
+	 *            {@code null} or empty to search every reachable scope. An
+	 *            entry is either {@code owner/name} for a single repository
+	 *            or a bare name for everything a user or organization owns
+	 */
+	public GitHubClient(@NonNull String token,
+			@Nullable String searchScopes) {
+		this(null, null, token, API_BASE_URL,
+				GitHubSearchQueries.parseScopes(searchScopes));
 	}
 
 	/**
@@ -91,13 +120,16 @@ public class GitHubClient implements IPullRequestClient {
 	 *            the GitHub access token
 	 * @param apiBaseUrl
 	 *            the REST API base URL, without a trailing slash
+	 * @param searchScopes
+	 *            owners and repositories to search, empty for all reachable
 	 */
 	GitHubClient(String owner, String repo, @NonNull String token,
-			@NonNull String apiBaseUrl) {
+			@NonNull String apiBaseUrl, @NonNull List<String> searchScopes) {
 		this.owner = owner;
 		this.repo = repo;
 		this.token = token;
 		this.apiBaseUrl = apiBaseUrl;
+		this.searchScopes = List.copyOf(searchScopes);
 		this.capabilities = PullRequestProviderCapabilities
 				.forProvider(PullRequestProviderType.GITHUB);
 	}
@@ -217,36 +249,79 @@ public class GitHubClient implements IPullRequestClient {
 		return pulls;
 	}
 
+	/**
+	 * Lists pull requests across every searched scope.
+	 * <p>
+	 * The search already reports when each pull request was last updated, so
+	 * the results of all scopes are ordered and cut down to the requested page
+	 * first. Only that page is then read in full: reading every hit instead
+	 * costs one request per pull request found in any scope, which exhausts
+	 * the API rate limit as soon as a token can reach a few dozen
+	 * repositories.
+	 *
+	 * @param state
+	 *            pull request state filter, or {@code null} for open
+	 * @param authorUsername
+	 *            author filter, or {@code null} for every author
+	 * @param limit
+	 *            how many pull requests to return
+	 * @param start
+	 *            how many pull requests to skip
+	 * @return the requested page, most recently updated first
+	 * @throws IOException
+	 *             if the pull requests cannot be listed
+	 */
 	private List<PullRequest> getUserPullRequests(String state,
 			String authorUsername, int limit, int start) throws IOException {
-		List<String> queries = GitHubSearchQueries
-				.accessiblePullRequestQueries(getCurrentUser(),
-						listOrganizationLogins(),
-						listCollaboratorRepositories(), state,
-						authorUsername);
+		List<GitHubSearchQueries.Query> queries = pullRequestQueries(state,
+				authorUsername);
 
 		int needed = Math.max(1, start + Math.max(1, limit));
 		int pageSize = Math.min(100, needed);
 		GitHubPullRequestSearch.Result search = GitHubPullRequestSearch.run(
 				queries, needed, pageSize,
-				(query, page, size) -> GitHubJsonParser
-						.parseSearchPullRequestPaths(
-								doGet(searchPath(query, page, size))));
+				(query, page, size) -> GitHubJsonParser.parseSearchHits(
+						doGet(searchPath(query, page, size))));
 		unsearchableScopes = search.getUnsearchableScopes();
 
+		List<GitHubSearchHit> hits = new ArrayList<>(search.getHits());
+		hits.sort(Comparator.comparing(GitHubSearchHit::updated,
+				Comparator.nullsLast(Comparator.reverseOrder())));
+		int from = Math.min(Math.max(0, start), hits.size());
+		int to = Math.min(from + Math.max(0, limit), hits.size());
+
 		List<PullRequest> result = new ArrayList<>();
-		for (String pullRequestPath : search.getPullRequestPaths()) {
+		for (GitHubSearchHit hit : hits.subList(from, to)) {
 			PullRequest pullRequest = GitHubJsonParser
-					.parseSinglePullRequest(doGet(pullRequestPath));
+					.parseSinglePullRequest(doGet(hit.path()));
 			if (pullRequest != null) {
 				result.add(pullRequest);
 			}
 		}
-		result.sort(Comparator.comparing(PullRequest::getUpdatedDate,
-				Comparator.nullsLast(Comparator.reverseOrder())));
-		int from = Math.min(Math.max(0, start), result.size());
-		int to = Math.min(from + Math.max(0, limit), result.size());
-		return new ArrayList<>(result.subList(from, to));
+		return result;
+	}
+
+	/**
+	 * Builds the searches to run, from the configured scopes when there are
+	 * any and from everything the token can reach otherwise.
+	 *
+	 * @param state
+	 *            pull request state filter, or {@code null} for open
+	 * @param authorUsername
+	 *            author filter, or {@code null} for every author
+	 * @return the queries to run
+	 * @throws IOException
+	 *             if the authenticated user cannot be read
+	 */
+	private List<GitHubSearchQueries.Query> pullRequestQueries(String state,
+			String authorUsername) throws IOException {
+		if (!searchScopes.isEmpty()) {
+			return GitHubSearchQueries.configuredPullRequestQueries(
+					searchScopes, state, authorUsername);
+		}
+		return GitHubSearchQueries.accessiblePullRequestQueries(
+				getCurrentUser(), listOrganizationLogins(),
+				listCollaboratorRepositories(), state, authorUsername);
 	}
 
 	private static String searchPath(String query, int page, int pageSize) {
