@@ -26,7 +26,7 @@ class GitHubJsonParser {
 
 	private static final Pattern SEARCH_PULL_URL = Pattern.compile(
 			"\"pull_request\"\\s*:\\s*\\{[^}]*\"url\"\\s*:\\s*" //$NON-NLS-1$
-					+ "\"https://api\\.github\\.com([^\"?]+)\"", //$NON-NLS-1$
+					+ "\"https?://[^\"]+?(/repos/[^\"?]+)\"", //$NON-NLS-1$
 			Pattern.DOTALL);
 
 	/**
