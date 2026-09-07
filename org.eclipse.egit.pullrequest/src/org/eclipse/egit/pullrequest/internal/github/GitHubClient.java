@@ -11,7 +11,6 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -20,6 +19,8 @@ import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestComment;
 import org.eclipse.egit.pullrequest.internal.model.PullRequestCommit;
+import org.eclipse.egit.pullrequest.internal.client.ConnectionDiagnostics;
+import org.eclipse.egit.pullrequest.internal.client.ConnectionDiagnostics.Outcome;
 import org.eclipse.egit.pullrequest.internal.client.IPullRequestClient;
 import org.eclipse.egit.pullrequest.internal.client.PullRequestProviderCapabilities;
 import org.eclipse.egit.pullrequest.Activator;
@@ -34,8 +35,6 @@ public class GitHubClient implements IPullRequestClient {
 
 	private static final String API_BASE_URL = "https://api.github.com"; //$NON-NLS-1$
 
-	private static final String GRAPHQL_URL = "https://api.github.com/graphql"; //$NON-NLS-1$
-
 	private static final int DEFAULT_TIMEOUT = 30000; // 30 seconds
 
 	private String owner;
@@ -44,7 +43,15 @@ public class GitHubClient implements IPullRequestClient {
 
 	private final String token;
 
+	private final String apiBaseUrl;
+
 	private final PullRequestProviderCapabilities capabilities;
+
+	/**
+	 * Owner scopes the last token-scoped listing had to skip because GitHub
+	 * refused to search them. Reported by {@link #diagnoseConnection()}.
+	 */
+	private List<String> unsearchableScopes = List.of();
 
 	/**
 	 * Creates a new GitHub client
@@ -58,11 +65,7 @@ public class GitHubClient implements IPullRequestClient {
 	 */
 	public GitHubClient(@NonNull String owner, @NonNull String repo,
 			@NonNull String token) {
-		this.owner = owner;
-		this.repo = repo;
-		this.token = token;
-		this.capabilities = PullRequestProviderCapabilities
-				.forProvider(PullRequestProviderType.GITHUB);
+		this(owner, repo, token, API_BASE_URL);
 	}
 
 	/**
@@ -73,9 +76,28 @@ public class GitHubClient implements IPullRequestClient {
 	 *            the GitHub access token
 	 */
 	public GitHubClient(@NonNull String token) {
-		this.owner = null;
-		this.repo = null;
+		this(null, null, token, API_BASE_URL);
+	}
+
+	/**
+	 * Creates a client against a specific GitHub REST API endpoint.
+	 *
+	 * @param owner
+	 *            the repository owner, or {@code null} to list pull requests
+	 *            from every accessible repository
+	 * @param repo
+	 *            the repository name, or {@code null}
+	 * @param token
+	 *            the GitHub access token
+	 * @param apiBaseUrl
+	 *            the REST API base URL, without a trailing slash
+	 */
+	GitHubClient(String owner, String repo, @NonNull String token,
+			@NonNull String apiBaseUrl) {
+		this.owner = owner;
+		this.repo = repo;
 		this.token = token;
+		this.apiBaseUrl = apiBaseUrl;
 		this.capabilities = PullRequestProviderCapabilities
 				.forProvider(PullRequestProviderType.GITHUB);
 	}
@@ -205,32 +227,15 @@ public class GitHubClient implements IPullRequestClient {
 
 		int needed = Math.max(1, start + Math.max(1, limit));
 		int pageSize = Math.min(100, needed);
-		LinkedHashSet<String> pullRequestPaths = new LinkedHashSet<>();
-		for (String query : queries) {
-			int collected = 0;
-			int page = 1;
-			while (collected < needed) {
-				String path = "/search/issues?q=" //$NON-NLS-1$
-						+ URLEncoder.encode(query, StandardCharsets.UTF_8)
-						+ "&per_page=" + pageSize //$NON-NLS-1$
-						+ "&page=" + page //$NON-NLS-1$
-						+ "&sort=updated&order=desc"; //$NON-NLS-1$
-				List<String> pagePaths = GitHubJsonParser
-						.parseSearchPullRequestPaths(doGet(path));
-				if (pagePaths.isEmpty()) {
-					break;
-				}
-				pullRequestPaths.addAll(pagePaths);
-				collected += pagePaths.size();
-				if (pagePaths.size() < pageSize) {
-					break;
-				}
-				page++;
-			}
-		}
+		GitHubPullRequestSearch.Result search = GitHubPullRequestSearch.run(
+				queries, needed, pageSize,
+				(query, page, size) -> GitHubJsonParser
+						.parseSearchPullRequestPaths(
+								doGet(searchPath(query, page, size))));
+		unsearchableScopes = search.getUnsearchableScopes();
 
 		List<PullRequest> result = new ArrayList<>();
-		for (String pullRequestPath : pullRequestPaths) {
+		for (String pullRequestPath : search.getPullRequestPaths()) {
 			PullRequest pullRequest = GitHubJsonParser
 					.parseSinglePullRequest(doGet(pullRequestPath));
 			if (pullRequest != null) {
@@ -244,19 +249,56 @@ public class GitHubClient implements IPullRequestClient {
 		return new ArrayList<>(result.subList(from, to));
 	}
 
-	private List<String> listOrganizationLogins() throws IOException {
+	private static String searchPath(String query, int page, int pageSize) {
+		return "/search/issues?q=" //$NON-NLS-1$
+				+ URLEncoder.encode(query, StandardCharsets.UTF_8)
+				+ "&per_page=" + pageSize //$NON-NLS-1$
+				+ "&page=" + page //$NON-NLS-1$
+				+ "&sort=updated&order=desc"; //$NON-NLS-1$
+	}
+
+	/**
+	 * Lists the organizations of the authenticated user.
+	 * <p>
+	 * A token without the {@code read:org} scope cannot read them. That only
+	 * narrows the set of searched scopes, so it is reported as a warning
+	 * instead of failing the whole listing.
+	 *
+	 * @return the organization logins, empty if they cannot be read
+	 */
+	private List<String> listOrganizationLogins() {
 		List<String> logins = new ArrayList<>();
-		for (String page : doGetAllPages("/user/orgs?per_page=100")) { //$NON-NLS-1$
-			logins.addAll(GitHubJsonParser.parseLogins(page));
+		try {
+			for (String page : doGetAllPages("/user/orgs?per_page=100")) { //$NON-NLS-1$
+				logins.addAll(GitHubJsonParser.parseLogins(page));
+			}
+		} catch (IOException e) {
+			Activator.logWarning(
+					"Cannot list GitHub organizations; their pull requests " //$NON-NLS-1$
+							+ "are not listed. " + e.getMessage()); //$NON-NLS-1$
 		}
 		return logins;
 	}
 
-	private List<String> listCollaboratorRepositories() throws IOException {
+	/**
+	 * Lists the repositories the authenticated user collaborates on.
+	 *
+	 * @return the {@code owner/name} repositories, empty if they cannot be
+	 *         read
+	 */
+	private List<String> listCollaboratorRepositories() {
 		List<String> fullNames = new ArrayList<>();
-		for (String page : doGetAllPages(
-				"/user/repos?affiliation=collaborator&per_page=100")) { //$NON-NLS-1$
-			fullNames.addAll(GitHubJsonParser.parseRepositoryFullNames(page));
+		try {
+			for (String page : doGetAllPages(
+					"/user/repos?affiliation=collaborator&per_page=100")) { //$NON-NLS-1$
+				fullNames.addAll(
+						GitHubJsonParser.parseRepositoryFullNames(page));
+			}
+		} catch (IOException e) {
+			Activator.logWarning(
+					"Cannot list GitHub collaborator repositories; their " //$NON-NLS-1$
+							+ "pull requests are not listed. " //$NON-NLS-1$
+							+ e.getMessage());
 		}
 		return fullNames;
 	}
@@ -817,6 +859,20 @@ public class GitHubClient implements IPullRequestClient {
 	}
 
 	@Override
+	public @NonNull ConnectionDiagnostics diagnoseConnection() {
+		ConnectionDiagnostics report = IPullRequestClient.super
+				.diagnoseConnection();
+		if (!unsearchableScopes.isEmpty()) {
+			report.add("Search scopes", Outcome.WARNING, //$NON-NLS-1$
+					"GitHub refused to search " //$NON-NLS-1$
+							+ String.join(", ", unsearchableScopes) //$NON-NLS-1$
+							+ ".\n" //$NON-NLS-1$
+							+ GitHubPullRequestSearch.TOKEN_SCOPE_HINT);
+		}
+		return report;
+	}
+
+	@Override
 	public @NonNull List<PullRequestCommit> getPullRequestCommits(
 			long pullRequestId) throws IOException {
 		String path = "/repos/" + owner + "/" + repo + "/pulls/" //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
@@ -881,7 +937,7 @@ public class GitHubClient implements IPullRequestClient {
 	 */
 	private List<String> doGetAllPages(String path) throws IOException {
 		List<String> pages = new ArrayList<>();
-		String nextUrl = API_BASE_URL + path;
+		String nextUrl = apiBaseUrl + path;
 
 		while (nextUrl != null) {
 			HttpURLConnection conn = null;
@@ -1134,7 +1190,7 @@ public class GitHubClient implements IPullRequestClient {
 	private String executeGraphQL(String query) throws IOException {
 		HttpURLConnection conn = null;
 		try {
-			URL url = new URL(GRAPHQL_URL);
+			URL url = new URL(apiBaseUrl + "/graphql"); //$NON-NLS-1$
 			conn = (HttpURLConnection) url.openConnection();
 			conn.setRequestMethod("POST"); //$NON-NLS-1$
 			conn.setConnectTimeout(DEFAULT_TIMEOUT);
@@ -1184,7 +1240,7 @@ public class GitHubClient implements IPullRequestClient {
 	 */
 	private HttpURLConnection createConnection(String path, String method)
 			throws IOException {
-		URL url = new URL(API_BASE_URL + path);
+		URL url = new URL(apiBaseUrl + path);
 		HttpURLConnection conn = (HttpURLConnection) url.openConnection();
 
 		// HttpURLConnection doesn't support PATCH by default in Java

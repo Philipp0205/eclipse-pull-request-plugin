@@ -96,6 +96,29 @@ final class GitHubSearchQueries {
 		return query.toString();
 	}
 
+	/**
+	 * Returns the owner qualifier a query was built for.
+	 *
+	 * @param query
+	 *            a query produced by
+	 *            {@link #pullRequestQuery(String, String, String)}
+	 * @return the {@code user:}, {@code org:} or {@code repo:} qualifier, or
+	 *         the whole query if it carries none
+	 */
+	static String scopeOf(String query) {
+		if (query == null) {
+			return ""; //$NON-NLS-1$
+		}
+		for (String token : query.split(" ")) { //$NON-NLS-1$
+			if (token.startsWith("user:") //$NON-NLS-1$
+					|| token.startsWith("org:") //$NON-NLS-1$
+					|| token.startsWith("repo:")) { //$NON-NLS-1$
+				return token;
+			}
+		}
+		return query;
+	}
+
 	static boolean isCoveredByUserOrOrg(String fullName, String login,
 			Set<String> organizations) {
 		if (fullName == null || fullName.isBlank()) {
