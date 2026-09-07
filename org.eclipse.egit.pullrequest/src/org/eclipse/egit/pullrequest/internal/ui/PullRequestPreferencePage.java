@@ -229,7 +229,11 @@ public class PullRequestPreferencePage extends PreferencePage
 	// Info label with instructions
 	Label infoLabel = new Label(group, SWT.WRAP);
 	infoLabel.setText(
-			"Create a personal access token (classic) with 'repo' scope at:\nhttps://github.com/settings/tokens\n\nRequired permissions: repo (Full control of private repositories)"); //$NON-NLS-1$
+			"Authenticate as a GitHub user with a personal access token " //$NON-NLS-1$
+					+ "(classic) that has the 'repo' scope:\n" //$NON-NLS-1$
+					+ "https://github.com/settings/tokens\n\n" //$NON-NLS-1$
+					+ "The plugin lists pull requests from every repository " //$NON-NLS-1$
+					+ "you own or belong to."); //$NON-NLS-1$
 	GridDataFactory.fillDefaults().span(2, 1).hint(400, SWT.DEFAULT)
 			.indent(0, 5).applyTo(infoLabel);
 

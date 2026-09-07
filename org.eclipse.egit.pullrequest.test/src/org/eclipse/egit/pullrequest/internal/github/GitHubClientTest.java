@@ -11,10 +11,14 @@
 package org.eclipse.egit.pullrequest.internal.github;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 
+import java.util.Arrays;
 import java.util.List;
 
 import org.junit.Test;
@@ -34,6 +38,49 @@ public class GitHubClientTest {
 	@Test
 	public void testTokenOnlyClientConstruction() {
 		assertThat(new GitHubClient("test-token"), notNullValue()); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testAccessibleSearchCoversOwnedOrgsAndForeignRepos() {
+		List<String> queries = GitHubSearchQueries
+				.accessiblePullRequestQueries("alice", //$NON-NLS-1$
+						Arrays.asList("acme", "friends"), //$NON-NLS-1$ //$NON-NLS-2$
+						Arrays.asList("alice/notes", "acme/app", //$NON-NLS-1$ //$NON-NLS-2$
+								"bob/tool"), //$NON-NLS-1$
+						null, null);
+
+		assertThat(queries, contains("is:pr user:alice is:open", //$NON-NLS-1$
+				"is:pr org:acme is:open", //$NON-NLS-1$
+				"is:pr org:friends is:open", //$NON-NLS-1$
+				"is:pr repo:bob/tool is:open")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testAccessibleSearchAppliesAuthorFilterOnlyWhenSet() {
+		List<String> allAuthors = GitHubSearchQueries
+				.accessiblePullRequestQueries("alice", null, null, //$NON-NLS-1$
+						"OPEN", null); //$NON-NLS-1$
+		List<String> oneAuthor = GitHubSearchQueries
+				.accessiblePullRequestQueries("alice", null, null, //$NON-NLS-1$
+						"OPEN", "carol"); //$NON-NLS-1$ //$NON-NLS-2$
+
+		assertThat(allAuthors, contains("is:pr user:alice is:open")); //$NON-NLS-1$
+		assertThat(allAuthors.get(0), not(containsString("author:"))); //$NON-NLS-1$
+		assertThat(oneAuthor,
+				contains("is:pr user:alice author:carol is:open")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testAccessibleSearchMapsMergedAndAllStates() {
+		assertThat(GitHubSearchQueries.pullRequestQuery("user:alice", //$NON-NLS-1$
+				"MERGED", null), //$NON-NLS-1$
+				equalTo("is:pr user:alice is:merged")); //$NON-NLS-1$
+		assertThat(GitHubSearchQueries.pullRequestQuery("org:acme", //$NON-NLS-1$
+				"ALL", null), //$NON-NLS-1$
+				equalTo("is:pr org:acme")); //$NON-NLS-1$
+		assertThat(GitHubSearchQueries.pullRequestQuery("repo:bob/tool", //$NON-NLS-1$
+				"DECLINED", null), //$NON-NLS-1$
+				equalTo("is:pr repo:bob/tool is:closed is:unmerged")); //$NON-NLS-1$
 	}
 
 	@Test

@@ -277,7 +277,7 @@ public interface IPullRequestClient {
 			int count = getPullRequests(null, null, null, 1, 0).size();
 			diagnostics.add("Read pull requests", //$NON-NLS-1$
 					ConnectionDiagnostics.Outcome.OK,
-					"Repository returned " + count + " pull request(s)"); //$NON-NLS-1$ //$NON-NLS-2$
+					"Returned " + count + " pull request(s)"); //$NON-NLS-1$ //$NON-NLS-2$
 		} catch (IOException | RuntimeException e) {
 			diagnostics.add("Read pull requests", //$NON-NLS-1$
 					ConnectionDiagnostics.Outcome.FAILED, describe(e));

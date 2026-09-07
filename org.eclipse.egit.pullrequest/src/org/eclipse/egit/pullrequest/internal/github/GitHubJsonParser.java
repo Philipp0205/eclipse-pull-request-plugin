@@ -49,6 +49,88 @@ class GitHubJsonParser {
 	}
 
 	/**
+	 * Parses {@code login} values from a GitHub user or organization array.
+	 *
+	 * @param json
+	 *            JSON array from {@code /user/orgs}
+	 * @return organization or user logins
+	 */
+	static List<String> parseLogins(String json) {
+		List<String> result = new ArrayList<>();
+		for (String object : splitTopLevelObjects(json)) {
+			String login = extractString(object, "login"); //$NON-NLS-1$
+			if (login != null && !login.isBlank()) {
+				result.add(login);
+			}
+		}
+		return result;
+	}
+
+	/**
+	 * Parses {@code owner/name} values from a GitHub repository array.
+	 *
+	 * @param json
+	 *            JSON array from {@code /user/repos}
+	 * @return repository full names
+	 */
+	static List<String> parseRepositoryFullNames(String json) {
+		List<String> result = new ArrayList<>();
+		for (String object : splitTopLevelObjects(json)) {
+			String fullName = extractString(object, "full_name"); //$NON-NLS-1$
+			if (fullName != null && !fullName.isBlank()) {
+				result.add(fullName);
+			}
+		}
+		return result;
+	}
+
+	private static List<String> splitTopLevelObjects(String json) {
+		List<String> result = new ArrayList<>();
+		if (json == null || json.isBlank()) {
+			return result;
+		}
+		String trimmed = json.trim();
+		if (!trimmed.startsWith("[")) { //$NON-NLS-1$
+			return result;
+		}
+		int depth = 0;
+		int start = -1;
+		boolean inString = false;
+		boolean escaped = false;
+		for (int i = 0; i < trimmed.length(); i++) {
+			char c = trimmed.charAt(i);
+			if (escaped) {
+				escaped = false;
+				continue;
+			}
+			if (c == '\\') {
+				escaped = true;
+				continue;
+			}
+			if (c == '"') {
+				inString = !inString;
+				continue;
+			}
+			if (inString) {
+				continue;
+			}
+			if (c == '{') {
+				if (depth == 0) {
+					start = i;
+				}
+				depth++;
+			} else if (c == '}') {
+				depth--;
+				if (depth == 0 && start >= 0) {
+					result.add(trimmed.substring(start, i + 1));
+					start = -1;
+				}
+			}
+		}
+		return result;
+	}
+
+	/**
 	 * Parses a list of pull requests from GitHub API JSON
 	 *
 	 * @param json
