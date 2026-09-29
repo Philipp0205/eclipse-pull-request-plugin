@@ -2,7 +2,7 @@
 <?artifactRepository version='1.1.0'?>
 <repository name='' type='org.eclipse.equinox.p2.artifact.repository.simpleRepository' version='1'>
   <properties size='2'>
-    <property name='p2.timestamp' value='1788783215765'/>
+    <property name='p2.timestamp' value='1790665373487'/>
     <property name='p2.compressed' value='true'/>
   </properties>
   <mappings size='3'>
@@ -10,7 +10,7 @@
     <rule filter='(&amp; (classifier=binary))' output='${repoUrl}/binary/${id}_${version}'/>
     <rule filter='(&amp; (classifier=org.eclipse.update.feature))' output='${repoUrl}/features/${id}_${version}.jar'/>
   </mappings>
-  <artifacts size='16'>
+  <artifacts size='18'>
     <artifact classifier='org.eclipse.update.feature' id='org.eclipse.egit.pullrequest.feature' version='7.6.0.202609071112'>
       <properties size='10'>
         <property name='artifact.size' value='872'/>
@@ -64,6 +64,20 @@
         <property name='download.checksum.sha-256' value='e8e3c93bbfd823589d74a7ef2f2f81c8f559d6d9d578d8cf4311f6e61ec3f244'/>
       </properties>
     </artifact>
+    <artifact classifier='org.eclipse.update.feature' id='org.eclipse.egit.pullrequest.feature' version='7.6.0.202609290702'>
+      <properties size='10'>
+        <property name='artifact.size' value='872'/>
+        <property name='download.size' value='872'/>
+        <property name='maven-groupId' value='org.eclipse.egit.pullrequest'/>
+        <property name='maven-artifactId' value='org.eclipse.egit.pullrequest.feature'/>
+        <property name='maven-version' value='7.6.0-SNAPSHOT'/>
+        <property name='maven-type' value='eclipse-feature'/>
+        <property name='download.contentType' value='application/zip'/>
+        <property name='download.checksum.sha-512' value='79032f9fcff81385c76284f975fbe261085cf2fb4ac967e1b3f92052a78d45f15ac18bc836280ccb435b93ab8501b2e0fb386ec50ea9dc8e969b3650b4a28732'/>
+        <property name='download.checksum.sha-1' value='51dd4eaf773c7a82b715d85fb0991b38d16e44d4'/>
+        <property name='download.checksum.sha-256' value='f23ea2e262054bb7af17f1449248970d495d8f9832c38a38676d772511d5c005'/>
+      </properties>
+    </artifact>
     <artifact classifier='org.eclipse.update.feature' id='org.eclipse.egit.pullrequest.feature' version='7.6.0.202608251444'>
       <properties size='10'>
         <property name='artifact.size' value='873'/>
@@ -76,6 +90,19 @@
         <property name='download.checksum.sha-512' value='826b6d03a23e314674bd2d4c188643e87596f731b69aed0ce3585f2427414ca43bbe1d0b90d7228293dc6d8d4f133a92d1da11aaf9fbaad4023d22badea8e122'/>
         <property name='download.checksum.sha-1' value='579bae8b388c19858f0601acb8790a1bc8a3e46f'/>
         <property name='download.checksum.sha-256' value='e0bfe2914a4e297b28d97d6363f6aeb8136a3b9a6ce355508a119df0043be9f8'/>
+      </properties>
+    </artifact>
+    <artifact classifier='osgi.bundle' id='org.eclipse.egit.pullrequest' version='7.6.0.202609290702'>
+      <properties size='9'>
+        <property name='artifact.size' value='339050'/>
+        <property name='download.size' value='339050'/>
+        <property name='maven-groupId' value='org.eclipse.egit.pullrequest'/>
+        <property name='maven-artifactId' value='org.eclipse.egit.pullrequest'/>
+        <property name='maven-version' value='7.6.0-SNAPSHOT'/>
+        <property name='maven-type' value='eclipse-plugin'/>
+        <property name='download.checksum.sha-512' value='70d5b3ee5d5faaa6f31f3ba09b0ebacd71f7f52364e7dfccdcea059162f586db632c7ae0363d8bfbb358835ff3e18678877d4d81ae6f775a57d3901cd2d1a529'/>
+        <property name='download.checksum.sha-1' value='bb315c3601ba03c836eae60946a20dd99647207f'/>
+        <property name='download.checksum.sha-256' value='f444a239524ce4d04a94e4e7fe4b3a7729d25ee990e18b09535765f31aeebeb3'/>
       </properties>
     </artifact>
     <artifact classifier='org.eclipse.update.feature' id='org.eclipse.egit.pullrequest.feature' version='7.6.0.202609071213'>
