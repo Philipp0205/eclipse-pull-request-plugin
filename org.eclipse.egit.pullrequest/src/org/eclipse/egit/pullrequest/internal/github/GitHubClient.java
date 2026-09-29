@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -227,21 +228,15 @@ public class GitHubClient implements IPullRequestClient {
 
 		int needed = Math.max(1, start + Math.max(1, limit));
 		int pageSize = Math.min(100, needed);
-		GitHubPullRequestSearch.Result search = GitHubPullRequestSearch.run(
-				queries, needed, pageSize,
-				(query, page, size) -> GitHubJsonParser
-						.parseSearchPullRequestPaths(
-								doGet(searchPath(query, page, size))));
+		GitHubPullRequestSearch.PullRequestSearchResult search = GitHubPullRequestSearch
+				.runPullRequests(queries, needed, pageSize,
+						(query, page, size) -> GitHubJsonParser
+								.parseSearchIssuesPullRequests(doGet(
+										searchPath(query, page, size))));
 		unsearchableScopes = search.getUnsearchableScopes();
 
-		List<PullRequest> result = new ArrayList<>();
-		for (String pullRequestPath : search.getPullRequestPaths()) {
-			PullRequest pullRequest = GitHubJsonParser
-					.parseSinglePullRequest(doGet(pullRequestPath));
-			if (pullRequest != null) {
-				result.add(pullRequest);
-			}
-		}
+		List<PullRequest> result = new ArrayList<>(
+				search.getPullRequestsByPath().values());
 		result.sort(Comparator.comparing(PullRequest::getUpdatedDate,
 				Comparator.nullsLast(Comparator.reverseOrder())));
 		int from = Math.min(Math.max(0, start), result.size());
@@ -919,6 +914,31 @@ public class GitHubClient implements IPullRequestClient {
 				conn.disconnect();
 			}
 		}
+	}
+
+	/**
+	 * Determines whether an error message describes a GitHub API rate-limit
+	 * response (HTTP 403 with a rate-limit body), as opposed to an
+	 * unrelated 403 (e.g. insufficient permissions) or another HTTP error.
+	 * <p>
+	 * Used to degrade gracefully when scanning many repositories/queries in
+	 * {@link #getUserPullRequests}: once the rate limit is hit, further
+	 * calls in the same scan are skipped instead of failing the whole
+	 * operation, since GitHub's rate-limit buckets (especially the Search
+	 * API's 30-requests-per-minute limit) are shared across all subsequent
+	 * calls until the window resets.
+	 *
+	 * @param errorMessage
+	 *            the exception message from a failed request, or
+	 *            {@code null}
+	 * @return {@code true} if the message indicates a rate-limit response
+	 */
+	static boolean isRateLimitExceeded(String errorMessage) {
+		if (errorMessage == null) {
+			return false;
+		}
+		String lower = errorMessage.toLowerCase(Locale.ROOT);
+		return lower.contains("403") && lower.contains("rate limit"); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
 	private static final Pattern LINK_NEXT_PATTERN = Pattern

@@ -13,10 +13,13 @@ package org.eclipse.egit.pullrequest.internal.github;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 
 import org.eclipse.egit.pullrequest.Activator;
+import org.eclipse.egit.pullrequest.internal.model.PullRequest;
 
 /**
  * Runs one GitHub issue search per owner scope and merges the results.
@@ -152,6 +155,155 @@ final class GitHubPullRequestSearch {
 			paths.addAll(pagePaths);
 			collected += pagePaths.size();
 			if (pagePaths.size() < pageSize) {
+				return;
+			}
+			page++;
+		}
+	}
+
+	/**
+	 * Reads one page of full pull requests for a single search query, keyed
+	 * by their REST API path.
+	 */
+	@FunctionalInterface
+	interface PullRequestPageReader {
+
+		/**
+		 * Runs one search request.
+		 *
+		 * @param query
+		 *            the search query
+		 * @param page
+		 *            the one-based page number
+		 * @param pageSize
+		 *            the number of results per page
+		 * @return pull requests keyed by REST API path, in result order
+		 * @throws IOException
+		 *             if the request fails
+		 */
+		Map<String, PullRequest> read(String query, int page, int pageSize)
+				throws IOException;
+	}
+
+	/** Merged outcome of searching every owner scope for full pull requests. */
+	static final class PullRequestSearchResult {
+
+		private final Map<String, PullRequest> pullRequestsByPath;
+
+		private final List<String> unsearchableScopes;
+
+		private final boolean rateLimited;
+
+		PullRequestSearchResult(Map<String, PullRequest> pullRequestsByPath,
+				List<String> unsearchableScopes, boolean rateLimited) {
+			this.pullRequestsByPath = pullRequestsByPath;
+			this.unsearchableScopes = unsearchableScopes;
+			this.rateLimited = rateLimited;
+		}
+
+		/**
+		 * @return pull requests keyed by REST API path, without duplicates
+		 */
+		Map<String, PullRequest> getPullRequestsByPath() {
+			return pullRequestsByPath;
+		}
+
+		/**
+		 * @return the owner qualifiers GitHub refused to search
+		 */
+		List<String> getUnsearchableScopes() {
+			return unsearchableScopes;
+		}
+
+		/**
+		 * @return {@code true} if scanning stopped early because GitHub's
+		 *         rate limit was reached, meaning the result may be
+		 *         incomplete
+		 */
+		boolean isRateLimited() {
+			return rateLimited;
+		}
+	}
+
+	/**
+	 * Searches every query and merges the full pull requests they return,
+	 * like {@link #run}, but additionally stops the whole scan (returning
+	 * whatever was already collected) as soon as GitHub's rate limit is
+	 * reached, since that limit then applies to every remaining query too.
+	 *
+	 * @param queries
+	 *            one search query per owner scope
+	 * @param needed
+	 *            how many results are needed per scope
+	 * @param pageSize
+	 *            how many results to request per page
+	 * @param reader
+	 *            runs the individual search requests
+	 * @return the merged result
+	 * @throws IOException
+	 *             if a search fails for a reason other than an unsearchable
+	 *             scope or a rate limit, or if GitHub refuses to search
+	 *             every scope
+	 */
+	static PullRequestSearchResult runPullRequests(List<String> queries,
+			int needed, int pageSize, PullRequestPageReader reader)
+			throws IOException {
+		Map<String, PullRequest> merged = new LinkedHashMap<>();
+		List<String> unsearchable = new ArrayList<>();
+		IOException lastRejection = null;
+		boolean rateLimited = false;
+		for (String query : queries) {
+			try {
+				collectPullRequests(query, needed, pageSize, reader, merged);
+			} catch (IOException e) {
+				if (GitHubClient.isRateLimitExceeded(e.getMessage())) {
+					// GitHub's Search API rate limit (30 requests per
+					// minute) applies across all remaining queries in this
+					// scan, so further attempts would also fail. Stop
+					// scanning and return whatever was already found
+					// instead of failing the whole operation.
+					Activator.logWarning(
+							"GitHub search rate limit reached while listing pull requests; " //$NON-NLS-1$
+									+ "returning partial results (" //$NON-NLS-1$
+									+ merged.size() + " found so far)."); //$NON-NLS-1$
+					rateLimited = true;
+					break;
+				}
+				if (!isUnsearchableScope(e)) {
+					throw e;
+				}
+				String scope = GitHubSearchQueries.scopeOf(query);
+				unsearchable.add(scope);
+				lastRejection = e;
+				Activator.logWarning(
+						"GitHub cannot search " + scope //$NON-NLS-1$
+								+ "; its pull requests are not listed. " //$NON-NLS-1$
+								+ e.getMessage());
+			}
+		}
+		if (!rateLimited && lastRejection != null
+				&& unsearchable.size() == queries.size()) {
+			throw new IOException(allScopesRejected(unsearchable),
+					lastRejection);
+		}
+		return new PullRequestSearchResult(merged,
+				Collections.unmodifiableList(unsearchable), rateLimited);
+	}
+
+	private static void collectPullRequests(String query, int needed,
+			int pageSize, PullRequestPageReader reader,
+			Map<String, PullRequest> merged) throws IOException {
+		int collected = 0;
+		int page = 1;
+		while (collected < needed) {
+			Map<String, PullRequest> pageResults = reader.read(query, page,
+					pageSize);
+			if (pageResults.isEmpty()) {
+				return;
+			}
+			merged.putAll(pageResults);
+			collected += pageResults.size();
+			if (pageResults.size() < pageSize) {
 				return;
 			}
 			page++;

@@ -5,6 +5,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
@@ -29,6 +30,9 @@ class GitHubJsonParser {
 					+ "\"https?://[^\"]+?(/repos/[^\"?]+)\"", //$NON-NLS-1$
 			Pattern.DOTALL);
 
+	private static final Pattern REPOSITORY_URL_PATTERN = Pattern
+			.compile("https?://[^/]+/repos/([^/]+)/([^/\"]+)"); //$NON-NLS-1$
+
 	/**
 	 * Extracts REST pull request paths from a GitHub issue search response.
 	 *
@@ -46,6 +50,133 @@ class GitHubJsonParser {
 			result.add(matcher.group(1));
 		}
 		return result;
+	}
+
+	/**
+	 * Builds pull requests directly from a GitHub issue-search response
+	 * ({@code GET /search/issues}), without any further per-pull-request
+	 * request.
+	 * <p>
+	 * The search API does not include branch ref details ({@code head}/
+	 * {@code base}), so {@link PullRequest#getFromRef()} and
+	 * {@link PullRequest#getToRef()} carry only the repository identity
+	 * (derived from {@code repository_url}), not branch names or commit
+	 * SHAs. The comment count reflects issue comments only (search results
+	 * do not include the review comment count). Both are acceptable
+	 * trade-offs for the aggregated "my pull requests" list view, which
+	 * fetches full detail separately once a specific pull request is
+	 * opened.
+	 *
+	 * @param json
+	 *            search response JSON
+	 * @return pull requests keyed by their REST API path (e.g.
+	 *         {@code /repos/owner/name/pulls/7}), in result order, suitable
+	 *         for merging across multiple search queries while de-duplicating
+	 *         pull requests that match more than one query
+	 */
+	static Map<String, PullRequest> parseSearchIssuesPullRequests(
+			String json) {
+		Map<String, PullRequest> result = new LinkedHashMap<>();
+		if (json == null || json.isBlank()) {
+			return result;
+		}
+		String itemsJson = extractArray(json, "items"); //$NON-NLS-1$
+		if (itemsJson == null) {
+			return result;
+		}
+		for (String itemJson : splitTopLevelObjects(itemsJson)) {
+			String path = extractSearchPullRequestPath(itemJson);
+			if (path == null) {
+				continue;
+			}
+			PullRequest pr = parseSearchIssuePullRequest(itemJson);
+			if (pr != null) {
+				result.put(path, pr);
+			}
+		}
+		return result;
+	}
+
+	private static String extractSearchPullRequestPath(String itemJson) {
+		String pullRequestJson = extractObject(itemJson, "pull_request"); //$NON-NLS-1$
+		if (pullRequestJson == null) {
+			return null;
+		}
+		String url = extractString(pullRequestJson, "url"); //$NON-NLS-1$
+		if (url == null) {
+			return null;
+		}
+		int pathStart = url.indexOf("/repos/"); //$NON-NLS-1$
+		return pathStart == -1 ? url : url.substring(pathStart);
+	}
+
+	private static PullRequest parseSearchIssuePullRequest(String itemJson) {
+		PullRequest pr = new PullRequest();
+		pr.setId(extractLong(itemJson, "number")); //$NON-NLS-1$
+		pr.setTitle(extractString(itemJson, "title")); //$NON-NLS-1$
+		pr.setDescription(extractString(itemJson, "body")); //$NON-NLS-1$
+		pr.setCreatedDate(extractDate(itemJson, "created_at")); //$NON-NLS-1$
+		pr.setUpdatedDate(extractDate(itemJson, "updated_at")); //$NON-NLS-1$
+		pr.setCommentCount(extractInt(itemJson, "comments")); //$NON-NLS-1$
+
+		String state = extractString(itemJson, "state"); //$NON-NLS-1$
+		String pullRequestJson = extractObject(itemJson, "pull_request"); //$NON-NLS-1$
+		String mergedAt = pullRequestJson == null ? null
+				: extractString(pullRequestJson, "merged_at"); //$NON-NLS-1$
+		if ("closed".equals(state) && mergedAt != null) { //$NON-NLS-1$
+			pr.setState("MERGED"); //$NON-NLS-1$
+			pr.setOpen(false);
+			pr.setClosed(true);
+		} else if ("closed".equals(state)) { //$NON-NLS-1$
+			pr.setState("DECLINED"); //$NON-NLS-1$
+			pr.setOpen(false);
+			pr.setClosed(true);
+		} else {
+			pr.setState("OPEN"); //$NON-NLS-1$
+			pr.setOpen(true);
+			pr.setClosed(false);
+		}
+
+		String userJson = extractObject(itemJson, "user"); //$NON-NLS-1$
+		if (userJson != null) {
+			PullRequest.PullRequestParticipant author = new PullRequest.PullRequestParticipant();
+			PullRequest.User user = new PullRequest.User();
+			user.setName(extractString(userJson, "login")); //$NON-NLS-1$
+			user.setDisplayName(extractString(userJson, "name", //$NON-NLS-1$
+					extractString(userJson, "login"))); //$NON-NLS-1$
+			user.setAvatarUrl(extractString(userJson, "avatar_url")); //$NON-NLS-1$
+			author.setUser(user);
+			author.setRole("AUTHOR"); //$NON-NLS-1$
+			pr.setAuthor(author);
+		}
+
+		String repositoryUrl = extractString(itemJson, "repository_url"); //$NON-NLS-1$
+		if (repositoryUrl != null) {
+			Matcher matcher = REPOSITORY_URL_PATTERN.matcher(repositoryUrl);
+			if (matcher.matches()) {
+				String owner = matcher.group(1);
+				String name = matcher.group(2);
+				PullRequest.Repository repo = new PullRequest.Repository();
+				repo.setSlug(name);
+				repo.setName(owner + "/" + name); //$NON-NLS-1$
+				PullRequest.Project project = new PullRequest.Project();
+				project.setKey(owner);
+				project.setName(owner);
+				repo.setProject(project);
+				PullRequest.PullRequestRef toRef = new PullRequest.PullRequestRef();
+				toRef.setRepository(repo);
+				pr.setToRef(toRef);
+			}
+		}
+
+		PullRequest.PullRequestLinks links = new PullRequest.PullRequestLinks();
+		PullRequest.Link[] self = new PullRequest.Link[1];
+		self[0] = new PullRequest.Link();
+		self[0].setHref(extractString(itemJson, "html_url")); //$NON-NLS-1$
+		links.setSelf(self);
+		pr.setLinks(links);
+
+		return pr;
 	}
 
 	/**

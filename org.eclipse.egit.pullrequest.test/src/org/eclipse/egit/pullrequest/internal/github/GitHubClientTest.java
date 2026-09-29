@@ -41,6 +41,28 @@ public class GitHubClientTest {
 	}
 
 	@Test
+	public void testIsRateLimitExceededDetectsGitHubRateLimitMessage() {
+		String message = "GitHub API request failed: HTTP 403 - {" //$NON-NLS-1$
+				+ "\"message\":\"API rate limit exceeded for user ID 201185819." //$NON-NLS-1$
+				+ " If you reach out to GitHub Support for help...\"," //$NON-NLS-1$
+				+ "\"documentation_url\":\"https://docs.github.com/...\"}"; //$NON-NLS-1$
+
+		assertThat(GitHubClient.isRateLimitExceeded(message), equalTo(true));
+	}
+
+	@Test
+	public void testIsRateLimitExceededIgnoresUnrelatedErrors() {
+		assertThat(GitHubClient.isRateLimitExceeded(null), equalTo(false));
+		assertThat(GitHubClient.isRateLimitExceeded(
+				"GitHub API request failed: HTTP 404 - Not Found"), //$NON-NLS-1$
+				equalTo(false));
+		assertThat(GitHubClient.isRateLimitExceeded(
+				"GitHub API request failed: HTTP 403 - Forbidden: " //$NON-NLS-1$
+						+ "insufficient permissions"), //$NON-NLS-1$
+				equalTo(false));
+	}
+
+	@Test
 	public void testAccessibleSearchCoversOwnedOrgsAndForeignRepos() {
 		List<String> queries = GitHubSearchQueries
 				.accessiblePullRequestQueries("alice", //$NON-NLS-1$
@@ -53,6 +75,33 @@ public class GitHubClientTest {
 				"is:pr org:acme is:open", //$NON-NLS-1$
 				"is:pr org:friends is:open", //$NON-NLS-1$
 				"is:pr repo:bob/tool is:open")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testAccessibleSearchBatchesManyCollaboratorRepos() {
+		// GitHub's search API allows at most 5 OR operators per query, so at
+		// most 6 repo: qualifiers can share a single query. With 7 foreign
+		// collaborator repos, expect one batch of 6 (OR-combined) and one
+		// batch of 1 (plain, matching the single-repo format above).
+		List<String> queries = GitHubSearchQueries.accessiblePullRequestQueries(
+				null, null,
+				Arrays.asList("o/r1", "o/r2", "o/r3", "o/r4", "o/r5", "o/r6", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$
+						"o/r7"), //$NON-NLS-1$
+				null, null);
+
+		assertThat(queries,
+				contains("is:pr (repo:o/r1 OR repo:o/r2 OR repo:o/r3 OR repo:o/r4 OR repo:o/r5 OR repo:o/r6) is:open", //$NON-NLS-1$
+						"is:pr repo:o/r7 is:open")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testAccessibleSearchBatchAppliesAuthorFilterOncePerBatch() {
+		List<String> queries = GitHubSearchQueries.accessiblePullRequestQueries(
+				null, null, Arrays.asList("o/r1", "o/r2"), //$NON-NLS-1$ //$NON-NLS-2$
+				"OPEN", "carol"); //$NON-NLS-1$ //$NON-NLS-2$
+
+		assertThat(queries, contains(
+				"is:pr (repo:o/r1 OR repo:o/r2) author:carol is:open")); //$NON-NLS-1$
 	}
 
 	@Test

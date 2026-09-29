@@ -17,6 +17,7 @@ import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 
 import java.util.List;
+import java.util.Map;
 
 import org.eclipse.egit.pullrequest.internal.model.ChangedFile;
 import org.eclipse.egit.pullrequest.internal.model.PullRequest;
@@ -28,6 +29,99 @@ import org.junit.Test;
  * Tests for {@link GitHubJsonParser}
  */
 public class GitHubJsonParserTest {
+
+	@Test
+	public void testParseSearchIssuesPullRequestsBuildsFullPullRequests() {
+		String json = "{\"total_count\":2,\"items\":[" //$NON-NLS-1$
+				+ "{\"number\":7,\"title\":\"Fix bug\",\"body\":\"desc\"," //$NON-NLS-1$
+				+ "\"state\":\"open\",\"created_at\":\"2026-01-01T00:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-02T00:00:00Z\"," //$NON-NLS-1$
+				+ "\"comments\":3,\"user\":{\"login\":\"alice\"}," //$NON-NLS-1$
+				+ "\"repository_url\":\"https://api.github.com/repos/alice/one\"," //$NON-NLS-1$
+				+ "\"pull_request\":{\"url\":\"https://api.github.com/repos/alice/one/pulls/7\"}}," //$NON-NLS-1$
+				+ "{\"number\":12,\"title\":\"Add feature\",\"body\":\"desc2\"," //$NON-NLS-1$
+				+ "\"state\":\"closed\",\"created_at\":\"2026-01-03T00:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-04T00:00:00Z\"," //$NON-NLS-1$
+				+ "\"comments\":0,\"user\":{\"login\":\"bob\"}," //$NON-NLS-1$
+				+ "\"repository_url\":\"https://api.github.com/repos/acme/two\"," //$NON-NLS-1$
+				+ "\"pull_request\":{\"url\":\"https://api.github.com/repos/acme/two/pulls/12\"," //$NON-NLS-1$
+				+ "\"merged_at\":\"2026-01-04T00:00:00Z\"}}" //$NON-NLS-1$
+				+ "]}"; //$NON-NLS-1$
+
+		Map<String, PullRequest> result = GitHubJsonParser
+				.parseSearchIssuesPullRequests(json);
+
+		assertThat(result.keySet(), hasSize(2));
+
+		PullRequest open = result.get("/repos/alice/one/pulls/7"); //$NON-NLS-1$
+		assertThat(open, notNullValue());
+		assertThat(open.getId(), equalTo(7L));
+		assertThat(open.getTitle(), equalTo("Fix bug")); //$NON-NLS-1$
+		assertThat(open.getState(), equalTo("OPEN")); //$NON-NLS-1$
+		assertThat(open.isOpen(), equalTo(true));
+		assertThat(open.getCommentCount(), equalTo(3));
+		assertThat(open.getAuthor().getUser().getName(),
+				equalTo("alice")); //$NON-NLS-1$
+		assertThat(open.getToRef().getRepository().getName(),
+				equalTo("alice/one")); //$NON-NLS-1$
+		assertThat(open.getToRef().getRepository().getSlug(),
+				equalTo("one")); //$NON-NLS-1$
+		assertThat(open.getToRef().getRepository().getProject().getKey(),
+				equalTo("alice")); //$NON-NLS-1$
+
+		PullRequest merged = result.get("/repos/acme/two/pulls/12"); //$NON-NLS-1$
+		assertThat(merged, notNullValue());
+		assertThat(merged.getState(), equalTo("MERGED")); //$NON-NLS-1$
+		assertThat(merged.isClosed(), equalTo(true));
+	}
+
+	@Test
+	public void testParseSearchIssuesPullRequestsClosedWithoutMergedAtIsDeclined() {
+		String json = "{\"total_count\":1,\"items\":[" //$NON-NLS-1$
+				+ "{\"number\":3,\"title\":\"Old idea\",\"state\":\"closed\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-01T00:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-01T00:00:00Z\"," //$NON-NLS-1$
+				+ "\"repository_url\":\"https://api.github.com/repos/alice/one\"," //$NON-NLS-1$
+				+ "\"pull_request\":{\"url\":\"https://api.github.com/repos/alice/one/pulls/3\"}}" //$NON-NLS-1$
+				+ "]}"; //$NON-NLS-1$
+
+		PullRequest pr = GitHubJsonParser.parseSearchIssuesPullRequests(json)
+				.get("/repos/alice/one/pulls/3"); //$NON-NLS-1$
+
+		assertThat(pr, notNullValue());
+		assertThat(pr.getState(), equalTo("DECLINED")); //$NON-NLS-1$
+	}
+
+	@Test
+	public void testParseSearchIssuesPullRequestsEmptyItems() {
+		String json = "{\"total_count\":0,\"items\":[]}"; //$NON-NLS-1$
+
+		assertThat(GitHubJsonParser.parseSearchIssuesPullRequests(json)
+				.isEmpty(), equalTo(true));
+	}
+
+	@Test
+	public void testParseSearchIssuesPullRequestsWorksAgainstAnyApiHost() {
+		// GitHub Enterprise Server and test doubles serve the REST API from
+		// a host other than api.github.com; the path/owner/repo extraction
+		// must not assume the production hostname.
+		String json = "{\"total_count\":1,\"items\":[" //$NON-NLS-1$
+				+ "{\"number\":5,\"title\":\"Fix\",\"state\":\"open\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-01-01T00:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-01-01T00:00:00Z\"," //$NON-NLS-1$
+				+ "\"repository_url\":\"http://127.0.0.1:9999/repos/alice/one\"," //$NON-NLS-1$
+				+ "\"pull_request\":{\"url\":\"http://127.0.0.1:9999/repos/alice/one/pulls/5\"}}" //$NON-NLS-1$
+				+ "]}"; //$NON-NLS-1$
+
+		Map<String, PullRequest> result = GitHubJsonParser
+				.parseSearchIssuesPullRequests(json);
+
+		assertThat(result.keySet(), hasSize(1));
+		PullRequest pr = result.get("/repos/alice/one/pulls/5"); //$NON-NLS-1$
+		assertThat(pr, notNullValue());
+		assertThat(pr.getToRef().getRepository().getName(),
+				equalTo("alice/one")); //$NON-NLS-1$
+	}
 
 	@Test
 	public void testParseOrganizationLogins() {

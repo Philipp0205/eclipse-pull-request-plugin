@@ -19,6 +19,7 @@ import static org.hamcrest.Matchers.not;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 import org.eclipse.egit.pullrequest.internal.client.ConnectionDiagnostics;
 import org.eclipse.egit.pullrequest.internal.client.ConnectionDiagnostics.Outcome;
@@ -41,6 +42,16 @@ public class GitHubConnectionTest {
 			+ "the resources do not exist or you do not have permission to " //$NON-NLS-1$
 			+ "view them.\",\"resource\":\"Search\",\"field\":\"q\"," //$NON-NLS-1$
 			+ "\"code\":\"invalid\"}],\"status\":\"422\"}"; //$NON-NLS-1$
+
+	/**
+	 * Titles for the pull requests used across these tests, keyed by their
+	 * REST API path. Mirrors what a real {@code /search/issues} response
+	 * carries directly (title, state, etc.) so that {@link #searchReturns}
+	 * does not need a separate per-pull-request stub.
+	 */
+	private static final Map<String, String> PULL_REQUEST_TITLES = Map.of(
+			"/repos/Philipp0205/notes/pulls/1", "Fix the parser", //$NON-NLS-1$ //$NON-NLS-2$
+			"/repos/acme/app/pulls/4", "Bump the target platform"); //$NON-NLS-1$ //$NON-NLS-2$
 
 	private StubGitHubServer server;
 
@@ -195,12 +206,37 @@ public class GitHubConnectionTest {
 			if (items.length() > 0) {
 				items.append(',');
 			}
-			items.append("{\"pull_request\":{\"url\":\"") //$NON-NLS-1$
-					.append(server.url()).append(pullPath).append("\"}}"); //$NON-NLS-1$
+			items.append(searchItem(pullPath));
 		}
 		server.onQueryContaining(encodedScope,
 				ok("{\"total_count\":" + pullPaths.length + ",\"items\":[" //$NON-NLS-1$ //$NON-NLS-2$
 						+ items + "]}")); //$NON-NLS-1$
+	}
+
+	/**
+	 * Builds a {@code /search/issues} result item carrying the same pull
+	 * request data as the corresponding {@code /repos/.../pulls/N} stub
+	 * registered in {@link #startServer()}, since {@link GitHubClient} reads
+	 * pull requests directly from the search response and no longer follows
+	 * up with a per-pull-request request.
+	 */
+	private String searchItem(String pullPath) {
+		// pullPath looks like "/repos/{owner}/{repo}/pulls/{number}"
+		String[] segments = pullPath.split("/"); //$NON-NLS-1$
+		String owner = segments[2];
+		String repo = segments[3];
+		String number = segments[5];
+		String title = PULL_REQUEST_TITLES.get(pullPath);
+		return "{\"number\":" + number + ",\"title\":\"" + title //$NON-NLS-1$ //$NON-NLS-2$
+				+ "\",\"state\":\"open\",\"body\":\"\"," //$NON-NLS-1$
+				+ "\"created_at\":\"2026-09-01T10:00:00Z\"," //$NON-NLS-1$
+				+ "\"updated_at\":\"2026-09-0" + number //$NON-NLS-1$
+				+ "T10:00:00Z\",\"comments\":0," //$NON-NLS-1$
+				+ "\"user\":{\"login\":\"Philipp0205\"}," //$NON-NLS-1$
+				+ "\"repository_url\":\"" + server.url() + "/repos/" + owner //$NON-NLS-1$ //$NON-NLS-2$
+				+ "/" + repo + "\"," //$NON-NLS-1$ //$NON-NLS-2$
+				+ "\"pull_request\":{\"url\":\"" + server.url() + pullPath //$NON-NLS-1$
+				+ "\"}}"; //$NON-NLS-1$
 	}
 
 	private void searchFailsWithValidationError(String encodedScope) {
