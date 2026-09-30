@@ -93,6 +93,22 @@ public class GitHubJsonParserTest {
 	}
 
 	@Test
+	public void testParseSearchIssuesPullRequestsDerivesCloneUrl() {
+		String json = "{\"total_count\":1,\"items\":[" //$NON-NLS-1$
+				+ "{\"number\":7,\"title\":\"Fix\",\"state\":\"open\"," //$NON-NLS-1$
+				+ "\"html_url\":\"https://github.com/alice/one/pull/7\"," //$NON-NLS-1$
+				+ "\"repository_url\":\"https://api.github.com/repos/alice/one\"," //$NON-NLS-1$
+				+ "\"pull_request\":{\"url\":\"https://api.github.com/repos/alice/one/pulls/7\"}}" //$NON-NLS-1$
+				+ "]}"; //$NON-NLS-1$
+
+		PullRequest pr = GitHubJsonParser.parseSearchIssuesPullRequests(json)
+				.get("/repos/alice/one/pulls/7"); //$NON-NLS-1$
+
+		assertThat(pr.getToRef().getRepository().getCloneUrl(),
+				equalTo("https://github.com/alice/one.git")); //$NON-NLS-1$
+	}
+
+	@Test
 	public void testParseSearchIssuesPullRequestsEmptyItems() {
 		String json = "{\"total_count\":0,\"items\":[]}"; //$NON-NLS-1$
 

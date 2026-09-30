@@ -110,6 +110,22 @@ class GitHubJsonParser {
 		return pathStart == -1 ? url : url.substring(pathStart);
 	}
 
+	/**
+	 * Derives the HTTPS clone URL of a repository from the web URL of one of
+	 * its pull requests. Search results carry no {@code clone_url}.
+	 *
+	 * @param htmlUrl
+	 *            web URL such as {@code https://github.com/o/r/pull/7}
+	 * @return the clone URL, or null if it cannot be derived
+	 */
+	private static String deriveCloneUrl(String htmlUrl) {
+		if (htmlUrl == null) {
+			return null;
+		}
+		int idx = htmlUrl.indexOf("/pull/"); //$NON-NLS-1$
+		return idx <= 0 ? null : htmlUrl.substring(0, idx) + ".git"; //$NON-NLS-1$
+	}
+
 	private static PullRequest parseSearchIssuePullRequest(String itemJson) {
 		PullRequest pr = new PullRequest();
 		pr.setId(extractLong(itemJson, "number")); //$NON-NLS-1$
@@ -163,6 +179,8 @@ class GitHubJsonParser {
 				project.setKey(owner);
 				project.setName(owner);
 				repo.setProject(project);
+				repo.setCloneUrl(deriveCloneUrl(
+						extractString(itemJson, "html_url"))); //$NON-NLS-1$
 				PullRequest.PullRequestRef toRef = new PullRequest.PullRequestRef();
 				toRef.setRepository(repo);
 				pr.setToRef(toRef);
